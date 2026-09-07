@@ -18,7 +18,8 @@ league's ID can follow it, and anyone with the admin key can run it.
 - **Leagues.** Create one (singles or teams), or load the two demo leagues to see everything
   working. A device can hold several; switch between them in the header.
 - **Players and teams.** Add, rename, retire; a per-player handicap comes off the start of every
-  leg they throw. Teams hold up to eight players.
+  singles leg they throw — a team match starts every leg from the full score. Teams hold up to
+  eight players.
 - **Seasons and fixtures.** Start a season and generate a round robin — byes for an odd count, an
   optional double round, one round a week or any spacing — or add matches one at a time.
 - **Scoring.** Tap a match, add a leg, tap who won it. The match ends itself when the format says
@@ -52,10 +53,13 @@ can **Share** it from the League tab, and from then on:
   tournaments. The key is compared on the server, in a document nobody can read.
 - **The owner** is whoever shared the league. Only the owner can make or unmake admins, remove
   members, hand ownership to another member, make a new Admin Key, or delete the league.
-- **Both keys are kept by your password manager**, never by the app's sync, backups or share
-  links: the Invite card is a real login form whose username is the League ID and whose
+- **Both keys are handed to your password manager**, and never to the app's sync, backups or
+  share links: the Invite card is a real login form whose username is the League ID and whose
   password is the Admin Key, so iCloud Keychain or your browser carries the pair to your next
-  phone end to end encrypted. The app never learns whether it was saved.
+  phone end to end encrypted. The app never learns whether it was saved. It does keep its own copy
+  of the key in this browser's local storage, under a key of its own, so it can show it to you —
+  what it never does is put it inside the league, where it would ride into every backup, every
+  share link and every member's copy.
 - **Every change is a transaction.** Two admins scoring two matches at once both land; the
   same match scored on two phones resolves to the later tap. Offline, a change is saved on the
   phone and goes up on its own when the network is back.
@@ -107,14 +111,7 @@ Then prove it with two Google accounts: one shares a league, the other joins wit
 sees the table; the second enters the Admin Key and can score; the first makes the second the
 owner; a viewer's attempt to score is refused on the sync button with the rules' own message.
 
-## What is coming
-
-- **Other games.** Cornhole, shuffleboard, bowling and golf — one entry each in the game
-  registry; the league engine already knows nothing about darts.
-- **A live x01 scorer for cricket**, the second darts format. Dart by dart, with bust detection and checkout hints, feeding the
-  averages, 180s and high checkouts automatically.
-
-### Inviting people
+## Inviting people
 
 Once a league is shared, the Invite card on the League tab offers the join link four ways:
 the phone's own share sheet (or Copy on a desktop), Email, Text, and a **QR code drawn in the
@@ -127,6 +124,12 @@ The QR encoder covers versions 1 to 6 (up to 106 characters), which is what a jo
 and no more; it is pinned in the test suite against an independent encoder's output, a
 Reed–Solomon syndrome check and the structural facts every reader relies on.
 
+## What is coming
+
+- **Other games.** Cornhole, shuffleboard, bowling and golf — one entry each in the game
+  registry; the league engine already knows nothing about darts.
+- **Cricket**, the second darts format, with a live scorer of its own beside the x01 one.
+
 ## Accessibility and Paper
 
 Every view and window was audited with axe-core under Playwright at 1280px in Midnight and at
@@ -134,12 +137,14 @@ Every view and window was audited with axe-core under Playwright at 1280px in Mi
 axe's best-practice level (7 September 2026). Beyond what a tool can see: status is never
 carried by colour alone (a form tile is a letter, a chosen side a tick, a thrower a pill),
 every dialog closes on Escape and a click outside, the tab strip takes arrow keys, and the
-column letters of the table are spelled out beneath it rather than hidden in a hover title.
+column letters of the table are spelled out beneath it rather than hidden in a hover title —
+and so is its one other abbreviation, the minus figure marking a player's handicap.
 On paper every round prints open and a bracket wraps instead of clipping.
 
 A league that grows past 300 KB is offered **Trim Closed Seasons** on the League tab: every
-live-scored leg in a closed season keeps its figures and loses the visit-by-visit record,
-and no table changes. The cloud holds one document of at most 1 MiB per league.
+live-scored leg in a closed season keeps its figures — the darts, the checkout, the 180s, and the
+points scored, which is what an average is made of — and loses only the visit-by-visit record. No
+table changes. The cloud holds one document of at most 1 MiB per league.
 
 ## Running it locally
 
@@ -153,10 +158,11 @@ published site.
 
 ## Privacy
 
-Nothing is uploaded until you sign in. A league you create or join is stored in a Firebase
-project the author pays for, readable by anyone signed in to Google who knows its ID. Your
-League ID and Admin Key are kept by your browser's password manager, never by the app's
-sync, backups or share links. The [privacy policy](privacy.html) has the details.
+Nothing is uploaded until you sign in, and Google's code is not fetched until you ask to share or
+join a league. A league you create or join is stored in a Firebase project the author pays for,
+readable by anyone signed in to Google who knows its ID. Your League ID and Admin Key go to your
+browser's password manager and never into the app's sync, backups or share links. The
+[privacy policy](privacy.html) has the details.
 
 ## Provenance
 

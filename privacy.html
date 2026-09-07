@@ -106,12 +106,23 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
       on the League tab removes one.</p>
     <p>Names are the only free text a league holds: player, team, season and league names, and a
       venue, each capped at forty characters. There is no notes field.</p>
+    <p>If you share or join a league, its <strong>Admin Key</strong> is kept in this browser's local
+      storage too, under a key of its own, so the app can show it to you and use it. It is never put
+      into the league itself, so it reaches no backup, no share link and nothing that is uploaded.
+      One more flag records whether this browser has a live sign-in, so a signed-in visit is
+      recognised without pressing anything — and so a browser that has never signed in fetches
+      nothing from Google at all.</p>
 
     <h2>What Is Not</h2>
     <ul>
       <li>No analytics, no tracking, no cookies.</li>
-      <li>No third-party scripts of any kind — the page loads nothing beyond its own files.</li>
-      <li>No personal information is asked for or kept.</li>
+      <li>No advertising, and nothing sold or shared with anyone.</li>
+      <li>Until you sign in, no third-party script of any kind: the page loads nothing beyond its
+        own files. Signing in is the one exception, and it is described below — Google's sign-in
+        client and the Firebase library are fetched from Google only once you ask to share or join
+        a league, or if you have signed in on this browser before.</li>
+      <li>No personal information is asked for. Signing in tells the app the name and email address
+        on your Google account, and nothing else.</li>
     </ul>
 
     <h2>Backups and Share Links</h2>

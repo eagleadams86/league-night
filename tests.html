@@ -51,7 +51,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 186;
+const EXPECTED = 198;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -1277,7 +1277,9 @@ function define() {
   });
   t('the keys are carried by the password manager, never by state', () => {
     const src = stripComments(APP_SRC);
-    ok(/const KEY_KEY = \(id\) => 'ln-key-' \+ id;/.test(src), 'the key has its own localStorage key');
+    ok(/const KEY_KEY\s+= \(id\) => 'ln-key-' \+ id;/.test(src), 'the key has its own localStorage key');
+    eq((src.match(/'ln-key-'/g) || []).length, 1,
+       'spelled ONCE — forgetting a league and Delete All Data both remove it, and both used to write the string out by hand');
     const st = H.normalizeLeague(FIXTURE);
     ok(!JSON.stringify(st).includes('adminKey') && !JSON.stringify(H.buildSharePayload(st, {})).includes('adminKey'), 'nothing in a league or a link is called adminKey');
     const form = (APP_SRC.match(/<form id="keyForm"[\s\S]*?<\/form>/) || [''])[0];
@@ -1286,7 +1288,8 @@ function define() {
     ok(/autocapitalize="off"[^>]*autocorrect="off"/.test(form), 'iOS would capitalise the first letter of a key');
     const join = (APP_SRC.match(/<form id="joinForm"[\s\S]*?<\/form>/) || [''])[0];
     ok(/id="jn_id"[^>]*autocomplete="username"/.test(join) && /id="jn_key"[^>]*autocomplete="current-password"/.test(join), 'and the join window is the same pairing');
-    ok(/localStorage\.removeItem\('ln-key-' \+ id\)/.test(src), 'forgetting a league forgets its key');
+    ok(/function forgetLeague\(id\) \{[\s\S]*?localStorage\.removeItem\(KEY_KEY\(id\)\)/.test(src), 'forgetting a league forgets its key');
+    ok(/device\.leagues\.slice\(\)\.forEach[\s\S]{0,200}?localStorage\.removeItem\(KEY_KEY\(l\.id\)\)/.test(src), 'and Delete All Data forgets every one');
   });
   t('the device record carries the cloud revision and the dirty flag, and an edit sets it', () => {
     const d = H.normalizeDevice({ leagues: [{ id: 'LN-A', name: 'a', cloud: true, rev: '7', dirty: true }, { id: 'LN-B', name: 'b', rev: -3, dirty: 'yes' }] });
@@ -1434,8 +1437,8 @@ function define() {
   });
 
   group('the live scorer');
-  t('a new leg remembers who throws first and the double-out rule, and SCHEMA is 2', () => {
-    eq(H.SCHEMA, 2);
+  t('a new leg remembers who throws first and the double-out rule, and SCHEMA is 3', () => {
+    eq(H.SCHEMA, 3);
     const out = H.normalizeLeague({ league: { id: 'L' }, matches: [{ id: 'm', a: 'x', b: 'y', legs: [{ first: 'b', dOut: false }, {}] }] });
     eq(out.matches[0].legs.map((l) => [l.first, l.dOut]), [['b', false], ['a', true]]);
   });
@@ -1846,6 +1849,203 @@ function define() {
   });
   t('there is only ONE csvCell in the file', () => {
     eq((stripComments(APP_SRC).match(/function csvCell/g) || []).length, 1);
+  });
+
+  /* ── The 7 September 2026 audit ──────────────────────────────────────────
+     One test per defect found reading the whole app through, each named for
+     what went wrong rather than for the function it lives in. */
+  group('the 2026-09-07 audit: what went wrong, and stays fixed');
+
+  t('a leg with no starting score keeps null — Number(null) is 0, and 0 clamped to 1', () => {
+    const out = H.normalizeLeague({ league: { id: 'L' },
+      matches: [{ id: 'm', a: 'x', b: 'y', legs: [{ start: { a: null, b: null } }, { start: { a: 501, b: 0 } }, {}] }] });
+    const st = out.matches[0].legs.map((l) => l.start);
+    eq(st[0], { a: null, b: null }, 'an explicit null is "this game has no start", not a start of 1');
+    eq(st[1], { a: 501, b: null }, 'and nor is a zero');
+    eq(st[2], { a: null, b: null }, 'a leg with no start object at all');
+  });
+
+  t('trimming a closed season does not move a single figure', () => {
+    const live = { w: 'a', by: { a: ['p1'], b: ['p2'] }, start: { a: 501, b: 501 },
+      visits: { a: [{ t: 180, d: 3 }, { t: 180, d: 3 }, { t: 141, d: 3 }], b: [{ t: 100, d: 3 }, { t: 100, d: 3 }] } };
+    const st = H.normalizeLeague({ league: { id: 'LN-TRIMTRIM' },
+      players: [{ id: 'p1', name: 'Winner' }, { id: 'p2', name: 'Loser' }],
+      seasons: [{ id: 's1', name: 'Closed', startsOn: '2026-01-01', status: 'done' }],
+      matches: [{ id: 'm1', seasonId: 's1', a: 'p1', b: 'p2', status: 'played', legs: [live] }] });
+    const before = ['p1', 'p2'].map((id) => H.dartsPlayerStats(H.legsIn(st, 's1'), id));
+    const out = H.compactSeason(st, 's1');
+    eq(out.trimmed, 1, 'the leg was trimmed');
+    ok(!out.matches[0].legs[0].visits, 'and its visits are gone');
+    const after = ['p1', 'p2'].map((id) => H.dartsPlayerStats(H.legsIn(out, 's1'), id));
+    eq(after.map((s) => [s.darts, s.avg3, s.t180, s.highOut, s.legs, s.won]),
+       before.map((s) => [s.darts, s.avg3, s.t180, s.highOut, s.legs, s.won]),
+       'every figure the tables show is the same afterwards — the LOSER’s average went to null before ' +
+       'this, because their points went with the visits and the window promised nothing would change');
+    eq(after[1].avg3, 100, 'the loser threw 200 in 6 darts');
+    /* And the leg itself can still say what it was. */
+    eq(H.legSideStats(out.matches[0].legs[0], 'b').avg3, 100, 'a trimmed leg keeps its own average too');
+    eq(H.legSideStats({ w: 'a', b: { darts: 18 } }, 'b').avg3, null, 'a leg somebody TYPED has no average to give');
+  });
+
+  t('`scored` is on the allowlist and nothing else new is', () => {
+    const out = H.normalizeLeague({ league: { id: 'L' }, matches: [{ id: 'm', a: 'x', b: 'y',
+      legs: [{ a: { darts: 30, scored: 501, sneaky: 'x', t180: 2 }, b: { scored: 99999 } }] }] });
+    eq(out.matches[0].legs[0].a, { darts: 30, t180: 2, scored: 501 });
+    eq(out.matches[0].legs[0].b, { scored: 9999 }, 'and it is clamped like every other figure');
+  });
+
+  t('a forfeit asks before it throws the scored legs away', () => {
+    const D = W.document;
+    const asked = [];
+    const real = W.confirm;
+    try {
+      const fx = JSON.parse(JSON.stringify(FIXTURE));
+      fx.matches[3].legs = [{ w: 'a', by: { a: ['fx-bravo'], b: ['fx-delta'] }, start: { a: 481, b: 501 } }];
+      H.__plant(fx);
+      D.getElementById('tab-matches').click();
+      D.querySelector('.mrow[data-match="fx-m4"]').click();
+      const m = () => H.__state().matches.find((x) => x.id === 'fx-m4');
+      W.confirm = (msg) => { asked.push(msg); return false; };
+      D.getElementById('mtForfeit').click();
+      D.getElementById('forfeitA').click();
+      eq(m().legs.length, 1, 'said no, so the leg is still there');
+      ok(/deleted/.test(asked[0] || ''), 'and it said the legs would go', JSON.stringify(asked[0]));
+      W.confirm = () => true;
+      D.getElementById('forfeitA').click();
+      eq([m().legs.length, m().status], [0, 'forfeit'], 'said yes, so it went through');
+      D.getElementById('matchDialog').close();
+    } finally { W.confirm = real; H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+
+  t('a forfeit on a match with nothing scored asks nothing', () => {
+    const D = W.document;
+    const real = W.confirm;
+    let asked = 0;
+    try {
+      W.confirm = () => { asked++; return true; };
+      D.getElementById('tab-matches').click();
+      D.querySelector('.mrow[data-match="fx-m4"]').click();
+      D.getElementById('mtForfeit').click();
+      D.getElementById('forfeitB').click();
+      eq(asked, 0, 'there was nothing to lose');
+      eq(H.__state().matches.find((x) => x.id === 'fx-m4').status, 'forfeit');
+      D.getElementById('matchDialog').close();
+    } finally { W.confirm = real; H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+
+  t('a quick key that finishes the leg asks how many darts, exactly as typing it does', () => {
+    const D = W.document;
+    try {
+      const fx = JSON.parse(JSON.stringify(FIXTURE));
+      fx.matches[3].legs = [{ w: null, by: { a: ['fx-bravo'], b: ['fx-delta'] }, start: { a: 60, b: 501 },
+                             first: 'a', dOut: true, visits: { a: [], b: [] } }];
+      H.__plant(fx);
+      D.getElementById('tab-matches').click();
+      D.querySelector('.mrow[data-match="fx-m4"]').click();
+      D.querySelector('#legsWrap [data-live]').click();
+      const leg = () => H.__state().matches.find((x) => x.id === 'fx-m4').legs[0];
+      D.querySelector('#lvPad [data-key="q60"]').click();
+      eq(leg().visits.a, [], '60 on 60 is a checkout, so nothing is committed yet');
+      ok(!D.getElementById('lvFinishRow').hidden, 'the finish row asks instead');
+      ok(D.getElementById('lvIn1').disabled && !D.getElementById('lvIn2').disabled, '60 cannot be done in one dart, and can in two');
+      D.getElementById('lvIn2').click();
+      eq(leg().visits.a, [{ t: 60, d: 2 }], 'two darts, not the flat three the quick key used to record');
+      eq(leg().w, 'a');
+      D.getElementById('liveDialog').close();
+      D.getElementById('matchDialog').close();
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+
+  t('a quick key that is not a checkout still goes straight in', () => {
+    const D = W.document;
+    try {
+      const fx = JSON.parse(JSON.stringify(FIXTURE));
+      fx.matches[3].legs = [{ w: null, by: { a: ['fx-bravo'], b: ['fx-delta'] }, start: { a: 501, b: 501 },
+                             first: 'a', dOut: true, visits: { a: [], b: [] } }];
+      H.__plant(fx);
+      D.getElementById('tab-matches').click();
+      D.querySelector('.mrow[data-match="fx-m4"]').click();
+      D.querySelector('#legsWrap [data-live]').click();
+      D.querySelector('#lvPad [data-key="q100"]').click();
+      eq(H.__state().matches.find((x) => x.id === 'fx-m4').legs[0].visits.a, [{ t: 100, d: 3 }]);
+      D.getElementById('liveDialog').close();
+      D.getElementById('matchDialog').close();
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+
+  t('the first season takes the matches that came before it', () => {
+    const D = W.document;
+    try {
+      H.__plant({ league: { id: 'LN-NOSEASON', name: 'No Season', game: 'darts', settings: FIXTURE.league.settings },
+        players: [{ id: 'p1', name: 'Ann' }, { id: 'p2', name: 'Bob' }], teams: [], seasons: [], brackets: [], tombstones: [],
+        matches: [{ id: 'm1', seasonId: null, round: 1, date: '2026-01-01', a: 'p1', b: 'p2', status: 'played',
+                    legs: [{ w: 'a' }, { w: 'a' }] }] });
+      D.getElementById('tab-matches').click();
+      eq(D.querySelectorAll('#matchesWrap .mrow').length, 1, 'the match is on the tab with no season at all');
+      W.openAdd('season');
+      D.getElementById('ad_name').value = 'Season One';
+      D.getElementById('ad_date').value = '2026-01-01';
+      D.getElementById('addSave').click();
+      const st = H.__state();
+      eq(st.matches[0].seasonId, st.seasons[0].id, 'and the first season adopted it rather than hiding it');
+      D.getElementById('tab-matches').click();
+      eq(D.querySelectorAll('#matchesWrap .mrow').length, 1, 'still on the tab');
+      eq(D.querySelectorAll('#standingsTable tbody tr').length, 2, 'and still in the table');
+      /* Only the FIRST: a second season leaves the matches where they are. */
+      W.openAdd('season');
+      D.getElementById('ad_name').value = 'Season Two';
+      D.getElementById('ad_date').value = '2026-06-01';
+      D.getElementById('addSave').click();
+      eq(H.__state().matches[0].seasonId, st.seasons[0].id, 'a later season takes nothing');
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+
+  t('the standings table says what its minus figure means, because a title never shows on a phone', () => {
+    const D = W.document;
+    D.getElementById('tab-standings').click();
+    const note = D.getElementById('standingsNote').textContent;
+    ok(/P played, W won/.test(note), 'the column letters');
+    ok(/minus figure beside a name is that player’s start deduction/.test(note),
+       'and the handicap pill, which reads as a bare −20 in this table', JSON.stringify(note));
+    try {
+      const fx = JSON.parse(JSON.stringify(FIXTURE));
+      fx.players.forEach((p) => { p.hcp = null; });
+      H.__plant(fx);
+      ok(!/minus figure/.test(D.getElementById('standingsNote').textContent), 'and is silent when nobody has one');
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+
+  t('somebody else’s snapshot may take a copy out and put nothing in', () => {
+    const D = W.document;
+    const wasView = W.lnViewOnly;
+    try {
+      /* viewOnly is decided at boot from the fragment; the window is drawn
+         from the same flag, so the test sets it the way a share link would. */
+      W.__lnTestHooks.__viewOnly(true);
+      D.getElementById('dataBtn').click();
+      ok(D.getElementById('exportBtn').hidden === false, 'a backup can still be downloaded');
+      ok(D.getElementById('importBtn').hidden, 'Restore is not offered — its save() was thrown away by the viewOnly guard, ' +
+         'so the league on screen changed and nothing was written');
+      ok(D.getElementById('restoreNote').hidden, 'nor is the paragraph explaining it');
+      ok(D.querySelector('#dataDialog .danger-zone').hidden, 'and Start Again does not open onto a hidden button');
+      D.getElementById('dataDialog').close();
+    } finally { W.__lnTestHooks.__viewOnly(!!wasView); H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+
+  t('the owner is named in the Members list for everyone, not only for the owner', () => {
+    ok(/window\.lnOwner\(id, r\.owner\)/.test(stripComments(APP_SRC)), 'the league snapshot hands the owner uid over');
+    ok(/window\.lnOwner\(id, data\.owner\)/.test(stripComments(APP_SRC)), 'and so does adopting one');
+    ok(/if \(ownerOf && ownerOf\.id === state\.league\.id && ownerOf\.uid\) return ownerOf\.uid;/.test(stripComments(APP_SRC)),
+       'and ownerUid() prefers it to "am I the owner"');
+  });
+
+  t('the CSV BOM is an escape in both places, and the page describes itself', () => {
+    ok(APP_SRC.indexOf(String.fromCharCode(0xFEFF)) === -1,
+       'no literal U+FEFF is left in the source — invisible in an editor, in a diff, and to anything that normalises it');
+    eq((APP_SRC.match(/'\\uFEFF'/g) || []).length, 2, 'both CSV writers spell it as an escape');
+    const desc = (APP_SRC.match(/<meta name="description" content="([^"]*)"/) || [])[1] || '';
+    ok(/darts league/.test(desc) && !/shell every app/.test(desc),
+       'the description is this app’s, not the starter’s', JSON.stringify(desc));
   });
 
   group('installable, and it works offline');

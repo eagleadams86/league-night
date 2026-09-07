@@ -48,17 +48,26 @@ Phases 1, 2, 3 and 5 are built (2026-09-07): the scaffold, the pure engine (`rou
 `standings`/`rankSides`, the bracket resolvers, the x01 fold and checkout table, `mergeLeague`),
 the five views with the bottom bar, the scorer sheet, the editors, both demo leagues, the
 tournaments, and the whole sharing model — the sync module, `firestore.rules`, the Invite and
-Members cards, the join window and the password-manager key forms. **Sharing is dark until
-Charles creates the Firebase project and pastes `FIREBASE_CONFIG` and `GOOGLE_CLIENT_ID`** (the
-README's "Setting up the cloud"); it cannot be verified end to end from here, only from two real
-Google accounts. Phase 7 (polish, 2026-09-07 evening): axe clean across every view, window
+Members cards, the join window and the password-manager key forms. **The cloud is switched on**:
+`FIREBASE_CONFIG` points at `league-night-dff31` and `GOOGLE_CLIENT_ID` is set (the README's
+"Setting up the cloud" keeps the console steps). Sharing still cannot be verified end to end from
+here — only from two real Google accounts — so anything below about roles, claims and ownership is
+argued from the rules rather than observed.
+
+Phase 7 (polish, 2026-09-07 evening): axe clean across every view, window
 and both demo leagues in two themes plus the privacy page (`axe.mjs` lived in the session
-scratchpad — re-create it from axe-core under Playwright when auditing again); `compactSeason`
+scratchpad — re-create it from axe-core under Playwright when auditing again; the audit below
+rebuilt it and it was clean again); `compactSeason`
 + the Trim button past 300 KB; rounds open for print; the column-letter key under the table.
 Phases 4 (the live x01 sheet, `openLive`/`liveCommit` over the pure fold) and
 6 (invites: `joinLink`, Web Share, mailto/sms, the in-app QR encoder capped at version 6, and
-`#join=` arrival that strips the fragment at once) landed the same day. Still to come: 7 polish
-(the axe pass, print CSS, `compactSeason`). The README tracks what is live.
+`#join=` arrival that strips the fragment at once) landed the same day. **Every phase is built;
+nothing is outstanding.** The README tracks what is live.
+
+An audit pass the same evening (2026-09-07) read the whole app through for holes, bugs, dead
+comments and doc drift and fixed eleven things. Each has a test named for what went wrong, in the
+suite's group *the 2026-09-07 audit*; the rules they left behind are the last three bullets of
+"What is new here" and the last five of "Things a tidy-up would break". Do not re-audit those.
 
 **The QR encoder** matches the Python `qrcode` library module for module on four fixtures
 (forced masks). A second library, segno, inserts a whole zero byte after the terminator before
@@ -99,6 +108,23 @@ showed it.
   the subcollection rules `get()` the league and would be undeletable after it went.
 - **The demo ids carry an O** and so fail `LEAGUE_ID_RE`; that is what keeps them off the cloud.
 
+- **Trim Closed Seasons must not move a figure, and the leg has to carry the points for
+  that to be true.** An average is scored ÷ darts; `darts` was written onto a trimmed leg and the
+  points were not, so the side that LOST a live leg dropped out of its player's average the moment
+  a closed season was trimmed — while the button, the help and the README all promised nothing
+  would change. `compactSeason` writes `scored` per side now, `legSideStats` hands it back, and
+  `dartsPlayerStats` counts a trimmed leg exactly as it counted the live one. `scored` is on
+  `normalizeLeague`'s allowlist by name and NOT in `legFields`, because `legFields` is what the
+  Details boxes offer a scorer to type; SCHEMA went to 3 in the same commit.
+- **`int()` clamps UP, so it can invent a value that was never there.** `Number(null)` is 0, which
+  is finite, so `int(start.a, 1, 9999, 0)` turned a leg with no starting score into a leg starting
+  on 1. Leg starts go through `startAt()` instead, which answers null for anything that is not a
+  real start. Ask of every other boundary helper whether its floor can manufacture a figure.
+- **A quick key is a visit like any other and must go through the same gate.** 26, 41, 45, 60 and
+  100 are all real checkouts, several of them in one or two darts; the quick keys committed at a
+  flat three and never showed the finish row, so a checkout scored that way lied about the darts
+  it took. Anything new on the keypad routes through the `total === rem && canFinish` check.
+
 ## Things a tidy-up would break
 
 - **A place in a bracket holds one of THREE things**: a side id, `null` (a bye — nobody, for
@@ -121,6 +147,22 @@ showed it.
   bracket's best of three after `demoPlay`, which played them to the league's best of five.
 - **`tests.html` reads its markup from `</head>`**, not `<body>` — a CSS comment in the head says
   `<body>` first.
+- **The first season adopts the matches that came before it, and only the first.**
+  `leagueMatches()` returns every league match while there are no seasons and only the chosen
+  season's once there is one, so a match added early vanished from the Matches tab and the table
+  the moment a season was started. It belongs to the league's first season; a later season takes
+  nothing.
+- **A forfeit deletes the legs, so it asks first when there are any.** Void keeps its legs and
+  already asked; forfeit stores a score and none, and took them without a word.
+- **The owner is a field on the LEAGUE DOCUMENT and never on `state`** — a uid has no business in
+  a backup or a share link. `window.lnOwner(id, uid)` is how the module tells the classic side
+  whose league it is; without it every member but the owner saw the owner listed as an ordinary
+  admin, on a card that says the owner decides who may run the league.
+- **A shared snapshot may take a copy OUT and put nothing in.** Restore ran `adoptLeague()`,
+  whose `save()` the `viewOnly` guard threw away — the league on screen changed, the snapshot
+  banner started naming it, and nothing had been written anywhere. The button and its paragraph
+  are hidden in a snapshot and the import handler refuses behind them, and the danger zone goes
+  with the Delete All button rather than opening onto nothing.
 
 ## Editing rules
 
