@@ -301,6 +301,9 @@ async function runAsync() {
       noAddMatch: SD.getElementById('addMatchBtn').hidden,
       noScore: !SD.querySelector('.mrow .mgo'),
       rows: (SD.getElementById('tab-standings').click(), SD.querySelectorAll('#standingsTable tbody tr').length),
+      /* Every button on the League tab that a reader could press. */
+      leagueButtons: (SD.getElementById('tab-league').click(), [...SD.querySelectorAll('#leaguePanel button')]
+        .filter((b) => !b.classList.contains('tile-help') && !b.disabled && b.getClientRects().length).map((b) => b.id || b.textContent.trim())),
     };
   } catch (e) { asyncResults.shared = { error: e.message }; }
 
@@ -1214,6 +1217,7 @@ function define() {
     eq(r.leagueId, H.SHARED_ID, 'the snapshot has the shared id, never the sender’s');
     ok(r.noAddMatch && r.noScore, 'no add-match button, no scorer');
     eq(r.rows, 4, 'and the table is drawn from the link');
+    eq(r.leagueButtons, [], 'the League tab offers nothing to press — Create Another League was live there (Charles, 2026-09-07)');
   });
   t('the share window is the family shape', () => {
     ok(APP_SRC.indexOf('id="shareDialogTitle">Share a Read-Only Link<') !== -1);

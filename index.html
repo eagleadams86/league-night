@@ -1424,7 +1424,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
       <div id="seasonsWrap"></div>
     </div>
 
-    <div class="card">
+    <div class="card" id="inviteCard">
       <h2>Invite
         <button class="tile-help" type="button" data-help="invite" aria-label="How sharing a league works">i</button>
         <span class="spacer"></span>
@@ -1484,7 +1484,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
         <select id="meLink"></select></div>
     </div>
 
-    <div class="card">
+    <div class="card" id="deviceCard">
       <h2>This League on This Device
         <button class="tile-help" type="button" data-help="device" aria-label="What Forget and Delete do">i</button>
       </h2>
@@ -3895,12 +3895,19 @@ function renderLeagueTab() {
   $('seasonsWrap').innerHTML = seasons.length ? '<div class="plist">' + seasons.map((sn) => {
     const n = state.matches.filter((m) => m.seasonId === sn.id && !m.bracketId).length;
     const played = state.matches.filter((m) => m.seasonId === sn.id && !m.bracketId && countsForStandings(m)).length;
-    return '<button type="button" class="prow" data-season="' + esc(sn.id) + '"><span class="pname">' + esc(sn.name)
+    /* A row is a BUTTON only when pressing it opens the editor; for a viewer
+       or a snapshot it is a plain row, never a control that does nothing. */
+    const tag = canEdit() ? 'button type="button" class="prow"' : 'div class="prow static"';
+    return '<' + tag + ' data-season="' + esc(sn.id) + '"><span class="pname">' + esc(sn.name)
       + (sn.status === 'done' ? ' <span class="pill">closed</span>' : ' <span class="pill ok">active</span>') + '</span>'
-      + '<span class="pstat">from ' + esc(fmtDate(sn.startsOn)) + ' · ' + (n ? played + ' of ' + plural(n, 'match', 'matches') + ' played' : 'no fixtures yet') + '</span></button>';
+      + '<span class="pstat">from ' + esc(fmtDate(sn.startsOn)) + ' · ' + (n ? played + ' of ' + plural(n, 'match', 'matches') + ' played' : 'no fixtures yet') + '</span></' + (canEdit() ? 'button' : 'div') + '>';
   }).join('') + '</div>' : '<p class="empty">No seasons yet' + (canEdit() ? ' — start one above.' : '.') + '</p>';
-  /* Invite and Members */
-  renderInvite();
+  /* Invite and Members — and neither card in somebody else's snapshot: there
+     is no device record, no ID worth showing and nothing to create or forget.
+     Charles found Create Another League live in a read-only link. */
+  $('inviteCard').hidden = viewOnly;
+  $('deviceCard').hidden = viewOnly;
+  if (!viewOnly) renderInvite();
   /* This device */
   const bytes = JSON.stringify(state).length;
   $('sizeMeter').textContent = 'League data: ' + (bytes < 10000 ? (bytes / 1024).toFixed(1) : Math.round(bytes / 1024)) + ' KB of the 1,000 KB a league may hold.';
