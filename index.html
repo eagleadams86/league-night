@@ -1386,11 +1386,10 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
     <div class="card" id="rulesCard">
       <h2>League Rules
         <span class="spacer"></span>
-        <button type="button" class="btn-small no-print" id="renameBtn">Rename</button>
       </h2>
       <p class="lede" id="rulesNote"></p>
       <div class="grid3">
-        <div class="field"><label for="lr_name">League</label><input type="text" id="lr_name" readonly></div>
+        <div class="field"><label for="lr_name">League</label><input type="text" id="lr_name" maxlength="40" autocomplete="off"></div>
         <div class="field"><label for="lr_game">Game</label><input type="text" id="lr_game" readonly></div>
         <div class="field"><label for="lr_format">Played as</label>
           <select id="lr_format"><option value="singles">Singles</option><option value="teams">Teams</option></select></div>
@@ -1775,11 +1774,13 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
     a backup of another league is added beside the ones you have. You are told what the file
     holds and asked to confirm first.</p>
   <details class="danger-zone">
-    <summary>Delete This League</summary>
-    <p>Deletes the league on screen — its players, fixtures and tournaments. Your other leagues, your
-      settings and your theme are kept.</p>
+    <summary>Start Again</summary>
+    <p>Deletes every league on this device. A league you have shared stays in the cloud for its
+      members and comes back when you sign in; a league that lives only here is gone for good. Your
+      settings and your theme are kept. To delete one league, or to delete a shared league for
+      everyone, use the League tab.</p>
     <div class="datarow">
-      <button type="button" id="clearBtn" class="danger">Delete This League</button>
+      <button type="button" id="clearBtn" class="danger">Delete All Data</button>
     </div>
   </details>
   <div class="datafoot">
@@ -1788,7 +1789,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
 </dialog>
 
 <dialog id="clearDialog" aria-labelledby="clearTitle">
-  <h2 id="clearTitle">Delete This League?</h2>
+  <h2 id="clearTitle">Delete All Data?</h2>
   <p id="clearBody"></p>
   <div class="clearfoot">
     <button type="button" id="clearBackupBtn" class="safety"><span aria-hidden="true">⬇︎</span> Download Backup First</button>
@@ -3831,6 +3832,7 @@ function renderLeagueTab() {
     : 'These can all change until the first match is recorded.';
   document.querySelectorAll('#rulesCard input, #rulesCard select').forEach((el) => {
     if (el.id !== 'lr_format' && el.id !== 'lr_game') el.disabled = !canEdit();
+    if (el.id === 'lr_name') el.readOnly = !canEdit();
   });
   /* Seasons */
   const seasons = seasonsSorted();
@@ -3866,9 +3868,9 @@ function renderLeagueTab() {
 let addKind = null;
 function openAdd(kind) {
   addKind = kind;
-  $('ad_title').textContent = { player: 'Add a Player', team: 'Add a Team', season: 'Start a Season', league: 'Rename the League' }[kind];
-  $('ad_label').textContent = { player: 'Name', team: 'Team name', season: 'Season name', league: 'League name' }[kind];
-  $('ad_name').value = kind === 'season' ? suggestSeasonName() : kind === 'league' ? state.league.name : '';
+  $('ad_title').textContent = { player: 'Add a Player', team: 'Add a Team', season: 'Start a Season' }[kind];
+  $('ad_label').textContent = { player: 'Name', team: 'Team name', season: 'Season name' }[kind];
+  $('ad_name').value = kind === 'season' ? suggestSeasonName() : '';
   $('ad_dateWrap').hidden = kind !== 'season';
   $('ad_date').value = todayISO();
   $('addWarn').textContent = '';
@@ -3899,16 +3901,21 @@ $('addSave').addEventListener('click', () => {
     const sn = touch({ id: uid(), name: name, startsOn: date, status: 'active' });
     state.seasons.push(sn);
     seasonPick = sn.id;
-  } else if (addKind === 'league') {
-    state.league.name = name;
-    touch(state.league);
   }
   save();
   render();
   $('addDialog').close();
-  toast(addKind === 'league' ? 'League renamed' : name + ' added');
+  toast(name + ' added');
 });
 $('addCancel').addEventListener('click', () => $('addDialog').close());
+/* Enter saves. A one-box window that ignores its own return key sends a
+   reader hunting for the button; the same for creating a league. */
+['ad_name', 'ad_date'].forEach((id) => $(id).addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) { e.preventDefault(); $('addSave').click(); }
+}));
+$('lg_name').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) { e.preventDefault(); $('leagueSave').click(); }
+});
 
 /* ── The player editor ────────────────────────────────────────────────── */
 let playerCtx = null;
@@ -4497,6 +4504,15 @@ function rulesChanged(e) {
   const s = S();
   const id = e.target.id;
   const int = (v, lo, hi, d) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
+  /* The name is edited IN ITS BOX like every other rule here — a box that
+     looks editable and is not was the first thing Charles hit. Handled in
+     this one listener, because a second one would run after render() had
+     already put the old name back in the box. */
+  if (id === 'lr_name') {
+    const name = $('lr_name').value.trim().slice(0, NAME_MAX);
+    if (!name) { $('lr_name').value = state.league.name; toast('The league keeps its name — the box was empty'); return; }
+    state.league.name = name;
+  }
   if (id === 'lr_format' && !state.matches.length) s.format = $('lr_format').value === 'teams' ? 'teams' : 'singles';
   if (id === 'lr_teamSize') s.teamSize = int($('lr_teamSize').value, 2, 8, 2);
   if (id === 'lr_legFormat') s.legFormat = $('lr_legFormat').value;
@@ -4515,7 +4531,7 @@ function rulesChanged(e) {
   save(); render();
 }
 document.querySelectorAll('#rulesCard input, #rulesCard select').forEach((el) => el.addEventListener('change', rulesChanged));
-$('renameBtn').addEventListener('click', () => openAdd('league'));
+
 
 /* ═══════════════════════════════ Wiring ═══════════════════════════════════ */
 $('leagueSel').addEventListener('change', (e) => openLeague(e.target.value));
@@ -4699,29 +4715,62 @@ $('importFile').addEventListener('change', () => {
 });
 
 /* ── Deleting a league ────────────────────────────────────────────────── */
+/* ONE window, two jobs, and the heading says which. From the Back Up window
+   it is the family's Delete All Data: every league on THIS DEVICE goes, a
+   shared one staying in the cloud for its members. From the League tab it is
+   the owner deleting ONE league, for everyone. */
 const clearDialog = $('clearDialog');
-function openClear() {
-  if (!state || !isOwner()) return;
+let clearMode = 'all';
+function openClear(mode) {
+  if (!state) return;
+  if (mode === 'league' && !isOwner()) return;
+  clearMode = mode;
   $('dataDialog').close();
-  $('clearBody').textContent = 'This deletes ' + state.league.name + ' — ' + plural(state.players.length, 'player') + ', '
-    + plural(state.matches.length, 'match', 'matches') + ' and ' + plural(state.brackets.length, 'tournament') + '. '
-    + (myEntry() && myEntry().cloud ? 'It goes for every member, not only this device. ' : '')
-    + 'Your other leagues, your settings and your theme are kept. There is no undo — a downloaded backup is the only way to get any of it back.';
+  if (mode === 'league') {
+    $('clearTitle').textContent = 'Delete This League?';
+    $('clearBody').textContent = 'This deletes ' + state.league.name + ' — ' + plural(state.players.length, 'player') + ', '
+      + plural(state.matches.length, 'match', 'matches') + ' and ' + plural(state.brackets.length, 'tournament') + '. '
+      + (myEntry() && myEntry().cloud ? 'It goes for every member, not only this device. ' : '')
+      + 'Your other leagues, your settings and your theme are kept. There is no undo — a downloaded backup is the only way to get any of it back.';
+  } else {
+    const n = device.leagues.length, shared = device.leagues.filter((l) => l.cloud).length;
+    $('clearTitle').textContent = 'Delete All Data?';
+    $('clearBody').textContent = 'This deletes ' + plural(n, 'league') + ' from this device'
+      + (shared ? ' — ' + plural(shared, 'shared one', 'shared ones') + ' stay in the cloud for their members and come back when you sign in' : '')
+      + '. Your settings and your theme are kept. There is no undo — a downloaded backup is the only way to get a league that lived only here back.';
+  }
   openModal(clearDialog);
 }
-$('clearBtn').addEventListener('click', openClear);
-$('deleteLeagueBtn').addEventListener('click', openClear);
+$('clearBtn').addEventListener('click', () => openClear('all'));
+$('deleteLeagueBtn').addEventListener('click', () => openClear('league'));
 $('clearBackupBtn').addEventListener('click', downloadBackup);
 $('clearCancel').addEventListener('click', () => clearDialog.close());
 $('clearConfirm').addEventListener('click', () => {
   if (!state) return;
-  const name = state.league.name, id = state.league.id;
   clearDialog.close();
-  const entry = myEntry();
-  if (entry && entry.cloud && typeof window.cloudDelete === 'function') window.cloudDelete(id);
-  device.leagues.forEach((l) => { if (l.id === id) l.cloud = false; });   /* so forget does not also "leave" */
-  forgetLeague(id);
-  toast(name + ' deleted');
+  if (clearMode === 'league') {
+    const name = state.league.name, id = state.league.id;
+    const entry = myEntry();
+    if (entry && entry.cloud && typeof window.cloudDelete === 'function') window.cloudDelete(id);
+    device.leagues.forEach((l) => { if (l.id === id) l.cloud = false; });   /* so forget does not also "leave" */
+    forgetLeague(id);
+    toast(name + ' deleted');
+    return;
+  }
+  /* Everything on this device — and ONLY this device: no cloud league is
+     left, deleted or touched, and the account's own list of leagues stays,
+     so signing in brings the shared ones back. */
+  device.leagues.slice().forEach((l) => {
+    try { localStorage.removeItem(LEAGUE_KEY(l.id)); localStorage.removeItem('ln-key-' + l.id); } catch (e) {}
+  });
+  device.leagues = [];
+  device.current = null;
+  state = null;
+  seasonPick = null;
+  saveLocal();
+  render();
+  if (typeof window.cloudOpen === 'function') window.cloudOpen(null);
+  toast('Everything deleted from this device');
 });
 
 /* ═══════════════════════════════ Share links ═══════════════════════════════
@@ -6210,16 +6259,31 @@ async function shareLeague() {
   const st = window.lnGet();
   if (!st || !window.lnIsLeagueId(st.league.id)) { window.toast('The demo cannot be shared — create a league of your own.'); return false; }
   const id = st.league.id;
-  const key = window.lnKey(id) || window.lnNewAdminKey();
+  let key = window.lnKey(id) || window.lnNewAdminKey();
+  let rev = 0;
   try {
-    await F.setDoc(leagueRef(id), { state: forCloud(st), rev: 0, owner: user.uid, game: st.league.game,
-                                    name: st.league.name, schema: window.lnSchema(), updatedAt: Date.now() });
-    await F.setDoc(keyRef(id), { key: key });
-    await F.setDoc(memberRef(id, user.uid), { role: 'admin', name: myName(), joinedAt: Date.now() });
+    /* IDEMPOTENT, because a share can stop halfway (a rule refused one of
+       the four writes once) and the second press must repair rather than
+       fail: a league already up under this account is left as it is, its
+       key read back, and only what is missing is written. */
+    const had = await F.getDoc(leagueRef(id));
+    if (had.exists()) {
+      if (had.data().owner !== user.uid) { window.toast('A league with this ID already exists under another account.'); return false; }
+      rev = Number(had.data().rev) || 0;
+      const k = await F.getDoc(keyRef(id));
+      if (k.exists() && k.data().key) key = k.data().key;
+      else await F.setDoc(keyRef(id), { key: key });
+    } else {
+      await F.setDoc(leagueRef(id), { state: forCloud(st), rev: 0, owner: user.uid, game: st.league.game,
+                                      name: st.league.name, schema: window.lnSchema(), updatedAt: Date.now() });
+      await F.setDoc(keyRef(id), { key: key });
+    }
+    const me = await F.getDoc(memberRef(id, user.uid));
+    if (!me.exists()) await F.setDoc(memberRef(id, user.uid), { role: 'admin', name: myName(), joinedAt: Date.now() });
     await noteUserLeague(id, st.league.name, st.league.game, false);
   } catch (e) { setSyncError(e); return false; }
   window.lnSetKey(id, key);
-  window.lnRegisterCloud({ id: id, role: 'owner', rev: 0, current: true });
+  window.lnRegisterCloud({ id: id, role: 'owner', rev: rev, current: true });
   listenTo(id);
   clearSyncError();
   window.toast('Shared — anyone signed in with the League ID can follow it');

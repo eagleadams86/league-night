@@ -107,6 +107,9 @@ service cloud.firestore {
       // Who is in the league and what they may do. Readable by anyone signed in
       // (a roster is not a secret to the people in it); an account may add
       // itself as a viewer, or as an admin when its claim matches the key; the
+      // OWNER may add itself as an admin outright (sharing a league writes the
+      // owner's own record, and the owner never presents a key — the first
+      // published version forgot this and every Share stopped halfway); the
       // owner may set anyone's role or remove anyone; anyone may leave.
       match /members/{uid} {
         function validMember(d) {
@@ -118,7 +121,7 @@ service cloud.firestore {
         allow read:   if signedIn();
         allow create: if signedIn() && me() == uid && exists(leaguePath())
                       && validMember(request.resource.data)
-                      && (request.resource.data.role == 'viewer' || keyMatches());
+                      && (request.resource.data.role == 'viewer' || keyMatches() || isOwner());
         allow update: if signedIn() && validMember(request.resource.data) && (
                          isOwner()
                       || (me() == uid && request.resource.data.role == resource.data.role)

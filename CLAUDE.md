@@ -78,6 +78,15 @@ showed it.
   that is not a League ID (the demo).
 - **The Admin Key** lives in `ln-key-<id>`, never in `state`; the Invite card and the join
   window are real forms (username = League ID, password = Admin Key) for the password manager.
+- **The owner writes their own member record without a key.** The first published rules
+  required `keyMatches()` for any admin record, so every Share stopped at the third write
+  (Charles hit it within the hour). `shareLeague()` is idempotent for the same reason: a second
+  press repairs a league that stopped halfway instead of failing on `rev == 0`.
+- **The Back Up window's danger zone is the family's Delete All Data** — every league on THIS
+  device, shared ones left in the cloud. Deleting ONE league, or a shared league for everyone,
+  is the owner's button on the League tab. One `clearDialog`, two modes, the heading says which.
+- **The league name is edited in its box, inside `rulesChanged`** — a second `change` listener
+  would run after `render()` had put the old name back.
 - **Deleting a league is one `writeBatch`** — members, the key, the claim, the league — because
   the subcollection rules `get()` the league and would be undeletable after it went.
 - **The demo ids carry an O** and so fail `LEAGUE_ID_RE`; that is what keeps them off the cloud.

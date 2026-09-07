@@ -51,7 +51,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 180;
+const EXPECTED = 182;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -1224,6 +1224,8 @@ function define() {
     ok(/match \/private\/admin[\s\S]*allow read:\s*if isOwner\(\);/.test(r), 'only the owner reads the key');
     ok(/match \/claims\/\{uid\}[\s\S]*allow read:\s*if false;/.test(r), 'a claim is never readable');
     ok(/request\.resource\.data\.role == 'admin' && keyMatches\(\)/.test(r), 'admin is claimed by matching the key');
+    ok(/request\.resource\.data\.role == 'viewer' \|\| keyMatches\(\) \|\| isOwner\(\)/.test(r),
+       'and the owner may write their own admin record without a key — Share writes it, and the first published rules refused it');
     /* Every get() is guarded by an exists() on the same path. */
     /* A balanced-paren scan: get(memberPath(me())).data nests two deep. */
     const gets = [];
@@ -1253,6 +1255,8 @@ function define() {
     ok(/forCloud = \(s\) => JSON\.parse\(JSON\.stringify\(s\)\)/.test(m), 'the cloud copy goes through JSON — Firestore refuses undefined');
     ok(/writeBatch\(db\)/.test(m) && /batch\.delete\(leagueRef\(id\)\)/.test(m), 'deleting a league is one batch');
     ok(/F\.deleteDoc\(claimRef\(id\)\)/.test(m), 'the claim is emptied after use');
+    ok(/const had = await F\.getDoc\(leagueRef\(id\)\);/.test(m) && /if \(!me\.exists\(\)\) await F\.setDoc\(memberRef/.test(m),
+       'Share is idempotent: a second press repairs a league that stopped halfway rather than failing on rev 0');
     ok(/const FIREBASE_CONFIG = null;/.test(m) || /projectId:/.test(m), 'a config or an explicit null');
     ok(/addEventListener\('online'/.test(m) && /visibilitychange/.test(m), 'a held push is retried when the network or the reader comes back');
   });
@@ -1482,10 +1486,48 @@ function define() {
   t('a dialog heading is h2 at --fs-md, as in every sibling', () => {
     ok(/dialog h2\s*\{[^}]*font-size:\s*var\(--fs-md\)/.test(css()));
   });
-  t('"Delete" is folded into the Back up dialog, behind a disclosure, and confirms in the family window', () => {
-    ok(/<details class="danger-zone">/.test(APP_SRC));
+  t('"Start Again" is folded into the Back up dialog, behind a disclosure, and confirms in the family window', () => {
+    ok(/<details class="danger-zone">\s*<summary>Start Again<\/summary>/.test(APP_SRC), 'the family\'s words');
+    ok(/id="clearBtn" class="danger">Delete All Data</.test(APP_SRC), 'and the family\'s button');
     ok(/<dialog id="clearDialog"/.test(APP_SRC) && /id="clearBackupBtn"[^>]*class="safety"/.test(APP_SRC));
     ok(/There is no undo — a downloaded backup is the only way/.test(stripComments(APP_SRC)));
+  });
+  t('Delete All Data empties this device and returns to the welcome card; Delete This League is the owner’s, on the League tab', () => {
+    const D = W.document;
+    const fx = JSON.parse(JSON.stringify(FIXTURE)); fx.league.id = 'LN-SECONDONE'; fx.league.name = 'Second';
+    H.__plant(fx); H.__plant(FIXTURE);
+    const held = H.__device().leagues.length;
+    ok(held >= 2, 'at least two leagues on the device', held);
+    D.getElementById('clearBtn').click();
+    ok(D.getElementById('clearDialog').open && /Delete All Data\?/.test(D.getElementById('clearTitle').textContent));
+    ok(new RegExp(held + ' leagues from this device').test(D.getElementById('clearBody').textContent), D.getElementById('clearBody').textContent);
+    D.getElementById('clearConfirm').click();
+    eq(H.__device().leagues.length, 0); ok(D.documentElement.hasAttribute('data-welcome'), 'home again');
+    H.__plant(FIXTURE);
+    D.getElementById('deleteLeagueBtn').click();
+    ok(/Delete This League\?/.test(D.getElementById('clearTitle').textContent) && /Fixture League/.test(D.getElementById('clearBody').textContent));
+    D.getElementById('clearDialog').close();
+    W.setTab('standings');
+  });
+  t('Enter saves a new player, and the league name is edited in its own box', () => {
+    const D = W.document;
+    D.getElementById('tab-players').click();
+    D.getElementById('addPlayerBtn').click();
+    const box = D.getElementById('ad_name');
+    box.value = 'Echo Enter';
+    box.dispatchEvent(new W.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    ok(!D.getElementById('addDialog').open && H.__state().players.some((p) => p.name === 'Echo Enter'), 'saved on Enter');
+    D.getElementById('tab-league').click();
+    const name = D.getElementById('lr_name');
+    ok(!name.readOnly && !D.getElementById('renameBtn'), 'the box itself is the editor; there is no Rename button');
+    name.value = 'Renamed League';
+    name.dispatchEvent(new W.Event('change', { bubbles: true }));
+    eq(H.__state().league.name, 'Renamed League');
+    eq(D.getElementById('leagueSel').selectedOptions[0].textContent, 'Renamed League', 'and the header picker follows');
+    name.value = '   ';
+    name.dispatchEvent(new W.Event('change', { bubbles: true }));
+    eq(H.__state().league.name, 'Renamed League', 'an empty box changes nothing');
+    H.__plant(FIXTURE); W.setTab('standings');
   });
   t('a delete is confirmed, and the confirmation NAMES the record', () => {
     const src = stripComments(APP_SRC);
