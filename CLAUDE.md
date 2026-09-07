@@ -44,11 +44,35 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
 
 ## Status
 
-Phase 1 (scaffold) is done: the starter renamed, the dartboard mark, port 8024, both
-workflows, the theme-pack consumer entry. The app is still the starter's "named numbers"
-placeholder until phase 2 replaces the middle. Phases, in order: 2a engine (pure, tested),
-2b views + demo, 3a Firebase create/join/read, 3b roles, 4 live scorer + handicaps,
-5 tournaments, 6 invites + QR, 7 polish. The README tracks what is live.
+Phases 1, 2 and 5 are live (2026-09-07): the scaffold, the pure engine (`roundRobin`,
+`standings`/`rankSides`, the bracket resolvers, the x01 fold and checkout table, `mergeLeague`),
+the five views with the bottom bar, the scorer sheet, the editors, both demo leagues and the
+tournaments. Still to come, in order: 3a Firebase create/join/read, 3b roles (the Admin Key,
+Members, ownership), 4 the live x01 sheet + handicap starts in it, 6 invites + QR, 7 polish
+(the axe pass, print CSS, `compactSeason`). The README tracks what is live.
+
+## Things a tidy-up would break
+
+- **A place in a bracket holds one of THREE things**: a side id, `null` (a bye — nobody, for
+  good) or `undefined` (not decided yet). `resolveCell` marks a cell `pending` only when a SIDE is
+  unknown; a cell with both sides known and no result has `winner: null` and is playable. The
+  first draft treated the two nulls alike and let a side through against an opponent who simply
+  had not played yet — and the demo generator found nothing to play.
+- **Scoring exactly what is left with no double to finish on is a BUST, not a refusal**
+  (`x01Visit`: 159 on 159 under double-out). Only a finish that IS possible in some count but not
+  in the count given is an error, and the sheet never offers that count.
+- **A bracket match plays to the BRACKET's best-of** (`matchFormatFor`), not the league's.
+  `matchDone` takes a match format, never the settings object.
+- **Standings `status`**: a match is `played` only once `matchDone` says so; legs entered on a
+  match still short of that leave it `scheduled` and it counts for nothing. Forfeits store a
+  score and no legs; voids keep their legs and count for nothing.
+- **`__plant` in the test hooks updates the device entry's name** — the header picker reads the
+  device record, not `state`, and a test that plants a hostile league name reads the picker.
+- **The demo is two leagues** (one format each) with ids that are NOT valid League IDs (they carry
+  an O), so they can never be pushed to the cloud. `buildDemoSingles` trims bracket legs to the
+  bracket's best of three after `demoPlay`, which played them to the league's best of five.
+- **`tests.html` reads its markup from `</head>`**, not `<body>` — a CSS comment in the head says
+  `<body>` first.
 
 ## Editing rules
 
