@@ -51,7 +51,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 182;
+const EXPECTED = 185;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -602,7 +602,7 @@ function define() {
     /* The family's numbers-and-dates rule, one level down: no notes, no
        comments, nothing a stranger's text can hide in. */
     ok(!/<textarea/.test(APP_SRC), 'no textarea anywhere');
-    const fields = (APP_SRC.match(/<input type="text"[^>]*>/g) || []).filter((f) => !/readonly/.test(f));
+    const fields = (APP_SRC.match(/<input type="text"[^>]*>/g) || []).filter((f) => !/readonly|disabled/.test(f));
     fields.forEach((f) => ok(/maxlength="40"/.test(f) || /id="searchBox"/.test(f), 'a text box without the 40-character cap: ' + f));
   });
   t('numbers are clamped, dates shape-checked, and junk never throws', () => {
@@ -1349,7 +1349,16 @@ function define() {
     const link = H.joinLink('LN-ABCDEFGH', '');
     ok(/#join=LN-ABCDEFGH$/.test(link) && link.indexOf('?') === -1, 'fragment, never a query string: ' + link);
     ok(/&admin=ABCDEFGHJKLMNPQR$/.test(H.joinLink('LN-ABCDEFGH', 'ABCDEFGHJKLMNPQR')));
-    ok(H.JOIN_RE.test('#join=LN-ABCDEFGH') && H.JOIN_RE.test('#join=LN-ABCDEFGH&admin=ABCDEFGHJKLMNPQR') && !H.JOIN_RE.test('#join=LN-ABC'));
+    eq(H.parseJoinHash('#join=LN-ABCDEFGH'), { id: 'LN-ABCDEFGH', key: '' });
+    eq(H.parseJoinHash('#join=LN-ABCDEFGH&admin=ABCDEFGHJKLMNPQR'), { id: 'LN-ABCDEFGH', key: 'ABCDEFGHJKLMNPQR' });
+    eq(H.parseJoinHash('#join=LN-ABC'), null);
+    eq(H.parseJoinHash('#share=abc'), null);
+    /* The first link Charles sent: a share sheet glued the words onto the address. */
+    eq(H.parseJoinHash('#join=LN-4FWXQEHS%20Join%20Misfits%20Fun%20on%20League%20Night'), { id: 'LN-4FWXQEHS', key: '' }, 'a mangled link still says which league');
+    eq(H.parseJoinHash('#join=ln-abcdefgh&admin=abcdefghjklmnpqr'), { id: 'LN-ABCDEFGH', key: 'ABCDEFGHJKLMNPQR' }, 'and case does not matter');
+    const msg = H.inviteMessage(false);
+    ok(msg.text.endsWith('\n\n' + msg.link), 'the link is the LAST thing in the message, on its own line');
+    ok(msg.words.indexOf('http') === -1, 'and the words handed to the share sheet do not repeat it');
     H.__plant(FIXTURE);
   });
   t('arriving by a join link takes the link off the address at once', () => {
@@ -1357,6 +1366,36 @@ function define() {
     ok(!r.error, r.error);
     eq(r.hash, '', 'the fragment — and the key in it — is gone from the address bar');
     ok(/cannot join leagues yet/.test(r.toast) && /LN-ABCDEFGH/.test(r.toast), 'and with no cloud the reader is told the ID');
+  });
+
+  group('the polish pass');
+  t('a closed season can be trimmed without changing a single figure', () => {
+    const d = H.buildDemoSingles();
+    const live = d.matches.filter((m) => m.legs.some((l) => l.visits));
+    ok(live.length > 0, 'the demo has live-scored legs');
+    const season = live[0].seasonId;
+    const stat = (l) => ['a', 'b'].map((side) => { const s = H.legSideStats(l, side); return [s.darts, s.checkout, s.t180, s.t140, s.t100, s.won]; });
+    const before = live.filter((m) => m.seasonId === season).map((m) => m.legs.map(stat));
+    const out = H.compactSeason(d, season);
+    ok(out.trimmed > 0, 'legs were trimmed');
+    const after = out.matches.filter((m) => m.seasonId === season && live.some((x) => x.id === m.id)).map((m) => m.legs.map(stat));
+    eq(after, before, 'every figure on every leg reads the same');
+    ok(out.matches.filter((m) => m.seasonId === season).every((m) => m.legs.every((l) => !l.visits)), 'no visits left in that season');
+    ok(d.matches.some((m) => m.legs.some((l) => l.visits)), 'the input was not touched');
+    ok(JSON.stringify(out).length < JSON.stringify(d).length, 'and it is smaller');
+    ok(/id="trimBtn"/.test(APP_SRC) && H.TRIM_AT === 300000, 'offered from the League tab past 300 KB');
+  });
+  t('a form row is an image with a name, the column letters are explained on screen, and no dot nests in a button', () => {
+    const D = W.document;
+    ok(D.querySelector('#standingsTable .form[role="img"][aria-label^="Form:"]'), 'axe: a span may not carry aria-label without a role');
+    ok(/P played, W won/.test(D.getElementById('standingsNote').textContent), 'a title on a heading never shows on a phone');
+    ok(!D.querySelector('button .tile-help'), 'nested interactive controls');
+    ok(D.getElementById('individualHelp').hidden, 'the individual-table dot hides in a singles league');
+  });
+  t('every round prints open, and the bracket is not clipped on paper', () => {
+    const src = stripComments(APP_SRC);
+    ok(/addEventListener\('beforeprint'/.test(src) && /addEventListener\('afterprint'/.test(src), 'a closed details prints closed');
+    ok(/@media print \{[\s\S]*?\.bracket \{ overflow: visible; flex-wrap: wrap; \}/.test(css()));
   });
 
   group('the live scorer');
@@ -1520,6 +1559,7 @@ function define() {
     D.getElementById('tab-league').click();
     const name = D.getElementById('lr_name');
     ok(!name.readOnly && !D.getElementById('renameBtn'), 'the box itself is the editor; there is no Rename button');
+    ok(D.getElementById('lr_game').disabled && W.getComputedStyle(D.getElementById('lr_game')).opacity !== '1', 'the game cannot change, and looks it');
     name.value = 'Renamed League';
     name.dispatchEvent(new W.Event('change', { bubbles: true }));
     eq(H.__state().league.name, 'Renamed League');

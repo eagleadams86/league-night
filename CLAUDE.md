@@ -51,7 +51,11 @@ tournaments, and the whole sharing model — the sync module, `firestore.rules`,
 Members cards, the join window and the password-manager key forms. **Sharing is dark until
 Charles creates the Firebase project and pastes `FIREBASE_CONFIG` and `GOOGLE_CLIENT_ID`** (the
 README's "Setting up the cloud"); it cannot be verified end to end from here, only from two real
-Google accounts. Phases 4 (the live x01 sheet, `openLive`/`liveCommit` over the pure fold) and
+Google accounts. Phase 7 (polish, 2026-09-07 evening): axe clean across every view, window
+and both demo leagues in two themes plus the privacy page (`axe.mjs` lived in the session
+scratchpad — re-create it from axe-core under Playwright when auditing again); `compactSeason`
++ the Trim button past 300 KB; rounds open for print; the column-letter key under the table.
+Phases 4 (the live x01 sheet, `openLive`/`liveCommit` over the pure fold) and
 6 (invites: `joinLink`, Web Share, mailto/sms, the in-app QR encoder capped at version 6, and
 `#join=` arrival that strips the fragment at once) landed the same day. Still to come: 7 polish
 (the axe pass, print CSS, `compactSeason`). The README tracks what is live.
@@ -85,6 +89,10 @@ showed it.
 - **The Back Up window's danger zone is the family's Delete All Data** — every league on THIS
   device, shared ones left in the cloud. Deleting ONE league, or a shared league for everyone,
   is the owner's button on the League tab. One `clearDialog`, two modes, the heading says which.
+- **A join link is parsed LENIENTLY** (`parseJoinHash`): the first link Charles sent arrived
+  with the message's words glued onto the fragment by a share sheet. The words come first and
+  the link last in every message, `navigator.share` gets the words without the link, and the
+  parser takes the first thing shaped like an ID after `#join=`.
 - **The league name is edited in its box, inside `rulesChanged`** — a second `change` listener
   would run after `render()` had put the old name back.
 - **Deleting a league is one `writeBatch`** — members, the key, the claim, the league — because

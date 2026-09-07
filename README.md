@@ -127,6 +127,20 @@ The QR encoder covers versions 1 to 6 (up to 106 characters), which is what a jo
 and no more; it is pinned in the test suite against an independent encoder's output, a
 Reed–Solomon syndrome check and the structural facts every reader relies on.
 
+## Accessibility and Paper
+
+Every view and window was audited with axe-core under Playwright at 1280px in Midnight and at
+375px in Light, both demo leagues, plus the privacy page, with no violations at WCAG 2.2 AA or
+axe's best-practice level (7 September 2026). Beyond what a tool can see: status is never
+carried by colour alone (a form tile is a letter, a chosen side a tick, a thrower a pill),
+every dialog closes on Escape and a click outside, the tab strip takes arrow keys, and the
+column letters of the table are spelled out beneath it rather than hidden in a hover title.
+On paper every round prints open and a bracket wraps instead of clipping.
+
+A league that grows past 300 KB is offered **Trim Closed Seasons** on the League tab: every
+live-scored leg in a closed season keeps its figures and loses the visit-by-visit record,
+and no table changes. The cloud holds one document of at most 1 MiB per league.
+
 ## Running it locally
 
 ```bash

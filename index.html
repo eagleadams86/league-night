@@ -1000,6 +1000,10 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
   [data-tab]:not([data-tab="league"]) #leaguePanel { display: none; }
   /* Every write surface goes for a viewer and in a shared snapshot. */
   html[data-readonly] .no-edit { display: none !important; }
+  /* A field that cannot be changed LOOKS it: the game is fixed for a league's
+     life, and the format once a match exists. Dimmed by opacity, not a new
+     colour, and the cursor says so. */
+  input:disabled, select:disabled { opacity: .55; cursor: not-allowed; }
 
   /* ── The bottom bar ────────────────────────────────────────────────────────
      THE FIRST IN THE FAMILY (2026-09-07). Under 760px the header goes static
@@ -1061,8 +1065,6 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
   .seg button:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
   .seg button:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; margin-left: -1px; }
   .seg button[aria-pressed="true"] { background: var(--btn-bg); color: var(--btn-text); border-color: var(--btn-bg); }
-  .seg .tile-help { margin-left: 5px; }
-  .seg button[aria-pressed="true"] .tile-help { color: var(--btn-text); border-color: var(--btn-text); }
 
   /* ── Standings ───────────────────────────────────────────────────────── */
   .form { display: inline-flex; gap: 2px; }
@@ -1172,6 +1174,11 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
      rebuilds under a box being typed in. Wider than the family's 560px
      default for the two that hold a grid. */
   #matchDialog, #bracketDialog, #scheduleDialog, #playerDialog { max-width: 700px; }
+  /* On paper a bracket wraps rather than clips, and the tap affordances go. */
+  @media print {
+    .bracket { overflow: visible; flex-wrap: wrap; }
+    .mgo, details.round > summary::before { display: none; }
+  }
 
   /* ── What only exists once the cloud does ────────────────────────────────
      The sync module stamps data-cloud on <html> when it has a config to
@@ -1319,9 +1326,9 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
         <span class="pickwrap"><label class="sr-only" for="stSeason">Season</label><select id="stSeason" class="btn-small"></select></span>
         <span class="seg no-print" id="stModeWrap" role="group" aria-label="Which table" hidden>
           <button type="button" class="btn-small" data-mode="sides" aria-pressed="true">Teams</button>
-          <button type="button" class="btn-small" data-mode="players" aria-pressed="false">Players
-            <span class="tile-help" data-help="individual" role="button" tabindex="0" aria-label="About the individual table">i</span></button>
+          <button type="button" class="btn-small" data-mode="players" aria-pressed="false">Players</button>
         </span>
+        <button class="tile-help no-print" type="button" data-help="individual" aria-label="About the individual table" id="individualHelp" hidden>i</button>
         <span class="row no-print" style="gap:6px">
           <button type="button" class="btn-small" data-export="standingsTable" data-export-name="standings" data-export-how="copy">Copy</button>
           <button type="button" class="btn-small" data-export="standingsTable" data-export-name="standings" data-export-how="csv"><span aria-hidden="true">⬇</span> CSV</button>
@@ -1385,12 +1392,12 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
   <div id="leaguePanel" role="tabpanel" aria-labelledby="tab-league" hidden>
     <div class="card" id="rulesCard">
       <h2>League Rules
-        <span class="spacer"></span>
+        <button class="tile-help" type="button" data-help="rules" aria-label="How the rules apply">i</button>
       </h2>
       <p class="lede" id="rulesNote"></p>
       <div class="grid3">
         <div class="field"><label for="lr_name">League</label><input type="text" id="lr_name" maxlength="40" autocomplete="off"></div>
-        <div class="field"><label for="lr_game">Game</label><input type="text" id="lr_game" readonly></div>
+        <div class="field"><label for="lr_game">Game</label><input type="text" id="lr_game" disabled></div>
         <div class="field"><label for="lr_format">Played as</label>
           <select id="lr_format"><option value="singles">Singles</option><option value="teams">Teams</option></select></div>
         <div class="field" id="lr_teamSizeWrap"><label for="lr_teamSize">Players per team</label>
@@ -1481,6 +1488,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
       </h2>
       <p class="hint" id="sizeMeter"></p>
       <div class="row no-print">
+        <button type="button" id="trimBtn" hidden>Trim Closed Seasons</button>
         <button type="button" id="newLeagueBtn">＋ Create Another League</button>
         <button type="button" id="joinBtn" class="cloud-only" hidden>Join a League…</button>
         <button type="button" id="forgetBtn">Forget This League</button>
@@ -2289,6 +2297,40 @@ function mergeLeague(mine, theirs) {
   out.tombstones = mergeTombstones(a.tombstones, b.tombstones);
   return normalizeLeague(out);
 }
+/* ── Trimming a closed season ──────────────────────────────────────────────
+   A league is one cloud document with a 1 MiB cap, and a season scored live
+   carries every visit of every leg. Once a season is closed the visits have
+   done their work: each leg's figures are written onto the leg as the typed
+   kind (darts, checkout, 180s, 140+, 100+) and the visits go. Pure; the
+   figures a leg shows are the same before and after, because legSideStats()
+   reads whichever kind is there. Who threw stays. */
+function compactSeason(st, seasonId) {
+  const out = Object.assign({}, st);
+  let trimmed = 0;
+  out.matches = (st.matches || []).map((m) => {
+    if (m.seasonId !== seasonId || !m.legs.some((l) => l.visits)) return m;
+    const legs = m.legs.map((leg) => {
+      if (!leg.visits) return leg;
+      const next = Object.assign({}, leg);
+      delete next.visits;
+      ['a', 'b'].forEach((side) => {
+        const s = x01LegStats(leg, side);
+        /* Zeros are written, not left out: a live-scored leg KNOWS it had no
+           180s, where a typed leg with the box empty does not. */
+        const o = { darts: s.darts, t180: s.t180, t140: s.t140, t100: s.t100 };
+        if (s.checkout != null) o.checkout = s.checkout;
+        next[side] = o;
+      });
+      trimmed++;
+      return next;
+    });
+    return Object.assign({}, m, { legs: legs });
+  });
+  out.trimmed = trimmed;
+  return out;
+}
+const TRIM_AT = 300000;   /* characters of JSON; the cloud cap is 1 MiB */
+
 /* Tombstones are kept for a season, not a month: a phone that sat in a drawer
    must not resurrect a deleted match when it wakes. Called at season close. */
 const TOMBSTONE_KEEP_MS = 90 * 86400000;
@@ -3483,7 +3525,9 @@ function sparkSvg(values) {
     + '" r="1.8" fill="var(--series-1)"></circle></svg>';
 }
 function formPills(form) {
-  return '<span class="form" aria-label="' + esc(form.join(' ') || 'no results yet') + '">'
+  /* role="img": a plain span may not carry aria-label (axe, 2026-09-07), and
+     an image role is what a row of letter tiles is to a screen reader. */
+  return '<span class="form" role="img" aria-label="Form: ' + esc(form.join(' ') || 'no results yet') + '">'
     + form.map((r) => '<span class="fp ' + (r === 'W' ? 'ok' : r === 'L' ? 'err' : 'draw') + '" aria-hidden="true">' + r + '</span>').join('')
     + '</span>';
 }
@@ -3562,6 +3606,7 @@ function renderStandings() {
   const wrap = $('standingsWrap');
   const modeWrap = $('stModeWrap');
   modeWrap.hidden = !isTeams();
+  $('individualHelp').hidden = !isTeams();
   if (!isTeams()) standingsMode = 'sides';
   modeWrap.querySelectorAll('[data-mode]').forEach((b) => {
     const on = b.dataset.mode === standingsMode;
@@ -3618,10 +3663,13 @@ function renderStandings() {
         + '</tr>';
     }).join('')
     + '</tbody></table>';
-  $('standingsNote').textContent = played
+  /* The column letters are said out loud here: a `title` on a heading never
+     shows on a phone, and P, W, D, L and ± are only obvious once you know. */
+  const key = 'P played, W won' + (anyDraw ? ', D drawn' : '') + ', L lost, ' + unit.many + ' for and against, ± ' + unit.one + ' difference.';
+  $('standingsNote').textContent = (played
     ? plural(played, 'match', 'matches') + ' counted' + (season ? ' in ' + season.name : '')
       + '. Order: ' + tiebreakWords(S().tiebreak) + '.'
-    : 'Nothing played yet' + (season ? ' in ' + season.name : '') + ' — every side sits on ' + S().points.loss * 0 + ' points until it has.';
+    : 'Nothing played yet' + (season ? ' in ' + season.name : '') + ' — every side sits on 0 points until it has.') + ' ' + key;
 }
 /* The individual table of a team league: every player's own legs. */
 function renderIndividual(seasonId, wrap) {
@@ -3832,7 +3880,7 @@ function renderLeagueTab() {
     : 'These can all change until the first match is recorded.';
   document.querySelectorAll('#rulesCard input, #rulesCard select').forEach((el) => {
     if (el.id !== 'lr_format' && el.id !== 'lr_game') el.disabled = !canEdit();
-    if (el.id === 'lr_name') el.readOnly = !canEdit();
+    if (el.id === 'lr_game') el.disabled = true;
   });
   /* Seasons */
   const seasons = seasonsSorted();
@@ -3850,6 +3898,9 @@ function renderLeagueTab() {
   const bytes = JSON.stringify(state).length;
   $('sizeMeter').textContent = 'League data: ' + (bytes < 10000 ? (bytes / 1024).toFixed(1) : Math.round(bytes / 1024)) + ' KB of the 1,000 KB a league may hold.';
   $('sizeMeter').className = 'hint' + (bytes > 600000 ? ' warn-text' : '');
+  const closed = state.seasons.filter((s) => s.status === 'done').map((s) => s.id);
+  const trimmable = closed.length && state.matches.some((m) => closed.indexOf(m.seasonId) !== -1 && m.legs.some((l) => l.visits));
+  $('trimBtn').hidden = !canEdit() || !trimmable || bytes < TRIM_AT;
   $('deleteLeagueBtn').hidden = !isOwner();
   $('forgetBtn').hidden = viewOnly;
   $('forgetBtn').textContent = (myEntry() && myEntry().cloud && myRole() !== 'owner') ? 'Leave This League' : 'Forget This League';
@@ -4572,6 +4623,20 @@ $('addBracketBtn').addEventListener('click', openBracketDialog);
 $('copyIdBtn').addEventListener('click', async () => {
   if (await copyText(state.league.id)) toast('League ID copied'); else { $('leagueIdBox').select(); toast('Press ⌘C to copy'); }
 });
+$('trimBtn').addEventListener('click', () => {
+  if (!canEdit()) return;
+  if (!confirm('Trim the closed seasons?\n\nEvery live-scored leg in a closed season keeps its figures — darts, checkout, 180s — and loses the visit-by-visit record. The tables do not change. There is no undo.')) return;
+  let n = 0;
+  state.seasons.filter((s) => s.status === 'done').forEach((s) => {
+    const out = compactSeason(state, s.id);
+    n += out.trimmed;
+    delete out.trimmed;
+    state = out;
+  });
+  state.matches.forEach((m) => { if (m.seasonId && state.seasons.some((s) => s.id === m.seasonId && s.status === 'done') && m.legs.length) touch(m); });
+  save(); render();
+  toast(plural(n, 'leg') + ' trimmed');
+});
 $('forgetBtn').addEventListener('click', () => {
   const entry = myEntry();
   if (!entry) return;
@@ -4612,6 +4677,9 @@ $('firstRestore').addEventListener('click', () => $('importFile').click());
 
 /* ── The info dots ────────────────────────────────────────────────────── */
 const HELP = {
+  rules: ['How the Rules Apply', `<p><strong>Played as</strong> is fixed once a match exists: a singles league's matches are between players, a team league's between teams, and the two cannot be told apart afterwards. Everything else can change at any time.</p>
+    <p><strong>Leg and match rules apply to matches scored from now on</strong> — a leg already thrown remembers the start and the double-out rule it was played under. <strong>Points and the tiebreak order re-rank the table at once</strong>, for every season, because they are how results are read rather than what was played.</p>
+    <p>A <strong>best of</strong> match ends when one side has more than half the legs; a <strong>fixed number</strong> plays them all and can be drawn.</p>`],
   standings: ['How the Table Is Ordered', `<p>Every side earns the league's points for a <strong>win, a draw or a loss</strong>, set on the League tab. Sides level on points are separated by the <strong>tiebreak order</strong> chosen there — by default leg difference, then legs for, then head-to-head.</p>
     <p><strong>Head-to-head is worked out among the sides still tied</strong>, as a mini-table of the matches between them, rather than pair by pair: three sides who each beat one of the others would otherwise rank differently depending on the order they were looked at. Sides the order cannot separate share a rank, and the next rank skips.</p>
     <p>The <strong>Trend</strong> line is a side's points after each of its last ten matches, and Form is its last five results, oldest first.</p>`],
@@ -5836,11 +5904,17 @@ closeOnBackdropClick($('liveDialog'));
 function joinLink(id, key) {
   return location.origin + location.pathname + '#join=' + id + (key ? '&admin=' + key : '');
 }
+/* THE LINK GOES LAST, ON ITS OWN LINE. A share sheet that folds the text and
+   the address into one message put the words straight after the fragment,
+   and the first join link Charles sent arrived as
+   #join=LN-4FWXQEHS%20Join%20Misfits… — the app saw no ID. The message's own
+   words come first now, the link ends it, and parseJoinHash() below reads
+   the ID leniently anyway. */
 function inviteMessage(withKey) {
   const link = joinLink(state.league.id, withKey ? adminKeyFor(state.league.id) : '');
-  return { link: link,
-    text: 'Join ' + state.league.name + ' on League Night: ' + link
-      + (withKey ? '\n\nThis link makes you an admin, so keep it to yourself.' : '') };
+  const words = 'Join ' + state.league.name + ' on League Night'
+    + (withKey ? ' — this link makes you an admin, so keep it to yourself.' : '.');
+  return { link: link, words: words, text: words + '\n\n' + link };
 }
 function renderInviteLinks() {
   const entry = myEntry();
@@ -5860,7 +5934,9 @@ function drawQr() {
 $('inviteShareBtn').addEventListener('click', async () => {
   const msg = inviteMessage($('inviteAdmin').checked);
   if (navigator.share) {
-    try { await navigator.share({ title: state.league.name, text: msg.text, url: msg.link }); return; }
+    /* `text` without the link: the sheet carries `url` itself, and a text
+       that repeats it is what glued the two together. */
+    try { await navigator.share({ title: state.league.name, text: msg.words, url: msg.link }); return; }
     catch (e) { if (e && e.name === 'AbortError') return; }
   }
   if (await copyText(msg.link)) toast('Link copied'); else toast('Could not copy');
@@ -5885,12 +5961,24 @@ $('inviteAdmin').addEventListener('change', () => { if (!$('qrWrap').hidden) dra
    link with the Admin Key in it must not sit in the history for the next
    person to read. Acted on after load, because the cloud module is a
    separate script that runs after this one. */
-const JOIN_RE = /^#join=(LN-[A-Za-z2-9]{8})(?:&admin=([A-Za-z2-9]{16}))?$/;
+/* Read LENIENTLY: the ID is the first thing shaped like one after `#join=`,
+   the key the first thing after `admin=`, and whatever a share sheet or a
+   mail client tacked on is ignored. Pure, pinned by tests. */
+const JOIN_RE = /^#join=/i;
+function parseJoinHash(hash) {
+  let h = String(hash || '');
+  try { h = decodeURIComponent(h); } catch (e) { /* read it raw */ }
+  if (!JOIN_RE.test(h)) return null;
+  const id = /LN-([A-Z2-9]{8})(?![A-Z0-9])/i.exec(h);
+  if (!id) return null;
+  const key = /admin=([A-Z2-9]{16})(?![A-Z0-9])/i.exec(h);
+  return { id: 'LN-' + id[1].toUpperCase(), key: key ? key[1].toUpperCase() : '' };
+}
 const joinArrival = (() => {
-  const m = JOIN_RE.exec(location.hash || '');
-  if (!m) return null;
+  const j = parseJoinHash(location.hash);
+  if (!j) return null;
   try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; }
-  return { id: m[1].toUpperCase(), key: m[2] ? m[2].toUpperCase() : '' };
+  return j;
 })();
 window.addEventListener('load', () => {
   if (!joinArrival || viewOnly) return;
@@ -5900,6 +5988,18 @@ window.addEventListener('load', () => {
   $('jn_key').value = joinArrival.key;
   if (joinArrival.key) $('joinWarn').textContent = 'This link carries the Admin Key: joining makes you an admin.';
 });
+
+/* ── Paper ─────────────────────────────────────────────────────────────────
+   A closed <details> prints closed, and a fixture list with every finished
+   round folded is not a fixture list. Every round is opened for the printer
+   and put back afterwards. Pack rule 13 does the palette; this is the one
+   thing CSS cannot reach. */
+let printFolded = [];
+addEventListener('beforeprint', () => {
+  printFolded = [...document.querySelectorAll('details.round:not([open])')];
+  printFolded.forEach((d) => { d.open = true; });
+});
+addEventListener('afterprint', () => { printFolded.forEach((d) => { d.open = false; }); printFolded = []; });
 
 /* ═══════════════════════════════ Boot ═════════════════════════════════════ */
 async function boot() {
@@ -5967,12 +6067,13 @@ window.__lnTestHooks = {
   x01LegStats: x01LegStats, legSideStats: legSideStats, checkoutRoute: checkoutRoute, dartValue: dartValue,
   dartsPlayerStats: dartsPlayerStats, legsIn: legsIn,
   buildDemoSingles: buildDemoSingles, buildDemoTeams: buildDemoTeams, isDemoId: isDemoId,
+  compactSeason: compactSeason, TRIM_AT: TRIM_AT,
   buildSharePayload: buildSharePayload, encodeShare: encodeShare, decodeShare: decodeShare,
   csvMatches: csvMatches, csvCell: csvCell, toCsv: toCsv, toTsv: toTsv, FORMULA_LEAD: FORMULA_LEAD, PLAIN_NUMBER: PLAIN_NUMBER,
   tableToRows: tableToRows, cellText: cellText, raisesKeyboard: raisesKeyboard, esc: esc, todayISO: todayISO,
   searchApp: searchApp, SEARCH_CAP: SEARCH_CAP, slug: slug, tableFor: tableFor, trendFor: trendFor,
   qrMatrix: qrMatrix, qrSvg: qrSvg, rsEncode: rsEncode, qrCodewords: qrCodewords, GF_EXP: GF_EXP, gfMul: gfMul,
-  QR_BLOCKS: QR_BLOCKS, joinLink: joinLink, JOIN_RE: JOIN_RE,
+  QR_BLOCKS: QR_BLOCKS, joinLink: joinLink, JOIN_RE: JOIN_RE, parseJoinHash: parseJoinHash, inviteMessage: inviteMessage,
 };
 </script>
 
