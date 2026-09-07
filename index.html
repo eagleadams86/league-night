@@ -5951,9 +5951,17 @@ window.__lnTestHooks = {
    owner can change. The rules file argues every clause.
 ──────────────────────────────────────────────────────────────────────────── */
 
-/* Set this to the project's web client config once the console side exists —
-   README, "Setting up the cloud". Until then: null, and the app is local. */
-const FIREBASE_CONFIG = null;
+/* Firebase's PUBLIC web client config for the league-night-dff31 project, not a
+   secret — access is enforced by firestore.rules. Set it to null to force fully
+   local mode. */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDSXLL8gh0nAmuYUy4z5-rSHEMUDgLCtI0",
+  authDomain: "league-night-dff31.firebaseapp.com",
+  projectId: "league-night-dff31",
+  storageBucket: "league-night-dff31.firebasestorage.app",
+  messagingSenderId: "324643684640",
+  appId: "1:324643684640:web:a16dcc29c792a500b3d745"
+};
 
 /* ⚠️ NOT part of FIREBASE_CONFIG and not derivable from it: Google Cloud
    Console → APIs & Services → Credentials → "Web client (auto created by
@@ -5963,7 +5971,7 @@ const FIREBASE_CONFIG = null;
    Google Identity Services rather than Firebase's hosted popup, because
    corporate filters block individual firebaseapp.com hostnames — the whole
    family switched on 2026-08-07. */
-const GOOGLE_CLIENT_ID = null;
+const GOOGLE_CLIENT_ID = "324643684640-88pu1581inao9tsj6d7lsa99eu71tvvf.apps.googleusercontent.com";
 
 const SDK = 'https://www.gstatic.com/firebasejs/12.18.0/';
 const GIS = 'https://accounts.google.com/gsi/client';

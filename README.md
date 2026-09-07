@@ -7,12 +7,11 @@ league's ID can follow it, and anyone with the admin key can run it.
 
 **Live: https://eagleadams86.github.io/league-night/**
 
-> **Status (7 September 2026): everything is built; sharing waits on one console step.**
-> Players and teams, seasons with generated fixtures, leg-by-leg and live scoring, the standings
-> table, knock-out tournaments, invites by link, email, text and QR code — all live. Sharing a
-> league across devices — sign-in, the League ID and Admin Key, members and ownership — is
-> written and tested, and switches on when the Firebase project exists (see *Setting up the
-> cloud* below). Until then a league lives in the browser it was made in.
+> **Status (7 September 2026): everything is built and the cloud is switched on.** Players and
+> teams, seasons with generated fixtures, leg-by-leg and live scoring, the standings table,
+> knock-out tournaments, invites by link, email, text and QR code, and sharing a league across
+> devices through Google sign-in — all live. The Firebase project is `league-night-dff31`; the
+> console steps that made it are under *Setting up the cloud* below.
 
 ## What it does today
 
@@ -69,9 +68,10 @@ clause. It must be pasted into the Firebase console before anyone signs in.
 
 ### Setting up the cloud
 
-The sync module at the foot of `index.html` ships with `FIREBASE_CONFIG = null` and
-`GOOGLE_CLIENT_ID = null`; while either is null the app is fully local and nothing cloud-only
-is offered. To switch sharing on:
+The sync module at the foot of `index.html` carries `FIREBASE_CONFIG` (Firebase's public client
+config for `league-night-dff31`, not a secret) and `GOOGLE_CLIENT_ID`; set either to null and the
+app is fully local with nothing cloud-only offered. These are the steps that created them, kept
+for the day the project is rebuilt or a sibling app needs the same:
 
 1. **Create a Firebase project** (its own — one project per app is the family's rule, so a
    rules mistake in one app can never reach another). Add a *web app* to it and copy the
@@ -87,6 +87,21 @@ is offered. To switch sharing on:
    `http://localhost:8024` — exact, port included, or Google refuses with `origin_mismatch`.
 6. Commit the two constants. The config is Firebase's public client config, not a secret;
    access is enforced by the rules.
+
+Checking the console side from a terminal, without opening it (nothing here is a secret):
+
+```bash
+curl -s "https://identitytoolkit.googleapis.com/v1/projects?key=AIzaSyDSXLL8gh0nAmuYUy4z5-rSHEMUDgLCtI0"
+```
+
+Healthy: a JSON body whose `authorizedDomains` includes `eagleadams86.github.io`.
+
+```bash
+curl -s "https://firestore.googleapis.com/v1/projects/league-night-dff31/databases/(default)/documents/leagues/probe?key=AIzaSyDSXLL8gh0nAmuYUy4z5-rSHEMUDgLCtI0"
+```
+
+Healthy: `PERMISSION_DENIED` — the database exists and refuses an anonymous read. A probe can
+never tell the published rules from the default deny-all; only a real signed-in session can.
 
 Then prove it with two Google accounts: one shares a league, the other joins with the ID and
 sees the table; the second enters the Admin Key and can score; the first makes the second the
