@@ -36,9 +36,27 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
   what `GAMES.darts` tells them. A new game is one entry in `GAMES` and nothing else.
 - **Bracket matches are ordinary matches** carrying `bracketId` and `slot`, resolved into a
   tree at render time, so two boards scoring two bracket games at once never collide.
-- **The phone gets a bottom tab bar** (under 760px) — the first in the family. The header row
-  is untouched; the bar is a `<nav>` with `aria-current`, not a second tablist, and it hides
-  while any dialog is open because iOS re-anchors a fixed bar above the keyboard.
+- **The phone gets a bottom tab bar** (under 760px) — the first in the family. The bar is a
+  `<nav>` with `aria-current`, not a second tablist, and it hides while any dialog is open
+  because iOS re-anchors a fixed bar above the keyboard.
+- **The phone header is the name above one line of controls that scrolls sideways**
+  (2026-09-08). The header used to wrap to three or four rows on a phone and was left
+  `position: static` for it; the controls live in a `.headctl` wrapper now, `flex-wrap: nowrap`
+  with `overflow-x: auto` under 759.98px, and the row is back to ~87px and sticky. Three things
+  go with it, all of them the family's: **the name is NOT in the scroller** (that is the whole
+  reason the wrapper exists), **the wrapper states `gap: 12px` itself** — a nested control row
+  does not inherit `.headbar`'s, which is how the four apps that nest theirs all ended up at 8px
+  in the 2026-08-23 sweep — and the scroller carries **4px of padding against a −4px margin** so
+  a focus ring has room without anything on the page moving. **759.98px is the same number as
+  the bottom bar on purpose**: this app has one definition of a phone, and the suite asserts
+  there are exactly two media blocks at that width so a third cannot arrive unread.
+- **The tab row pins, and here that is a DESKTOP affordance** — Money Map, Flow Metrics and
+  Sprint Predictability grew the 📌 first and a change belongs in all four. Under 760px the tab
+  strip is not on the page at all (the bottom bar is), so the row and its button go together and
+  `pinStuck()` answers by RECTANGLE: a `display: none` row still computes `position: sticky`.
+  Everything else is the family's — `data-pin` on `<html>` set before first paint, `ln-pin`, off
+  by default, `--pin-top` MEASURED from the header's rectangle, the margin becoming padding so
+  toggling costs no reflow, `--bg` and never `--surface`, and z-index 12 under the header's 20.
 - **Dev port 8024**, recorded in `.claude/launch.json` AND `~/.claude/launch.json`. 8021 is
   not free (held by something outside these repos); 8024 is the first past the family band.
 
@@ -147,6 +165,13 @@ showed it.
   bracket's best of three after `demoPlay`, which played them to the league's best of five.
 - **`tests.html` reads its markup from `</head>`**, not `<body>` — a CSS comment in the head says
   `<body>` first.
+- **The pin block sits BELOW `const $`** and that placement is load-bearing: `applyPin()` runs at
+  the foot of it to hang the observer and dress the button, and `$` is in its temporal dead zone
+  until the line that declares it. Moving the block up throws at boot, which leaves the page
+  drawn and every handler unattached — see [[league-night-harness-traps]] for the shape.
+- **A control that is not RENDERED has an all-zero rectangle**, whose top of 0 reads as a second
+  line the row has not got. The suite's phone probe filters `getClientRects().length` before it
+  measures the header, because `#syncBtn` is hidden in every harness run (no cloud config).
 - **The first season adopts the matches that came before it, and only the first.**
   `leagueMatches()` returns every league match while there are no seasons and only the chosen
   season's once there is one, so a match added early vanished from the Matches tab and the table

@@ -39,6 +39,10 @@ league's ID can follow it, and anyone with the admin key can run it.
 - **Everything the family has.** Four themes, offline, installable, backups per league, a CSV of
   the matches, a read-only snapshot link, Find (⌘K), and on a phone a bottom bar with the five
   views a thumb away.
+- **Chrome that stays out of the way.** On a phone the app's name holds the top of the screen and
+  the header's controls sit on one line that scrolls sideways rather than stacking three deep. On
+  a desktop the 📌 at the end of the tab row holds the tabs at the top while the page scrolls
+  under them; it is off until you press it, and remembered.
 
 ## Sharing a league
 
@@ -136,7 +140,8 @@ Every view and window was audited with axe-core under Playwright at 1280px in Mi
 375px in Light, both demo leagues, plus the privacy page, with no violations at WCAG 2.2 AA or
 axe's best-practice level (7 September 2026). Beyond what a tool can see: status is never
 carried by colour alone (a form tile is a letter, a chosen side a tick, a thrower a pill),
-every dialog closes on Escape and a click outside, the tab strip takes arrow keys, and the
+every dialog closes on Escape and a click outside, the tab strip takes arrow keys and hands the
+next Tab to the 📌 beside it, and the
 column letters of the table are spelled out beneath it rather than hidden in a hover title —
 and so is its one other abbreviation, the minus figure marking a player's handicap.
 On paper every round prints open and a bracket wraps instead of clipping.

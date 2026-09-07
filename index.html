@@ -141,6 +141,15 @@
       if (blank && location.hash.indexOf('#share=') !== 0)
         document.documentElement.setAttribute('data-welcome', '');
     } catch (e) {}
+
+    /* THE PINNED TAB ROW, for the same reason as the theme and the tab above:
+       decided down at the foot of the file it arrives after the first paint,
+       and the page visibly jumps as the row takes its 20px margin back as
+       padding. OFF unless the reader turned it on. */
+    try {
+      if (localStorage.getItem('ln-pin') === '1')
+        document.documentElement.setAttribute('data-pin', 'on');
+    } catch (e) {}
   })();
 </script>
 <!-- ── The palette, LINKED and never inlined ─────────────────────────────────
@@ -265,6 +274,53 @@
            letter-spacing: var(--ls-tight); }
   .brand span { font-weight: var(--fw-normal); color: var(--text-secondary); }
   .brand .mark { vertical-align: -4px; margin-right: 8px; border-radius: 5px; }
+  /* The controls, as one row. THE GAP IS DECLARED HERE and not inherited: a
+     nested row does not get `.headbar`'s 12px, which is how the four apps that
+     nest theirs all ended up at 8px (the 2026-08-23 sweep). `min-width: 0` is
+     what lets it shrink below its content on a phone, where it becomes the
+     scroller below. */
+  .headctl { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-width: 0; }
+
+  /* ── The phone header: the name above, the controls on one scrolling line ──
+     Asked for by Charles on 2026-09-08. The row used to WRAP — the name, then
+     the six controls over two or three lines more — 173px of a 390px-wide phone
+     at the demo's league name and 198px at 360, so it was left unsticky
+     (`position: static`), because a bar that size holding the top of the screen
+     is worse than one flick back up.
+
+     One line that scrolls sideways is the answer the family already reached for
+     its tabs (Money Map first, then Sprint Predictability and Flow Metrics on
+     2026-09-03): the header comes back to about 87px — the name on its line and
+     the controls on one more — and at that size it is worth sticking, which is
+     what was wanted. The old rule's own test is met rather than waived: sticky
+     everywhere it fits on one or two lines.
+
+     THE NAME IS NOT IN THE SCROLLER. It is `.headbar`'s own child and stays put
+     while `.headctl` scrolls, which is the whole reason that wrapper exists.
+
+     759.98px, the same number as the bottom bar further down and deliberately
+     so: this app has ONE definition of a phone — the width where the tab strip
+     gives way to the bar — and a header that changed shape at a second width
+     would be two. Harmless where the controls still fit: a nowrap row with
+     `overflow-x: auto` only scrolls when there is something to scroll.
+
+     ROOM FOR THE FOCUS RING ON EVERY SIDE. `overflow-x: auto` forces the
+     vertical axis to `auto` as well, so the box clips at its padding edge and a
+     2px ring at its 2px offset would be sliced off the top of every control and
+     off the outer edge of the first and the last. Money Map's `.yearrail`
+     pattern: 4px of padding gives the ring its room and a matching negative
+     margin takes the same 4px back, so the box grows INWARD and nothing on the
+     page moves. */
+  @media (max-width: 759.98px) {
+    .brand { flex: 1 1 100%; margin: 0; }
+    .headctl { flex: 1 1 100%; flex-wrap: nowrap; overflow-x: auto;
+               padding: 4px; margin: -4px; scrollbar-width: thin; }
+    .headctl > * { flex: 0 0 auto; }
+    /* The league picker's width follows its longest league name, so left alone
+       it would set the scroll width on its own; capped, it scrolls with the
+       rest. The full name is still in the list when it is opened. */
+    .headctl > select#leagueSel { max-width: 11rem; }
+  }
   .wrap { max-width: var(--page-w); margin: 0 auto; padding: 0 16px 64px; }
 
   /* ── Buttons: Sprint Predictability's, transcribed ──────────────────────────
@@ -345,15 +401,86 @@
      does the switching; setTab() only keeps aria-selected and the roving
      tabindex in step. With no script at all the attribute is never set and both
      panels show, which is the honest fallback. */
-  .tabs { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+  /* The row carries the tablist and the pin button; the 20px that was the
+     tablist's own bottom margin belongs to it now, for the reason the pin block
+     below records. `flex: 1 1 auto; min-width: 0` on the tablist is what puts
+     the button at the far end. */
+  .tabrow { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  .tabs { display: flex; gap: 12px; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
   .tab { background: var(--surface-alt); border: 1px solid var(--border-control);
          border-radius: var(--radius-sm); padding: 8px 14px; cursor: pointer;
          color: var(--text-primary); font-weight: var(--fw-medium); }
   .tab:hover { border-color: var(--text-muted); }
   .tab[aria-selected="true"] { background: var(--btn-bg); border-color: var(--btn-bg);
                                color: var(--btn-text); font-weight: var(--fw-semibold); }
-  /* The welcome card holds the whole page on its own, so the furniture goes. */
-  html[data-welcome] .tabs, html[data-welcome] [role="tabpanel"] { display: none !important; }
+  /* The welcome card holds the whole page on its own, so the furniture goes —
+     the ROW and not just the tabs inside it, or the pin button is left standing
+     on the card with nothing to pin. Sprint Predictability shipped exactly that
+     on 2026-09-04 by hiding only the tablist. */
+  html[data-welcome] .tabrow, html[data-welcome] [role="tabpanel"] { display: none !important; }
+
+  /* ── Pinning the tab row ────────────────────────────────────────────────────
+     Charles asked for this on 2026-09-08, having asked for it in Money Map,
+     Flow Metrics and Sprint Predictability first: the tab row held at the top of
+     the window while the page scrolls under it. OFF by default and toggled by
+     the button at the end of the row — pinned chrome is bought with vertical
+     space, and that is a trade only the reader can make.
+
+     A DESKTOP AFFORDANCE HERE, which is where this differs from its three
+     siblings. Under 760px the tab strip is not on the page at all: the bottom
+     bar is, fixed to the foot of the window, and that is already the pinned
+     chrome a phone gets. So the row and its button go together at that width,
+     and pinStuck() answers by RECTANGLE rather than by the cascade, because a
+     row that is `display: none` still computes `position: sticky`.
+
+     THE OFFSET IS MEASURED, NEVER WRITTEN DOWN. The header wraps to two rows at
+     a tablet width, so `top` reads a custom property that measurePinTop()
+     writes from the header's real rectangle. A literal here is wrong on the
+     first window that is not the one it was written at.
+
+     THE MARGIN BECOMES PADDING. A margin is transparent, so pinned, the page
+     scrolled through a 20px window under the row. The same 20px and the same
+     total height — so toggling causes no reflow — but owned now by the element
+     that has to paint it.
+
+     `--bg` AND NOT `--surface`. The header is a band deliberately lifted OFF the
+     page and wears the surface colour to say so. This row sits ON the page and
+     shows `--bg` through today, so `--bg` is the one value that makes pinning
+     change nothing except "content no longer shows through". No colour is
+     invented here.
+
+     Z-INDEX 12 IS PENNED IN ON BOTH SIDES: under the header's 20, which has to
+     stay over it, and well under the bottom bar's 30 and the toast's 50. */
+  .pinbtn {
+    flex: 0 0 auto; align-self: center;
+    display: flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; padding: 0; border-radius: var(--radius-sm);
+    border: 1px solid var(--border-control); background: transparent;
+    color: var(--text-secondary); cursor: pointer;
+  }
+  .pinbtn:hover { color: var(--text-primary); background: var(--surface-alt);
+                  border-color: var(--text-secondary); }
+  /* Pinned, the button wears the accent — but the ICON changes with it, so the
+     state is never resting on a hue. */
+  html[data-pin] .pinbtn { color: var(--accent); border-color: var(--accent); }
+  /* The icon must never be the thing that was clicked. This button rewrites its
+     own contents on press, which DETACHES the <path> a real pointer landed on,
+     and a detached node has no ancestors for anything upstream to ask about. */
+  .pinbtn svg { pointer-events: none; }
+  @media (pointer: coarse) { .pinbtn { width: 40px; height: 40px; } }
+
+  html[data-pin] .tabrow {
+    position: sticky; top: var(--pin-top, 0px); z-index: 12;
+    background: var(--bg);
+    margin-bottom: 0; padding-bottom: 20px;
+  }
+  /* Nothing in the app scrolls the page to an element — every focus() it makes
+     passes `preventScroll`. The BROWSER's own Tab-key scrolling does, though,
+     and it knows nothing about a pinned row, so a control tabbed into lands
+     behind it. `--pin-clear` is the height of everything actually stuck. */
+  html[data-pin] [role="tabpanel"] :is(button, a[href], input, select, textarea, [tabindex]) {
+    scroll-margin-top: var(--pin-clear, 0px);
+  }
 
   .card { background: var(--surface); border: 1px solid var(--border);
           border-radius: var(--radius); padding: 18px; margin-bottom: var(--sp-6); }
@@ -651,11 +778,13 @@
   @media (max-width: 560px) {
     .grid2 { grid-template-columns: 1fr; }
     .wrap, .headbar { padding-left: var(--sp-5); padding-right: var(--sp-5); }
-    /* A header row that wraps to three lines and then STAYS on screen eats half
-       a phone on the one view you scroll most. It is one flick back up, which is
-       a better trade than losing half of what you came to read. Sticky
-       everywhere it still fits on one or two lines. */
-    header { position: static; }
+    /* `header { position: static }` used to live here, because the row wrapped
+       to three or four lines on a phone and a bar that size holding the top of
+       the screen eats half of what you came to read. The controls scroll
+       sideways on one line now (the phone header block above), so the row is
+       two lines and the reason is gone — the rule that comment gave, "sticky
+       everywhere it still fits on one or two lines", is met rather than waived.
+       Don't put it back without making the row tall again first. */
   }
 
   fieldset.formpanel { border: 1px solid var(--border); border-radius: var(--radius-sm);
@@ -957,6 +1086,21 @@
        see. Both panels print: on paper there are no tabs to press. */
     .no-print { display: none !important; }
     [data-tab] [role="tabpanel"] { display: block !important; }
+    /* The pack hides the tablist by role; the ROW has to go too, or a pinned
+       one prints once over the top of whatever the first page starts with and
+       an unpinned one prints as 20px of nothing. */
+    .tabrow { display: none !important; }
+    /* AN A4 BODY IS ABOUT 700 CSS px WIDE, so the phone header rules above
+       match a sheet of paper as well. Every control inside this row is
+       furniture and already gone by the time paper is laid out — the pack
+       hides `.headbar button` and `#themeSel`, and this app tags its two
+       pickers `.no-print` — so what is left is an empty box with a scroller,
+       4px of padding and a −4px margin pulling on the name beside it. It is
+       reset rather than trusted to stay empty: the day a control that DOES
+       belong on paper lands here, a printed page should not clip it. */
+    .headctl { overflow: visible !important; flex-wrap: wrap !important;
+               padding: 0 !important; margin: 0 !important; }
+    .headctl > select#leagueSel { max-width: none !important; }
   }
 /* ── The footer every public page in this account carries ────────────────────
    Sprint Predictability's, transcribed — it is the design lead for this chrome,
@@ -1023,7 +1167,9 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
   :root { --tabbar-h: 56px; }
   .tabbar { display: none; }
   @media (max-width: 759.98px) {
-    .tabs { display: none; }
+    /* THE ROW, not just the tablist inside it: the pin has nothing to pin here
+       and its button would be left standing where the tabs were. */
+    .tabrow { display: none; }
     .tabbar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
               background: var(--surface); border-top: 1px solid var(--border);
               padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
@@ -1234,6 +1380,17 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
        is already the whole label. EVERYTHING IS WRITTEN AT ITS FINAL SIZE. -->
   <div class="headbar">
     <h1 class="brand"><img class="mark" src="favicon.ico?v=2" width="22" height="22" alt="">League Night <span>&middot; Charlie&#39;s Epic Scoreboard</span></h1>
+    <!-- ── The controls, in a row of their own ─────────────────────────────
+         Five apps put these straight in `.headbar`; PAPTrack, both lottery
+         pages and the dashboard nest theirs, and this one joins the second
+         group because on a phone the row has to SCROLL SIDEWAYS as one thing
+         while the name stays put above it — and a box can only scroll what is
+         inside it. A NESTED ROW HAS TO STATE THE GAP ITSELF: `.headbar` gives
+         its own children 12px and a wrapper does not pass that on, which is how
+         all four of the others ended up at 8 (the 2026-08-23 sweep). It is
+         declared on `.headctl`, and the suite measures the RENDERED gap between
+         two adjacent controls rather than the declared one. -->
+    <div class="headctl">
     <!-- Far left, because its label changes width. Hidden until the sync
          module finds a Firebase config; its label is rewritten with
          textContent (an account name reaches it), so the accessible name is
@@ -1258,6 +1415,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
       <option value="midnight">✦ Midnight</option>
       <option value="sepia">📜 Sepia</option>
     </select>
+    </div>
   </div>
 </header>
 
@@ -1271,6 +1429,12 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
 <!-- The banner on somebody else's snapshot. -->
 <div class="viewbar no-print" id="viewbar" hidden></div>
 
+<!-- The row carries the tablist AND the pin button beside it. The button cannot
+     go INSIDE the tablist — a non-tab child there is a lie about what the thing
+     is — and the 20px that was the tablist's own bottom margin belongs to the
+     row now: pinned, that margin is the band the page scrolls through, and only
+     the element carrying it can paint it. Sprint Predictability's arrangement. -->
+<div class="tabrow">
 <div class="tabs" role="tablist" aria-label="Views">
   <button class="tab" role="tab" id="tab-standings" data-tab="standings"
           aria-controls="standingsPanel" aria-selected="true">Standings</button>
@@ -1282,6 +1446,11 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
           aria-controls="tournamentPanel" aria-selected="false" tabindex="-1">Tournament</button>
   <button class="tab" role="tab" id="tab-league" data-tab="league"
           aria-controls="leaguePanel" aria-selected="false" tabindex="-1">League</button>
+</div>
+  <!-- Dressed by dressPinBtn() — icon, accessible name and title change
+       together, and there is no aria-pressed on top of them: the state would
+       then be announced twice and the two would have to be kept in agreement. -->
+  <button type="button" class="no-print pinbtn" id="pinBtn"></button>
 </div>
 
   <!-- ── The welcome card ─────────────────────────────────────────────────────
@@ -3588,6 +3757,117 @@ function formPills(form) {
 }
 const plural = (n, one, many) => n + ' ' + (n === 1 ? one : (many || one + 's'));
 
+/* ── Pinning the tab row ───────────────────────────────────────────────────
+   The CSS is up in "Pinning the tab row"; this is the one measurement it reads
+   and the button that turns it on. Ported from Sprint Predictability, which
+   took it from Flow Metrics, which took it from Money Map — a change belongs in
+   all four.
+
+   ONE ATTRIBUTE, ONE MEASURED OFFSET. `data-pin` on <html> is the whole state —
+   the head script sets it before first paint so the page doesn't jump — and
+   `--pin-top` / `--pin-clear` are where the row is told to stop and how far a
+   tabbed-to control has to clear it. Measured, because there is no number to
+   write down: the header wraps to two rows at a tablet width and to two on a
+   phone.
+
+   IT LIVES HERE, BELOW `$`, and that placement is load-bearing: applyPin() runs
+   at the foot of this block to hang the observer and dress the button, and
+   `const $` above it is in its temporal dead zone until the line that declares
+   it. A boot that throws leaves the page drawn and every handler unattached —
+   the shape this app has already been bitten by once. */
+
+/* Inline SVG rather than a glyph: a character is a different size in every
+   platform's font, and an <img> is a fetch on a page whose CSP allows none.
+   Named by what PRESSING does, because that is what the accessible name says. */
+const PIN_ICON = {
+  pin:   '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"'
+       + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"'
+       + ' focusable="false"><path d="M7 4h10"/><path d="M9 4v6l-3 3v2h12v-2l-3-3V4"/>'
+       + '<path d="M12 17v5"/></svg>',
+  unpin: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"'
+       + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"'
+       + ' focusable="false"><path d="M7 4h10"/><path d="M9 4v6l-3 3v2h12v-2l-3-3V4"/>'
+       + '<path d="M12 17v5"/><path d="M3 3l18 18"/></svg>',
+};
+
+/* Asked of the RECTANGLE and not only of the cascade. A row that is not on the
+   page is not stuck either, and getComputedStyle cannot say so: `position`
+   still reads `sticky` on a row that is `display: none` — which is every phone
+   width here, and the welcome card at any width. getClientRects() is empty for
+   both, and for `display: contents`, which Flow Metrics' phone rule uses. */
+const pinStuck = () => {
+  const row = document.querySelector('.tabrow');
+  if (!row || !row.getClientRects().length) return false;
+  return getComputedStyle(row).position === 'sticky';
+};
+
+function measurePinTop() {
+  const root = document.documentElement;
+  const head = document.querySelector('header');
+  const row = document.querySelector('.tabrow');
+  const h = head ? head.getBoundingClientRect().height : 0;
+  /* Zero when nothing is stuck, which is what makes the unpinned page, a phone
+     and the welcome card fall out with no branch of their own. */
+  const b = pinStuck() ? row.getBoundingClientRect().height : 0;
+  root.style.setProperty('--pin-top', Math.round(h) + 'px');
+  /* Plus a little, so a control tabbed into isn't flush against the row. */
+  root.style.setProperty('--pin-clear', Math.round(h + b + 8) + 'px');
+}
+
+const PIN_KEY = 'ln-pin';
+function savedPin() {
+  try { return localStorage.getItem(PIN_KEY) === '1'; }
+  catch (e) { return false; }   /* private mode: the app draws, just unpinned */
+}
+
+/* The visible icon and the accessible name say the same thing — what pressing
+   this will DO next — and there is no aria-pressed on top of them: the state
+   would then be announced twice and the two would have to be kept in step. */
+function dressPinBtn() {
+  const btn = $('pinBtn');
+  if (!btn) return;
+  const on = !!document.documentElement.dataset.pin;
+  btn.innerHTML = on ? PIN_ICON.unpin : PIN_ICON.pin;
+  btn.setAttribute('aria-label', on
+    ? 'Unpin the tabs — let them scroll with the page'
+    : 'Pin the tabs to the top of the page');
+  btn.title = on ? 'Unpin the tabs' : 'Pin the tabs to the top';
+}
+
+function applyPin(on) {
+  try { localStorage.setItem(PIN_KEY, on ? '1' : '0'); } catch (e) {}
+  if (on) document.documentElement.dataset.pin = 'on';
+  else delete document.documentElement.dataset.pin;
+  measurePinTop();
+  dressPinBtn();
+  if (pinWatch) {
+    pinWatch.disconnect();
+    if (on) {
+      pinWatch.observe(document.querySelector('header'));
+      pinWatch.observe(document.querySelector('.tabrow'));
+    }
+  }
+  /* NO render(). Nothing about the markup changes — this is paint and position
+     and nothing else — so the toggle keeps the reader's scroll place and their
+     focus, and nothing is redrawn. */
+}
+
+/* Both boxes change height for reasons that are not a window resize: a longer
+   league name wrapping the header, the picker arriving with a second league,
+   the row going away on the welcome card. An observer catches every one without
+   a list of call sites to keep in step. Connected only while the pin is on. */
+const pinWatch = ('ResizeObserver' in window)
+  ? new ResizeObserver(() => measurePinTop()) : null;
+$('pinBtn').addEventListener('click',
+  () => applyPin(!document.documentElement.dataset.pin));
+/* The header re-wraps on a resize whether or not the observer is connected. */
+addEventListener('resize', measurePinTop);
+/* A web font arriving after first paint changes the header's height. */
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(measurePinTop);
+/* The attribute is already on <html> from the head script; this hangs the
+   observer and the icon off it, and measures once there is a layout. */
+applyPin(savedPin());
+
 /* ═══════════════════════════════ Rendering ═══════════════════════════════ */
 
 /* ── The welcome card is DERIVED, never latched ─────────────────────────────
@@ -3606,6 +3886,12 @@ function renderWelcome() {
 
 function render() {
   renderLeaguePicker();
+  /* The header's height is DATA: the picker arrives with a second league, a
+     long name wraps the row, and the welcome card takes the tab row off the
+     page. The ResizeObserver catches all three — but an observer is delivered
+     with the next RENDERING step, which a background window has not got, so the
+     offset is written from here as well. Sprint Predictability's note. */
+  measurePinTop();
   if (renderWelcome()) return;
   renderViewbar();
   renderStandings();
@@ -6224,6 +6510,8 @@ window.__lnTestHooks = {
   csvMatches: csvMatches, csvCell: csvCell, toCsv: toCsv, toTsv: toTsv, FORMULA_LEAD: FORMULA_LEAD, PLAIN_NUMBER: PLAIN_NUMBER,
   tableToRows: tableToRows, cellText: cellText, raisesKeyboard: raisesKeyboard, esc: esc, todayISO: todayISO,
   searchApp: searchApp, SEARCH_CAP: SEARCH_CAP, slug: slug, tableFor: tableFor, trendFor: trendFor,
+  pin: { apply: applyPin, on: () => !!document.documentElement.dataset.pin,
+         stuck: pinStuck, measure: measurePinTop, KEY: PIN_KEY },
   qrMatrix: qrMatrix, qrSvg: qrSvg, rsEncode: rsEncode, qrCodewords: qrCodewords, GF_EXP: GF_EXP, gfMul: gfMul,
   QR_BLOCKS: QR_BLOCKS, joinLink: joinLink, JOIN_RE: JOIN_RE, parseJoinHash: parseJoinHash, inviteMessage: inviteMessage,
 };

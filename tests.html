@@ -51,7 +51,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 198;
+const EXPECTED = 206;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -318,10 +318,47 @@ async function runAsync() {
     const r = {
       vw: P.innerWidth, vh: P.innerHeight,
       barDisplay: P.getComputedStyle(bar).display,
-      tabsDisplay: P.getComputedStyle(PD.querySelector('.tabs')).display,
+      /* THE ROW, not the tablist inside it: hiding only the tabs would leave
+         the pin button standing where they were. */
+      tabrowDisplay: P.getComputedStyle(PD.querySelector('.tabrow')).display,
       barBottom: Math.round(bar.getBoundingClientRect().bottom),
       padBottom: parseFloat(P.getComputedStyle(PD.body).paddingBottom),
     };
+    /* ── The phone header: the name above, the controls on one scrolling line
+       (2026-09-08). Measured here rather than asserted from the CSS, because
+       what was wrong before was the HEIGHT of a wrapped row and only a real
+       frame has one. */
+    {
+      const head = PD.querySelector('header');
+      const ctl = PD.querySelector('.headctl');
+      const brand = PD.querySelector('.brand');
+      /* Two kinds of child are out. The .sr-only labels are absolutely
+         positioned and sit nowhere near the controls they name, so a gap
+         measured through one is a number about nothing. And anything not
+         RENDERED — the sync button is hidden with no cloud config, which is
+         every harness run — returns an all-zero rectangle, whose top of 0 reads
+         as a second line the row has not got. */
+      const kids = [...ctl.children].filter((e) =>
+        !e.classList.contains('sr-only') && e.getClientRects().length);
+      const gaps = [];
+      for (let i = 1; i < kids.length; i++) {
+        gaps.push(Math.round(kids[i].getBoundingClientRect().left - kids[i - 1].getBoundingClientRect().right));
+      }
+      r.headerPos = P.getComputedStyle(head).position;
+      r.headerH = Math.round(head.getBoundingClientRect().height);
+      r.brandLeft = Math.round(brand.getBoundingClientRect().left);
+      r.ctlTop = Math.round(ctl.getBoundingClientRect().top);
+      r.brandBottom = Math.round(brand.getBoundingClientRect().bottom);
+      r.ctlOverflowX = P.getComputedStyle(ctl).overflowX;
+      r.ctlWrap = P.getComputedStyle(ctl).flexWrap;
+      r.ctlScrolls = ctl.scrollWidth > ctl.clientWidth;
+      r.ctlGaps = gaps;
+      /* One line: every control shares a top. */
+      r.ctlLines = new Set(kids.map((e) => Math.round(e.getBoundingClientRect().top))).size;
+      /* The 📌 is not on a phone at all, so it cannot be reached by a Tab. */
+      r.pinRects = PD.getElementById('pinBtn').getClientRects().length;
+      r.pinStuck = P.__lnTestHooks.pin.stuck();
+    }
     PD.getElementById('tab-matches').click();
     PD.querySelector('#matchesWrap .mrow').click();
     r.sheetW = Math.round(PD.getElementById('matchDialog').getBoundingClientRect().width);
@@ -1727,11 +1764,20 @@ function define() {
     const bar = (APP_SRC.match(/<nav class="tabbar[\s\S]*?<\/nav>/) || [''])[0];
     ok(!/role="tab/.test(bar) && (bar.match(/data-tab="/g) || []).length === 5);
   });
+  /* ONE DEFINITION OF A PHONE. Two blocks answer to 759.98px — the header's
+     and the bar's — and both are named here so a third cannot arrive without
+     someone reading this line. Picked by what is INSIDE each rather than by
+     order: a regex that took the first block started matching the header's the
+     day it was added, and the bar's assertions then failed as if the bar had
+     broken. */
+  const phoneBlocks = () => (css().match(/@media \(max-width: 759\.98px\) \{[\s\S]*?\n  \}/g) || []);
+  const phoneBlock = (needle) => phoneBlocks().find((b) => b.indexOf(needle) > -1) || '';
   t('the bar is fixed only under 760px, lifts the toast, pads the page, and hides under a dialog', () => {
-    const mob = (css().match(/@media \(max-width: 759\.98px\) \{([\s\S]*?)\n  \}/) || [])[1] || '';
+    eq(phoneBlocks().length, 2, 'the header and the bar, and nothing else at this width');
+    const mob = phoneBlock('.tabbar {');
     ok(mob, 'the phone block exists');
     ok(/\.tabbar \{ display: flex; position: fixed;/.test(mob));
-    ok(/\.tabs \{ display: none; \}/.test(mob), 'and the tablist goes, so there is one control at a time');
+    ok(/\.tabrow \{ display: none; \}/.test(mob), 'and the whole tab row goes, so there is one control at a time and no orphaned 📌');
     ok(/body \{ padding-bottom: calc\(var\(--tabbar-h\) \+ env\(safe-area-inset-bottom\)\); \}/.test(mob));
     ok(/#toast \{ bottom: calc\(var\(--tabbar-h\)/.test(mob));
     ok(/html:has\(dialog\[open\]\) \.tabbar/.test(mob), 'iOS re-anchors a fixed bar above the keyboard');
@@ -1742,7 +1788,7 @@ function define() {
   t('on a phone the bar is really there and the tablist really gone', () => {
     const r = asyncResults.phone || {};
     ok(!r.error, r.error);
-    eq(r.barDisplay, 'flex'); eq(r.tabsDisplay, 'none');
+    eq(r.barDisplay, 'flex'); eq(r.tabrowDisplay, 'none');
     ok(r.barBottom <= r.vh + 1 && r.barBottom >= r.vh - 1, 'the bar sits on the bottom edge, got ' + r.barBottom + ' of ' + r.vh);
     ok(r.padBottom >= 56, 'the page is padded past it');
     ok(r.sheetW === r.vw, 'the scorer sheet is the full width: ' + r.sheetW + ' of ' + r.vw);
@@ -1758,6 +1804,96 @@ function define() {
   t('pressing the tab you are already on leaves the page where it is', () => {
     const L = asyncResults.landing || {};
     ok(L.held > 0, L.held); eq(L.afterSameTab, L.held);
+  });
+  /* ── The phone header and the pinned tab row (2026-09-08) ─────────────────
+     Two asks, one shape: the chrome you look at stays put and the chrome you
+     reach for scrolls sideways rather than stacking. */
+  t('on a phone the name stays put and the controls are ONE line that scrolls', () => {
+    const r = asyncResults.phone || {};
+    ok(!r.error, r.error);
+    eq(r.headerPos, 'sticky', 'the header is pinned — it was `position: static` while the row wrapped');
+    ok(r.headerH <= 100, 'and it is short enough to be worth pinning: it was 173px wrapped', r.headerH + 'px');
+    eq(r.ctlWrap, 'nowrap'); eq(r.ctlOverflowX, 'auto');
+    eq(r.ctlLines, 1, 'every control shares a top');
+    ok(r.ctlScrolls, 'and the row really does have somewhere to scroll to at 375px');
+    ok(r.ctlTop >= r.brandBottom, 'the name is ABOVE the controls, not in the scroller with them');
+    ok(r.noSideways, 'and a scroller inside the header never lets the PAGE scroll sideways');
+  });
+  t('the nested control row states the family’s 12px gap rather than inheriting it', () => {
+    const r = asyncResults.phone || {};
+    ok(r.ctlGaps.length >= 4, 'there are controls to measure between', JSON.stringify(r.ctlGaps));
+    eq([...new Set(r.ctlGaps)], [12],
+       'the four apps that nest their controls all said 8 and had to be corrected on 2026-08-23');
+    ok(/\.headctl \{[^}]*gap: 12px/.test(css()), 'and it is declared, not hoped for');
+  });
+  t('the pin is a desktop affordance: no button and nothing stuck on a phone', () => {
+    const r = asyncResults.phone || {};
+    eq(r.pinRects, 0, 'the 📌 is not on the page, so it cannot be tabbed to');
+    eq(r.pinStuck, false, 'and pinStuck() says so — a display:none row still COMPUTES position: sticky');
+    ok(/if \(!row \|\| !row\.getClientRects\(\)\.length\) return false;/.test(stripComments(APP_SRC)),
+       'which is why it asks the rectangle');
+  });
+  t('the tab row is pinned by ONE attribute, decided before first paint', () => {
+    const head = APP_SRC.split('</head>')[0];
+    ok(/setAttribute\('data-pin', 'on'\)/.test(head) && /'ln-pin'/.test(head),
+       'the head script sets it, or the row visibly takes its margin back as padding');
+    ok(/html\[data-pin\] \.tabrow \{[\s\S]*?position: sticky; top: var\(--pin-top, 0px\)/.test(css()));
+    ok(/html\[data-pin\] \.tabrow \{[\s\S]*?background: var\(--bg\)/.test(css()),
+       '--bg and never --surface: pinning must change nothing but "content no longer shows through"');
+    ok(/html\[data-pin\] \.tabrow \{[\s\S]*?margin-bottom: 0; padding-bottom: 20px/.test(css()),
+       'the margin becomes padding, so the band is inside the box that paints it');
+    ok(/scroll-margin-top: var\(--pin-clear, 0px\)/.test(css()),
+       'the browser’s own Tab-key scrolling knows nothing about a pinned row');
+    ok(/@media print \{[\s\S]*?\.tabrow \{ display: none !important; \}/.test(css()),
+       'and a pinned row would otherwise print once over the first page');
+  });
+  t('the pin button is a sibling of the tablist, never a child of it', () => {
+    const btn = W.document.getElementById('pinBtn');
+    ok(btn, 'it exists');
+    eq(btn.parentElement.className, 'tabrow', 'a non-tab child of a tablist is a lie about what the thing is');
+    eq(btn.closest('[role="tablist"]'), null);
+    ok(/\.pinbtn svg \{ pointer-events: none; \}/.test(css()),
+       'the icon is redrawn on press, so it must never be the thing that was clicked');
+  });
+  t('pinning costs no reflow, and the icon and the name change together', () => {
+    const D = W.document, root = D.documentElement;
+    const was = H.pin.on();
+    const row = D.querySelector('.tabrow');
+    const panel = D.getElementById('standingsPanel');
+    const read = () => [Math.round(row.getBoundingClientRect().top),
+                        Math.round(panel.getBoundingClientRect().top),
+                        Math.round(D.documentElement.scrollHeight)];
+    try {
+      H.pin.apply(false);
+      const off = read();
+      const offLabel = D.getElementById('pinBtn').getAttribute('aria-label');
+      H.pin.apply(true);
+      const on = read();
+      eq(on, off, 'the row, the panel below it and the whole document stay exactly where they were');
+      eq(root.getAttribute('data-pin'), 'on');
+      eq(getComputedStyle(row).position, 'sticky');
+      /* Measured, never written down: the header wraps at a tablet width. */
+      const top = getComputedStyle(root).getPropertyValue('--pin-top').trim();
+      eq(top, Math.round(D.querySelector('header').getBoundingClientRect().height) + 'px');
+      const onLabel = D.getElementById('pinBtn').getAttribute('aria-label');
+      ok(/^Unpin/.test(onLabel) && /^Pin/.test(offLabel), 'the name says what pressing it will DO next');
+      ok(D.getElementById('pinBtn').innerHTML !== '', 'and the icon is drawn');
+      ok(D.getElementById('pinBtn').getAttribute('aria-pressed') === null,
+         'no aria-pressed on top of a name that already carries the state');
+    } finally { H.pin.apply(was); }
+  });
+  t('the pin is off until asked for, and remembered under its own key', () => {
+    eq(H.pin.KEY, 'ln-pin');
+    ok(/localStorage\.getItem\(PIN_KEY\) === '1'/.test(stripComments(APP_SRC)),
+       'off by default: only a stored 1 turns it on');
+    ok(/catch \(e\) \{ return false; \}/.test(stripComments(APP_SRC).split('function savedPin')[1] || ''),
+       'and a browser that refuses storage draws the app unpinned rather than not at all');
+  });
+  t('render() measures the offset as well as the observer', () => {
+    const src = stripComments(APP_SRC);
+    ok(/function render\(\) \{\s*renderLeaguePicker\(\);\s*measurePinTop\(\);/.test(src),
+       'an observer is delivered with the next rendering step, which a background window has not got');
+    ok(/new ResizeObserver\(\(\) => measurePinTop\(\)\)/.test(src) && /addEventListener\('resize', measurePinTop\)/.test(src));
   });
   t('coarse pointers get a taller control floor and thumb-sized winner buttons', () => {
     const coarse = (css().match(/@media \(pointer: coarse\) \{\s*:root \{ --control-h: 44px; \}[\s\S]*?\}/) || [''])[0];
@@ -1775,7 +1911,7 @@ function define() {
     ok(/id="firstJoin" class="cloud-only"/.test(card), 'Join is offered only once the cloud exists — never a button that does nothing');
     ok(!W.document.documentElement.hasAttribute('data-cloud') && W.getComputedStyle(W.document.getElementById('firstJoin')).display === 'none',
        'and with no Firebase config it is not on screen');
-    ok(/html\[data-welcome\] \.tabs/.test(css()));
+    ok(/html\[data-welcome\] \.tabrow/.test(css()), 'and the tab ROW goes with it, pin button and all');
   });
   t('the welcome card is ONE measure and ONE colour', () => {
     const card = W.document.querySelector('#welcomeCard .empty');
