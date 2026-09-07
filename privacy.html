@@ -129,6 +129,10 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
       Your account's display name and the list of leagues you have joined are stored beside it so
       the app can show who is a member and find your leagues on a new phone. The <strong>Admin
       Key</strong> is stored in a document nobody can read.</p>
+    <p>An invite link carries the League ID — and the Admin Key, if the sender chose to include
+      it — in the part of the address after the <code>#</code>, which never reaches a server; the
+      app takes it off the address bar the moment the link is opened. The QR code is drawn by the app
+      itself; nothing is fetched to make one.</p>
     <p>Signing out stops the app talking to Google. Leaving a league removes your name from it;
       the owner deleting a league removes it for everyone. The <a href="https://github.com/eagleadams86/league-night/blob/main/firestore.rules"
       target="_blank" rel="noopener noreferrer">security rules</a> are published in the repository.</p>

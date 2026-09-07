@@ -7,12 +7,12 @@ league's ID can follow it, and anyone with the admin key can run it.
 
 **Live: https://eagleadams86.github.io/league-night/**
 
-> **Status (7 September 2026): the league works, and sharing is built but not yet switched on.**
-> Players and teams, seasons with generated fixtures, leg-by-leg scoring, the standings table
-> and knock-out tournaments are all live. Sharing a league across devices — sign-in, the League
-> ID and Admin Key, members and ownership — is written and tested, and waits on the Firebase
-> project being created (see *Setting up the cloud* below). Invites by text, email and QR
-> code, and the live dart-by-dart scorer, are the next phases.
+> **Status (7 September 2026): everything is built; sharing waits on one console step.**
+> Players and teams, seasons with generated fixtures, leg-by-leg and live scoring, the standings
+> table, knock-out tournaments, invites by link, email, text and QR code — all live. Sharing a
+> league across devices — sign-in, the League ID and Admin Key, members and ownership — is
+> written and tested, and switches on when the Firebase project exists (see *Setting up the
+> cloud* below). Until then a league lives in the browser it was made in.
 
 ## What it does today
 
@@ -25,6 +25,11 @@ league's ID can follow it, and anyone with the admin key can run it.
 - **Scoring.** Tap a match, add a leg, tap who won it. The match ends itself when the format says
   so (best of five, or a fixed count). Optional per-leg figures: darts thrown, checkout, 180s,
   140+ and 100+. Forfeits, voids and reopening. Every tap is saved as it lands.
+- **Live scoring.** Open a leg live and score it visit by visit on a keypad: the remaining
+  scores, whose throw it is, a checkout hint from the conventional chart, bust detection
+  (under, one left, or a finish no double can make), and a finish that asks how many darts it
+  took — offering only the counts that can do it. Undo takes the last visit back. The averages,
+  180s and checkouts fall out of it. A handicap comes off the player's start.
 - **Standings.** Points for a win, draw and loss; leg difference, legs for, head-to-head and wins
   as tiebreakers in the order you choose; form and a trend line per side; and in a team league an
   individual table of every player's own legs.
@@ -89,11 +94,23 @@ owner; a viewer's attempt to score is refused on the sync button with the rules'
 
 ## What is coming
 
-- **Invites.** A join link you can text or email, and a QR code drawn in the app.
-- **A live x01 scorer.** Dart by dart, with bust detection and checkout hints, feeding the
+- **Other games.** Cornhole, shuffleboard, bowling and golf — one entry each in the game
+  registry; the league engine already knows nothing about darts.
+- **A live x01 scorer for cricket**, the second darts format. Dart by dart, with bust detection and checkout hints, feeding the
   averages, 180s and high checkouts automatically.
-- **Other games.** Cornhole, shuffleboard, bowling and golf — one entry each in the game registry;
-  the league engine already knows nothing about darts.
+
+### Inviting people
+
+Once a league is shared, the Invite card on the League tab offers the join link four ways:
+the phone's own share sheet (or Copy on a desktop), Email, Text, and a **QR code drawn in the
+app** — no library, nothing fetched. The link is the app's own address with the League ID in
+the fragment (`#join=LN-…`), so it reaches no server log; tick *Include the Admin Key* and it
+carries the key too, and whoever opens it becomes an admin. A link is taken off the address bar
+the moment it is opened, so the key never sits in the history.
+
+The QR encoder covers versions 1 to 6 (up to 106 characters), which is what a join link needs
+and no more; it is pinned in the test suite against an independent encoder's output, a
+Reed–Solomon syndrome check and the structural facts every reader relies on.
 
 ## Running it locally
 
