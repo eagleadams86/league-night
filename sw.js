@@ -75,7 +75,7 @@ const ROOT = new URL('./', self.location).pathname;
 const SHELL_PATHS = new Set(SHELL.map((p) => new URL(p, self.location).pathname));
 
 /* Matches on the PATH, not the URL, because the markup asks for
-   `favicon.ico?v=1`: keyed on the full URL the precached favicon would never be
+   `favicon.ico?v=2`: keyed on the full URL the precached favicon would never be
    the entry that answers. index.html folds onto './' for the same reason. */
 function shellKey(url) {
   let p = url.pathname;

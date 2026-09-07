@@ -60,7 +60,7 @@
      loss, and modern iOS ignores them anyway. The pack fixes it properly, by
      flooring form controls at 16px on a coarse pointer (rule 11). -->
 <title>League Night · Charlie's Epic Scoreboard</title>
-<meta name="description" content="The shell every app in this family starts from: the shared palette, type scale and chrome, the guards that keep saved data safe, and the features every sibling already has.">
+<meta name="description" content="Run a darts league from your phone: players or teams, a season of fixtures, the table, leg-by-leg and live scoring, and knock-out tournaments — shared with everyone in the league.">
 <meta name="mobile-web-app-capable" content="yes">
 <!-- Both stay: Chrome warns the apple- prefixed one is deprecated, older iOS
      reads only the apple- one. -->
@@ -1780,7 +1780,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
     <button type="button" id="csvBtn"><span aria-hidden="true">⬇︎</span> Download Matches (CSV)</button>
   </div>
   <hr>
-  <p>Restoring a backup of a league already on this device <strong>replaces that league</strong>;
+  <p id="restoreNote">Restoring a backup of a league already on this device <strong>replaces that league</strong>;
     a backup of another league is added beside the ones you have. You are told what the file
     holds and asked to confirm first.</p>
   <details class="danger-zone">
@@ -1881,6 +1881,12 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
    preferences and never enter either. */
 const DEVICE_KEY = 'ln-device';
 const LEAGUE_KEY = (id) => 'ln-league-' + id;
+/* The Admin Key of one league. Declared HERE beside the other two rather than
+   beside the accessors down in the cloud section, because forgetting a league
+   and Delete All Data both have to remove it and both used to spell the string
+   out by hand — three copies of one key is a leak waiting for the fourth. What
+   it is and why it never enters `state` is argued where adminKeyFor() lives. */
+const KEY_KEY    = (id) => 'ln-key-' + id;
 const THEME_KEY  = 'ln-theme';
 const TAB_KEY    = 'ln-tab';
 const TABS       = ['standings', 'matches', 'players', 'tournament', 'league'];
@@ -2058,7 +2064,9 @@ const GAMES = {
    `schema`, and every boundary refuses a copy carrying a higher one — see the
    halt below. BUMP IT AND normalizeLeague TOGETHER when a stored field is
    added. */
-const SCHEMA = 2;   /* 2: a leg carries `first` and `dOut` for the live scorer (2026-09-07) */
+const SCHEMA = 3;   /* 2: a leg carries `first` and `dOut` for the live scorer (2026-09-07)
+                       3: a trimmed leg carries `scored` per side, so Trim Closed
+                          Seasons keeps its promise that no figure moves (2026-09-07) */
 const TIEBREAK_KEYS = ['pts', 'legDiff', 'legsFor', 'wins', 'h2h', 'name'];
 const NAME_MAX = 40;
 
@@ -2115,6 +2123,15 @@ function normalizeLeague(raw) {
   const stamp = (v) => (Number.isFinite(Number(v)) && Number(v) > 0) ? Number(v) : 0;
   const isoDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : null;
   const list = (v) => Array.isArray(v) ? v.filter((x) => x && typeof x === 'object') : [];
+  /* A leg's starting score, or null for a game that has none. Written out
+     rather than through int(): int() CLAMPS UP, so a null (Number(null) is 0,
+     which is finite) or a zero came back as a start of 1 — a number the game
+     never gave anyone. Anything that is not a real start is no start. */
+  const startAt = (v) => {
+    if (v == null || v === '') return null;
+    const n = Math.round(Number(v));
+    return (Number.isFinite(n) && n >= 1) ? Math.min(9999, n) : null;
+  };
 
   const L = (raw.league && typeof raw.league === 'object') ? raw.league : {};
   const game = GAMES[L.game] ? L.game : 'darts';
@@ -2186,6 +2203,15 @@ function normalizeLeague(raw) {
         if (n != null) o[f.key] = n;
       }
     });
+    /* `scored` is the one figure here a scorer never types: compactSeason()
+       writes it when it takes a live leg's visits away, because an average is
+       darts AND points and the points would otherwise go with the visits. It
+       is on the allowlist rather than in legFields for exactly that reason —
+       legFields is what the Details boxes offer. */
+    if (v.scored != null && v.scored !== '') {
+      const n = int(v.scored, 0, 9999, null);
+      if (n != null) o.scored = n;
+    }
     return Object.keys(o).length ? o : null;
   };
   const visits = (v) => {
@@ -2217,7 +2243,11 @@ function normalizeLeague(raw) {
         const leg = {
           w: lg.w === 'a' || lg.w === 'b' ? lg.w : null,
           by: { a: ids(by.a), b: ids(by.b) },
-          start: { a: int(start.a, 1, 9999, 0) || null, b: int(start.b, 1, 9999, 0) || null },
+          /* `startAt` and not int() directly: Number(null) is 0, which is
+             FINITE, so a leg carrying an explicit null start came back as 1
+             (the low clamp) rather than as "this game has no start". Only a
+             value that is genuinely absent may become null. */
+          start: { a: startAt(start.a), b: startAt(start.b) },
           /* Who threw first and whether a double was needed — what the live
              scorer's fold reads, stored on the leg so a rule change later
              cannot re-score a leg already thrown. */
@@ -2321,6 +2351,17 @@ function compactSeason(st, seasonId) {
            180s, where a typed leg with the box empty does not. */
         const o = { darts: s.darts, t180: s.t180, t140: s.t140, t100: s.t100 };
         if (s.checkout != null) o.checkout = s.checkout;
+        /* AND the points, or the promise this window makes is false. An
+           average is scored ÷ darts: darts survives on its own, the points
+           only survive if they are written down here. Without this the side
+           that LOST a live leg dropped out of its player's average entirely
+           the moment a closed season was trimmed — the tables did move, and
+           the button said they would not.
+
+           Number.isFinite and not `!= null`: a leg with no starting score
+           folds to NaN, and a key must never be written unless it has a value
+           — Firestore refuses a whole document over one `undefined`. */
+        if (Number.isFinite(s.scored)) o.scored = s.scored;
         next[side] = o;
       });
       trimmed++;
@@ -2773,6 +2814,7 @@ function x01LegStats(leg, side) {
   const good = vs.filter((v) => !v.bust);
   return {
     darts: darts,
+    scored: scored,
     avg3: darts ? scored / darts * 3 : null,
     t180: good.filter((v) => v.t === 180).length,
     t140: good.filter((v) => v.t >= 140).length,
@@ -2786,7 +2828,13 @@ function x01LegStats(leg, side) {
 function legSideStats(leg, side) {
   if (leg.visits && leg.visits[side] && leg.visits[side].length) return x01LegStats(leg, side);
   const s = leg[side] || {};
-  return { darts: s.darts == null ? null : s.darts, avg3: null,
+  const darts = s.darts == null ? null : s.darts;
+  const scored = s.scored == null ? null : s.scored;
+  return { darts: darts, scored: scored,
+           /* A leg that was scored live and has since been TRIMMED still knows
+              both halves of its average; a leg somebody typed figures into
+              knows only the darts, and has no average to give. */
+           avg3: (darts && scored != null) ? scored / darts * 3 : null,
            t180: s.t180 == null ? null : s.t180, t140: s.t140 == null ? null : s.t140,
            t100: s.t100 == null ? null : s.t100, checkout: s.checkout == null ? null : s.checkout,
            won: leg.w === side };
@@ -2857,6 +2905,9 @@ function dartsPlayerStats(legs, playerId) {
       /* Average needs the points scored, which a typed leg knows only when
          it was won (start to zero); a lost leg with no visits has no total. */
       if (leg.visits) { darts += s.darts; scored += leg.start[side] - x01State(leg).rem[side]; counted++; }
+      /* A trimmed leg carries its own points, so it counts the same after
+         Trim Closed Seasons as it did before — winner and loser alike. */
+      else if (s.scored != null) { darts += s.darts; scored += s.scored; counted++; }
       else if (leg.w === side) { darts += s.darts; scored += leg.start[side]; counted++; }
       if (leg.w === side && (bestLeg == null || s.darts < bestLeg)) bestLeg = s.darts;
     }
@@ -3124,7 +3175,7 @@ function forgetLeague(id) {
   const entry = device.leagues.find((l) => l.id === id);
   if (entry && entry.cloud && typeof window.cloudForget === 'function') window.cloudForget(id);
   device.leagues = device.leagues.filter((l) => l.id !== id);
-  try { localStorage.removeItem(LEAGUE_KEY(id)); localStorage.removeItem('ln-key-' + id); } catch (e) {}
+  try { localStorage.removeItem(LEAGUE_KEY(id)); localStorage.removeItem(KEY_KEY(id)); } catch (e) {}
   if (device.current === id) {
     device.current = device.leagues[0] ? device.leagues[0].id : null;
     state = device.current ? loadLeague(device.current) : null;
@@ -3667,9 +3718,15 @@ function renderStandings() {
         + '</tr>';
     }).join('')
     + '</tbody></table>';
-  /* The column letters are said out loud here: a `title` on a heading never
-     shows on a phone, and P, W, D, L and ± are only obvious once you know. */
-  const key = 'P played, W won' + (anyDraw ? ', D drawn' : '') + ', L lost, ' + unit.many + ' for and against, ± ' + unit.one + ' difference.';
+  /* Said out loud here, because a `title` on a heading never shows on a phone
+     and P, W, D, L and ± are only obvious once you know. The same goes for the
+     one PILL that is a bare figure: a handicap reads as "−60" in this table
+     (it is written out in full on the Players tab, where there is room). Only
+     mentioned when a side on the table carries one. */
+  const anyHcp = t.rows.some((r) => { const p = playerById(r.sideId); return p && p.hcp != null; });
+  const key = 'P played, W won' + (anyDraw ? ', D drawn' : '') + ', L lost, ' + unit.many + ' for and against, ± ' + unit.one + ' difference.'
+    + (anyHcp ? ' A minus figure beside a name is that player’s ' + G().handicap.label.toLowerCase()
+       + ', taken off the start of every ' + unit.one + ' they throw.' : '');
   $('standingsNote').textContent = (played
     ? plural(played, 'match', 'matches') + ' counted' + (season ? ' in ' + season.name : '')
       + '. Order: ' + tiebreakWords(S().tiebreak) + '.'
@@ -3956,6 +4013,7 @@ $('addSave').addEventListener('click', () => {
   if (!canEdit()) { $('addDialog').close(); toast('Only an admin can change the league'); return; }
   const name = $('ad_name').value.trim().slice(0, NAME_MAX);
   if (!name) { $('addWarn').textContent = 'Give it a name.'; $('ad_name').focus(); return; }
+  let note = '';
   if (addKind === 'player') {
     if (state.players.some((p) => p.name.toLowerCase() === name.toLowerCase())) {
       $('addWarn').textContent = 'There is already a player called ' + name + '.'; return;
@@ -3967,13 +4025,23 @@ $('addSave').addEventListener('click', () => {
     const date = $('ad_date').value;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { $('addWarn').textContent = 'Pick the date it starts.'; $('ad_date').focus(); return; }
     const sn = touch({ id: uid(), name: name, startsOn: date, status: 'active' });
+    /* THE FIRST SEASON TAKES THE MATCHES THAT CAME BEFORE IT. With no seasons
+       at all, leagueMatches() returns every league match; the moment one
+       exists it returns only that season's, so a match added earlier — which
+       has no season, because there was none to give it — dropped off the
+       Matches tab and out of the table with nothing said. It was played in
+       this league, and this is the league's first season. Only the first:
+       after that a match belongs to whichever season it was added under. */
+    const orphans = state.seasons.length ? [] : state.matches.filter((m) => !m.bracketId && !m.seasonId);
     state.seasons.push(sn);
+    orphans.forEach((m) => { m.seasonId = sn.id; touch(m); });
     seasonPick = sn.id;
+    if (orphans.length) note = ' — ' + plural(orphans.length, 'match', 'matches') + ' already on record moved into it';
   }
   save();
   render();
   $('addDialog').close();
-  toast(name + ' added');
+  toast(name + ' added' + note);
 });
 $('addCancel').addEventListener('click', () => $('addDialog').close());
 /* Enter saves. A one-box window that ignores its own return key sends a
@@ -4426,6 +4494,13 @@ $('forfeitCancel').addEventListener('click', () => { $('mtForfeitRow').hidden = 
 function forfeitTo(winner) {
   const m = curMatch();
   if (!m || !canEdit()) return;
+  /* A forfeit stores a score and NO legs, so whatever was scored before the
+     other side walked out is gone. Void, which keeps its legs, already asked;
+     this took them without a word. A match half played and then forfeited is
+     exactly the case where somebody wants the legs back. */
+  if (m.legs.length && !confirm('Give the match to ' + nameOf(m[winner]) + '?\n\nA forfeit is recorded as a full score and no '
+      + G().unit.many + ', so the ' + plural(m.legs.length, G().unit.one, G().unit.many)
+      + ' already scored are deleted. There is no undo — Void keeps them and counts for nothing instead.')) return;
   const fmt = matchFormatFor(m);
   const n = fmt.mode === 'bestOf' ? legsToWin(fmt) : fmt.n;
   m.legs = [];
@@ -4746,6 +4821,15 @@ $('dataBtn').addEventListener('click', () => {
   $('dataLeagueName').textContent = state ? state.league.name : 'a league';
   ['exportBtn', 'csvBtn', 'clearBtn'].forEach((id) => { $(id).hidden = !state; });
   $('clearBtn').hidden = !isOwner();
+  /* IN A SHARED SNAPSHOT this window may only take a copy OUT. Restore ran
+     adoptLeague(), whose save() the viewOnly guard then threw away — so the
+     league on screen changed, the snapshot banner started naming the restored
+     league, and nothing had been saved anywhere. And the danger zone opened
+     onto an explanation with its button hidden, which is a control that does
+     nothing dressed as one that does. Both go. */
+  $('importBtn').hidden = viewOnly;
+  $('restoreNote').hidden = viewOnly;
+  document.querySelector('#dataDialog .danger-zone').hidden = $('clearBtn').hidden;
   openModal($('dataDialog'));
 });
 $('dataClose').addEventListener('click', () => $('dataDialog').close());
@@ -4778,7 +4862,10 @@ function csvMatches(st) {
 }
 $('csvBtn').addEventListener('click', () => {
   if (!state) return;
-  const blob = new Blob(['﻿' + csvMatches(state)], { type: 'text/csv;charset=utf-8' });
+  /* The same BOM as runExport(), and spelled as an ESCAPE for the same reason:
+     a literal U+FEFF is invisible in an editor and in a diff, and anything that
+     normalises the source on the way past loses it without a trace. */
+  const blob = new Blob(['\uFEFF' + csvMatches(state)], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'league-night-' + slug(state.league.name) + '-matches-' + todayISO() + '.csv';
@@ -4802,6 +4889,8 @@ $('importFile').addEventListener('change', () => {
        most likely to have been written by a newer build. */
     if (raw && Number(raw.schema || 1) > SCHEMA) haltForNewerData(raw.schema);
     if (!raw || typeof raw !== 'object' || !raw.league) { toast('That file is not a League Night backup.'); return; }
+    /* The guard behind the hidden button: a snapshot has nowhere to put it. */
+    if (viewOnly) { toast('This is somebody else’s shared snapshot — open your own leagues to restore a backup.'); return; }
     const incoming = normalizeLeague(raw);
     const known = device.leagues.find((l) => l.id === incoming.league.id);
     if (known && known.cloud && known.role === 'viewer') { toast('You follow ' + known.name + ' — only an admin can restore a backup into it.'); return; }
@@ -4861,7 +4950,7 @@ $('clearConfirm').addEventListener('click', () => {
      left, deleted or touched, and the account's own list of leagues stays,
      so signing in brings the shared ones back. */
   device.leagues.slice().forEach((l) => {
-    try { localStorage.removeItem(LEAGUE_KEY(l.id)); localStorage.removeItem('ln-key-' + l.id); } catch (e) {}
+    try { localStorage.removeItem(LEAGUE_KEY(l.id)); localStorage.removeItem(KEY_KEY(l.id)); } catch (e) {}
   });
   device.leagues = [];
   device.current = null;
@@ -5303,8 +5392,9 @@ function loadDemo() {
    the browser's password manager carry it to another phone, end to end
    encrypted, on a path the app never touches — Money Map's Twelve Data key
    pattern. The app never learns whether the manager saved it, so this copy is
-   the only one it knows about. */
-const KEY_KEY = (id) => 'ln-key-' + id;
+   the only one it knows about. KEY_KEY itself is declared at the top of this
+   script with DEVICE_KEY and LEAGUE_KEY, because forgetting a league has to
+   remove it too. */
 function adminKeyFor(id) { try { return localStorage.getItem(KEY_KEY(id)) || ''; } catch (e) { return ''; } }
 function setAdminKey(id, key) {
   try { if (key) localStorage.setItem(KEY_KEY(id), key); else localStorage.removeItem(KEY_KEY(id)); } catch (e) {}
@@ -5314,6 +5404,7 @@ let cloudUser = null;        /* { uid, name, email } while signed in */
 let members = [];            /* the members of the league on screen, from the cloud */
 let membersFor = null;       /* which league they belong to */
 let meDoc = null;            /* this account's member document */
+let ownerOf = null;          /* { id, uid } — whose league, from the cloud document */
 let editSeq = 0;             /* counts local edits, so a push knows if it is stale */
 
 function isCloudLeague() { const e = myEntry(); return !!(e && e.cloud); }
@@ -5418,6 +5509,11 @@ window.lnCloudGone = (id) => {
   toast('This league was deleted by its owner — your copy stays on this device');
 };
 window.lnCloudUser = (u) => { cloudUser = u; render(); };
+/* Whose league this is, straight off the league document. */
+window.lnOwner = (id, uid) => {
+  ownerOf = { id: id, uid: String(uid || '') };
+  renderMembers();
+};
 window.lnMe = (doc) => { meDoc = doc; renderMembers(); };
 window.lnMembers = (id, list) => { membersFor = id; members = list; renderMembers(); };
 
@@ -5460,6 +5556,8 @@ function renderMembers() {
   wrap.innerHTML = sorted.length ? '<div class="plist">' + sorted.map((m) => {
     const isMe = m.uid === me;
     const player = m.playerId ? playerById(m.playerId) : null;
+    /* The owner's own member record says 'admin' — that is how they were
+       written — so the league document's owner field is what decides. */
     const roleWord = m.uid === ownerUid() ? 'owner' : m.role;
     return '<div class="prow static"><span class="pname">' + esc(m.name || 'A member') + (isMe ? ' <span class="pill">you</span>' : '')
       + ' <span class="pill' + (roleWord === 'owner' ? ' ok' : '') + '">' + esc(roleWord) + '</span>'
@@ -5480,9 +5578,16 @@ function renderMembers() {
   $('meLinkWrap').hidden = !mine;
 }
 function ownerUid() {
-  /* The owner's uid is not in `state`; the module tells us through the role
-     the league doc gave us, so only "am I the owner" is known here. The
-     Members list marks the owner from the member list when it can. */
+  /* The owner is a FIELD on the league document, not on `state` — it is never
+     synced into the league itself, because the league travels into backups and
+     share links and a uid belongs in neither. The module reads it off every
+     snapshot and hands it over through lnOwner(); until one has arrived, all
+     this side can say is whether the owner is us.
+
+     Before that call existed, an admin or a viewer saw the owner listed as an
+     ordinary 'admin': the card says the owner decides who may run the league
+     and then would not say who that was. */
+  if (ownerOf && ownerOf.id === state.league.id && ownerOf.uid) return ownerOf.uid;
   return isOwner() && cloudUser ? cloudUser.uid : null;
 }
 $('membersWrap').addEventListener('click', async (e) => {
@@ -5600,7 +5705,6 @@ closeOnBackdropClick($('joinDialog'));
 
    Pure: qrMatrix(text) returns an array of rows of booleans (true = dark),
    with no quiet zone; qrSvg() draws it. */
-const QR_ALPHA = ('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 $%*+-./:').split('');
 /* [version] → total codewords, EC codewords per block, number of blocks (level M). */
 const QR_BLOCKS = { 1: [26, 10, 1], 2: [44, 16, 1], 3: [70, 26, 1], 4: [100, 18, 2], 5: [134, 24, 2], 6: [172, 16, 4] };
 const QR_REMAINDER = { 1: 0, 2: 7, 3: 7, 4: 7, 5: 7, 6: 7 };
@@ -5898,7 +6002,19 @@ $('lvPad').addEventListener('click', (e) => {
     liveCommit(total, 3);
     return;
   }
-  if (/^q\d+$/.test(k)) { liveCommit(Number(k.slice(1)), 3); return; }
+  if (/^q\d+$/.test(k)) {
+    /* Through the SAME gate as ✓, not straight to liveCommit. 26, 41, 45, 60
+       and 100 are all real checkouts, and several of them are two darts or
+       one — committing them at a flat three quietly costs the average and the
+       best-leg figure their whole point. The quick key fills the box and the
+       finish row asks, exactly as typing the number would. */
+    const total = Number(k.slice(1));
+    const st = x01State(c.leg);
+    const rem = st.turn ? st.rem[st.turn] : 0;
+    if (total === rem && canFinish(rem, 3, c.leg.dOut !== false)) { liveEntry = String(total); renderLive(); return; }
+    liveCommit(total, 3);
+    return;
+  }
   if (/^\d$/.test(k)) {
     if (liveEntry.length >= 3) return;
     liveEntry = (liveEntry + k).replace(/^0+(?=\d)/, '');
@@ -6081,6 +6197,10 @@ window.__lnTestHooks = {
   __state: function () { return state; },
   __device: function () { return device; },
   __setRole: function (role) { const e = myEntry(); if (e) e.role = role; render(); },
+  /* A shared view is decided at boot from the fragment, which a suite running
+     one page cannot change; this is the same flag, set the same way, so the
+     windows that ask it can be tested without a second load. */
+  __viewOnly: function (on) { viewOnly = !!on; window.lnViewOnly = viewOnly; render(); },
   SCHEMA: SCHEMA, ID_RE: ID_RE, DEVICE_KEY: DEVICE_KEY, LEAGUE_KEY: LEAGUE_KEY, THEME_KEY: THEME_KEY, TAB_KEY: TAB_KEY,
   TABS: TABS, SHARE_FORMAT: SHARE_FORMAT, SHARE_PAYLOAD_V: SHARE_PAYLOAD_V, SHARED_ID: SHARED_ID,
   DEMO_ID: DEMO_ID, DEMO_TEAMS_ID: DEMO_TEAMS_ID, LEAGUE_ID_RE: LEAGUE_ID_RE, ADMIN_KEY_RE: ADMIN_KEY_RE,
@@ -6387,6 +6507,7 @@ async function roleIn(id, data) {
 async function adoptCloudLeague(id, data, makeCurrent) {
   if (Number(data.schema || 1) > window.lnSchema()) { window.lnStoreVerbatim(id, data.state); window.lnHalt(data.schema); return; }
   const role = await roleIn(id, data);
+  window.lnOwner(id, data.owner);
   window.lnRegisterCloud({ id: id, name: data.name, game: data.game, role: role, rev: Number(data.rev) || 0, state: data.state, current: !!makeCurrent });
 }
 
@@ -6554,6 +6675,9 @@ function listenTo(id) {
     const r = s.data();
     if (!r || !r.state || typeof r.state !== 'object') return;
     if (Number(r.schema || 1) > window.lnSchema()) { window.lnStoreVerbatim(id, r.state); window.lnHalt(r.schema); return; }
+    /* WHO owns it, and not merely whether we do: the Members card names the
+       owner, and every other member would otherwise see them as an admin. */
+    window.lnOwner(id, r.owner);
     window.lnRemote(id, r.state, Number(r.rev) || 0, r.owner === user.uid);
   }, onListenError));
   unsubs.push(F.onSnapshot(memberRef(id, user.uid), (s) => {
