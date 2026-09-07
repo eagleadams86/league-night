@@ -1,0 +1,94 @@
+# Runs tests.html on every push — the suite that pins League Night's pure
+# engines (round robin, standings, brackets, the x01 scorer, the league merge)
+# and the family rules it carries. There is no build step, so CI is exactly
+# what a person does: serve the folder, open the page in a real browser, read
+# the summary line. The job fails if the summary goes red or the page throws.
+# Ported from Money Map (financial-plan), which took it from Flow Metrics.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# `--omit=dev` is kept for the day package.json declares the Firebase SDK so
+# that Dependabot has a manifest to scan (Golf Handicap's arrangement): nothing
+# is ever installed from that entry — the bytes that run come from gstatic —
+# and without the flag npm would download it here too.
+#
+# The npm install runs third-party postinstall scripts; a read-only token is
+# the most they should ever be able to steal. Never rely on the repo default.
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save --no-audit --no-fund --omit=dev playwright
+          npx playwright install --with-deps chromium
+
+      - name: Run tests.html headless
+        run: |
+          python3 -m http.server 8024 &
+          # Written next to node_modules so `import 'playwright'` resolves.
+          cat > ci-run-tests.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import { appendFileSync } from 'node:fs';
+          const browser = await chromium.launch();
+          const page = await browser.newPage();
+          const errors = [];
+          page.on('pageerror', (e) => errors.push(String(e)));
+          await page.goto('http://localhost:8024/tests.html');
+          // The suite drives the real page — dialogs, toasts, a re-render per
+          // commit — and has run close to a minute since the row editor started
+          // saving as you go (Money Map's ran 56 s at 1,007 tests). Sixty seconds
+          // was a budget it had already spent; the job's own ten-minute limit is
+          // the real ceiling, so this waits well inside that rather than failing
+          // a green suite for being slow (2026-09-07, PR #16).
+          await page.waitForFunction(
+            () => !/^Loading/.test(document.getElementById('summary').textContent),
+            null, { timeout: 300000 });
+          const summary = await page.evaluate(() => document.getElementById('summary').textContent);
+          const failedNames = await page.evaluate(() =>
+            [...document.querySelectorAll('tr.fail, li.bad')].map((el) => el.textContent.trim()));
+          const groups = await page.evaluate(() => {
+            const out = []; let cur = null;
+            document.querySelectorAll('#out tr').forEach((tr) => {
+              if (tr.className === 'group') { cur = { name: tr.textContent.trim(), tests: [] }; out.push(cur); return; }
+              if (tr.className !== 'pass' && tr.className !== 'fail') return;
+              if (!cur) { cur = { name: 'Tests', tests: [] }; out.push(cur); }
+              const cell = tr.children[1] || tr;
+              cur.tests.push({ name: cell.textContent.trim(), ok: tr.className === 'pass' });
+            });
+            return out.filter((g) => g.tests.length);
+          });
+          /* The scorecard goes on the run's own page, not just into the log.
+             The published tests.html can't run the suite, so it links here
+             instead — and a link promising "the full scorecard" has to land on
+             one. */
+          if (process.env.GITHUB_STEP_SUMMARY) {
+            const green = /^All \d+ tests pass/.test(summary) && !errors.length;
+            let md = `## ${green ? '✅' : '❌'} ${summary}\n\n`;
+            for (const e of errors) md += `> **Page error:** \`${e}\`\n\n`;
+            for (const g of groups) {
+              const bad = g.tests.filter((t) => !t.ok).length;
+              md += `<details${bad ? ' open' : ''}><summary>${bad ? '❌' : '✅'} ${g.name}`
+                + ` — ${g.tests.length - bad}/${g.tests.length}</summary>\n\n`;
+              for (const t of g.tests) md += `- ${t.ok ? '✓' : '**✕**'} ${t.name}\n`;
+              md += `\n</details>\n\n`;
+            }
+            appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
+          }
+          console.log(summary);
+          for (const f of failedNames) console.log('FAIL:', f);
+          for (const e of errors) console.log('PAGE ERROR:', e);
+          await browser.close();
+          if (failedNames.length || errors.length || !/^All \d+ tests pass/.test(summary)) process.exit(1);
+          EOF
+          node ci-run-tests.mjs

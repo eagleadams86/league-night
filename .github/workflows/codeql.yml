@@ -1,0 +1,50 @@
+# CodeQL static analysis for League Night's JavaScript.
+#
+# It is here for the shared-origin rule above all: every Pages site in this
+# account is ONE browser origin, so an XSS hole in any page is a hole in all of
+# them — including the two apps holding figures copied out of a work Jira. The
+# escaping discipline that prevents it (esc() on everything rendered, ids pinned
+# to a shape at every boundary) is worth having a machine re-check on every push.
+#
+# And this app is the first in the family to hold a document many accounts can
+# read and several can write, so an injection through a league name or a score
+# reaches every member's browser rather than one.
+#
+# `security-events: write` is the one extra permission over the tests workflow,
+# and it is what lets the run publish alerts to the Security tab. Everything
+# else stays read-only.
+name: codeql
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly, so a newly published query pattern reaches this repo without
+    # waiting for the next commit. Monday early, off the hour to avoid the
+    # top-of-hour scheduling crush.
+    - cron: '17 6 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-and-quality
+          # No paths-ignore: this repo vendors no third-party bundle, so there is
+          # nothing here that an alert could name and nobody could fix.
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:javascript-typescript

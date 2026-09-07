@@ -1,0 +1,16 @@
+{
+  "id": "/league-night/",
+  "name": "League Night",
+  "short_name": "League Night",
+  "description": "Run a darts league from your phone: players or teams, a season schedule, standings, live leg scoring and knock-out tournaments — shared with everyone in the league.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0a0e1a",
+  "theme_color": "#0a0e1a",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

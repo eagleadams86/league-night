@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "_comment": "8024 is the first port past the family's 8010-8023 band (8021 is held by something outside these repos and is NOT free). Keep this in step with the league-night entry in ~/.claude/launch.json.",
+      "name": "league-night",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8024"],
+      "port": 8024
+    }
+  ]
+}

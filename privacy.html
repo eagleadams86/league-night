@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<!-- Every page ships a CSP, apps and static pages alike — this one is a public
+     page on the shared origin exactly like index.html, and a policy page with no
+     policy is the gap somebody walks through. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>League Night — Privacy Policy</title>
+<script>
+  /* The same pre-paint boot as the app page: honour the saved theme, so this
+     page doesn't open midnight on someone who chose Light. KEEP THE LIST IN
+     STEP with the app's — these are two separate copies and nothing checks
+     them against each other.
+
+     The default is 'auto', and on this page that is the common case: a privacy
+     page is linked to directly, so most readers arrive having saved nothing.
+     <html data-theme="auto"> above is the same answer with script disabled. */
+  try {
+    var t = localStorage.getItem('ln-theme');
+    if (t === 'slate') t = 'dark';
+    var ok = ['auto', 'midnight', 'dark', 'light', 'sepia'];
+    document.documentElement.setAttribute('data-theme',
+      ok.indexOf(t) === -1 ? 'auto' : t);
+  } catch (e) {}
+</script>
+<!-- The linked palette, the same bytes the app reads. A static page needs
+     `style-src 'self'` in its CSP for this, which is easy to forget: without it
+     the stylesheet is silently blocked and the page renders unstyled. -->
+<link rel="stylesheet" href="theme.css">
+<style>
+  :root                 { color-scheme: dark; }
+  [data-theme="dark"]   { color-scheme: dark; }
+  [data-theme="light"]  { color-scheme: light; }
+  [data-theme="sepia"]  { color-scheme: light; }
+  [data-theme="auto"]   { color-scheme: light; }
+  @media (prefers-color-scheme: dark) {
+    [data-theme="auto"] { color-scheme: dark; }
+  }
+
+  /* Type comes from the pack here too, and that is the whole point of this file
+     being in the starter. Seven privacy pages in this family linked theme.css
+     and then set `15px/1.6` with their own font stack on top of it, and every
+     gate stayed green — a hash proves the file arrived, never that the page uses
+     it. Sizes below are picked by ROLE: title xl, section heading md, date line
+     and footer xs. */
+  body { margin: 0; background: var(--bg); color: var(--text-primary);
+         font: var(--fw-normal) var(--fs-base)/var(--lh-base) var(--font-sans); }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 44px 20px 80px; }
+  h1 { font-size: var(--fs-xl); margin: 0 0 2px; }
+  .meta { color: var(--text-muted); font-size: var(--fs-xs); margin: 0 0 26px; }
+  h2 { font-size: var(--fs-md); margin: 30px 0 8px; }
+  p, li { color: var(--text-secondary); }
+  a { color: var(--accent); }
+  a:focus-visible { outline: 2px solid var(--focus-border); outline-offset: 2px; border-radius: 3px; }
+  .card { background: var(--surface); border: 1px solid var(--border);
+          border-radius: var(--radius); padding: 16px 20px; margin: 14px 0; }
+  .card p { margin: 0; }
+  .card strong { color: var(--text-primary); }
+  ul { padding-left: 20px; }
+  .back { display: inline-block; margin-bottom: 26px; font-size: var(--fs-xs); }
+  /* Same footer trio as every public page in the family, minus the privacy link
+     — you are standing on it. `margin`, not `margin-top`, so the rule does not
+     depend on which element carries it. */
+  .foot { color: var(--text-muted); font-size: var(--fs-xs); margin: 34px 0 0; }
+  .foot a { color: inherit; }
+
+/* The footer every public page in this account carries, minus the privacy link
+   — you are standing on that page. Sprint Predictability's treatment: muted
+   links, because this is provenance at the foot of a document rather than
+   something to click on the way in. `.footnotes` keeps the lines stacked inside
+   the flex footer. */
+footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+.footnotes { flex: 1 1 320px; min-width: 0; }
+.privacy { font-size: var(--fs-xs); color: var(--text-muted); margin: 28px 0 0; padding-left: 19px; }
+.privacy-links { margin-top: 6px; }
+.privacy-links a { color: var(--text-muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <!-- The back link stays OUTSIDE <main> — it is navigation, not the document —
+       but "outside main" is not "outside every landmark", which is where it sat
+       in six of these pages until axe-core's `region` rule found it. A <nav>
+       with an aria-label naming where it goes back to. -->
+  <nav aria-label="Back to the app"><a class="back" href="index.html">← Back to the app</a></nav>
+
+  <!-- A real <main>, and </main> closes BEFORE the <footer>. A <footer> nested
+       inside main/article/section is not contentinfo at all — which is why .wrap
+       stays an ordinary <div> rather than becoming the <main>. -->
+  <main>
+    <h1>Privacy Policy</h1>
+    <p class="meta">Effective 1 January 2026</p>
+
+    <div class="card">
+      <p><strong>Everything you type stays in this browser.</strong> There is no account, no
+        server, and nothing is uploaded.</p>
+    </div>
+
+    <h2>What Is Stored</h2>
+    <p>Your items, your choice of colour theme and which tab you last had open, saved in this
+      browser's local storage on this device. Clearing your browser's site data removes them.</p>
+
+    <h2>What Is Not</h2>
+    <ul>
+      <li>No analytics, no tracking, no cookies.</li>
+      <li>No third-party scripts of any kind — the page loads nothing beyond its own files.</li>
+      <li>No personal information is asked for or kept.</li>
+    </ul>
+
+    <h2>Backups</h2>
+    <p>A backup is a plain JSON file written to wherever your browser puts downloads. It
+      never leaves your device unless you send it somewhere yourself.</p>
+
+    <h2>Changes</h2>
+    <p>If what the app stores ever changes, this page and its effective date are updated in
+      the same commit as the change.</p>
+  </main>
+
+  <footer>
+  <div class="footnotes">
+    <!-- NO privacy link here, unlike the app's own footer — you are standing on
+         that page. That absence is asserted by the suite, not merely omitted. -->
+    <p class="privacy privacy-links"><a href="https://github.com/eagleadams86/league-night" target="_blank" rel="noopener noreferrer">How it works</a></p>
+    <p class="privacy privacy-links">&copy; 2026 Charles Adams — an
+      <a href="https://github.com/eagleadams86/league-night/blob/main/NOTICE"
+         target="_blank" rel="noopener noreferrer">independent personal project</a>,
+      <a href="https://github.com/eagleadams86/league-night/blob/main/LICENSE"
+         target="_blank" rel="noopener noreferrer">MIT licensed</a>.</p>
+  </div>
+</footer>
+</div>
+</body>
+</html>
