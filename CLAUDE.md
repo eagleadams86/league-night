@@ -44,12 +44,34 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
 
 ## Status
 
-Phases 1, 2 and 5 are live (2026-09-07): the scaffold, the pure engine (`roundRobin`,
+Phases 1, 2, 3 and 5 are built (2026-09-07): the scaffold, the pure engine (`roundRobin`,
 `standings`/`rankSides`, the bracket resolvers, the x01 fold and checkout table, `mergeLeague`),
-the five views with the bottom bar, the scorer sheet, the editors, both demo leagues and the
-tournaments. Still to come, in order: 3a Firebase create/join/read, 3b roles (the Admin Key,
-Members, ownership), 4 the live x01 sheet + handicap starts in it, 6 invites + QR, 7 polish
-(the axe pass, print CSS, `compactSeason`). The README tracks what is live.
+the five views with the bottom bar, the scorer sheet, the editors, both demo leagues, the
+tournaments, and the whole sharing model — the sync module, `firestore.rules`, the Invite and
+Members cards, the join window and the password-manager key forms. **Sharing is dark until
+Charles creates the Firebase project and pastes `FIREBASE_CONFIG` and `GOOGLE_CLIENT_ID`** (the
+README's "Setting up the cloud"); it cannot be verified end to end from here, only from two real
+Google accounts. Still to come: 4 the live x01 sheet, 6 invites + QR, 7 polish (the axe pass,
+print CSS, `compactSeason`). The README tracks what is live.
+
+## The sharing model, in the code
+
+- `window.ln*` is the contract between the classic script and the module: the module reads the
+  league through `lnGet`/`lnEntry`/`lnDevice`, and hands results back through `lnAdopt` (this
+  device's own push came back merged), `lnRemote` (another device's push arrived), `lnRegisterCloud`
+  (a league joined or shared), `lnSetRole`, `lnMembers`, `lnMe`, `lnCloudGone`.
+- **`save()` is an edit, `saveLocal()` is not.** save() counts (`editSeq`), marks a shared league
+  `dirty` and asks for a push; the module's own adoptions go through saveLocal(), or nothing would
+  ever come clean. A push that lands while `editSeq` moved on merges instead of adopting and
+  pushes again.
+- **A push is `runTransaction`**: read, `mergeLeague(mine, cloud.state)`, `update` with
+  `rev + 1`. The rules refuse any other rev. `pushNow` refuses for a viewer and for anything
+  that is not a League ID (the demo).
+- **The Admin Key** lives in `ln-key-<id>`, never in `state`; the Invite card and the join
+  window are real forms (username = League ID, password = Admin Key) for the password manager.
+- **Deleting a league is one `writeBatch`** — members, the key, the claim, the league — because
+  the subcollection rules `get()` the league and would be undeletable after it went.
+- **The demo ids carry an O** and so fail `LEAGUE_ID_RE`; that is what keeps them off the cloud.
 
 ## Things a tidy-up would break
 

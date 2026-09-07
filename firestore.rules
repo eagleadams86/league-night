@@ -1,0 +1,140 @@
+rules_version = '2';
+
+// Security rules for League Night's Firestore database.
+//
+// This file is a checked-in copy of what should be deployed in the Firebase
+// console (Firestore Database → Rules). Nothing in this repo deploys it — there
+// is no Firebase CLI setup here and the app is a single static page — so if the
+// rules are ever changed in the console, update this file to match. (Same
+// pattern as the golf-handicap, paptrack and financial-plan repos.)
+//
+// PASTE THESE INTO THE CONSOLE BEFORE SIGNING IN FOR THE FIRST TIME. Firestore's
+// default rules for a new project either deny everything (sync silently fails)
+// or, in test mode, allow every signed-in user to read and write everything.
+//
+// THIS IS THE FIRST APP IN THE FAMILY WHOSE DOCUMENTS ARE SHARED. Every sibling
+// keeps one private document per account; here a league is one document many
+// accounts can read and a few can write. The model, in one paragraph:
+//
+//   * Knowing a League ID is the READ capability. Any signed-in account can
+//     `get` a league by its id, and NOBODY can `list` the collection — that is
+//     what makes an unguessable id a capability rather than a hint.
+//   * Presenting the Admin Key is the WRITE capability. It lives in a document
+//     nobody can read (`private/admin`); an account claims admin by writing the
+//     key it was given into its own write-only mailbox (`claims/{uid}`) and
+//     asking for the admin role — the rules compare the two on the server.
+//   * The OWNER is a field on the league document. Only the owner can change it,
+//     and only to an existing member; only the owner rotates the key, promotes,
+//     demotes or removes members, or deletes the league.
+//   * Every update must raise `rev` by exactly one, which makes "every write is
+//     a transaction" a fact the server checks, not a habit the client keeps.
+//
+// EVERY get() IS GUARDED BY exists(). An unguarded get() on a missing document
+// is an evaluation ERROR, not `false`; an `||` chain forgives that error only
+// when its other side is true, so the outcome would depend on evaluation order
+// and every test in the Rules Playground would show an error. Access-call
+// budget: the worst case below makes four of the ten a request may make.
+//
+// Rules do NOT cascade to subcollections: a match on /leagues/{id} says nothing
+// about /leagues/{id}/members. Each block below is needed.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function me()       { return request.auth.uid; }
+
+    match /leagues/{leagueId} {
+      function leaguePath()    { return /databases/$(database)/documents/leagues/$(leagueId); }
+      function memberPath(uid) { return /databases/$(database)/documents/leagues/$(leagueId)/members/$(uid); }
+      function claimPath()     { return /databases/$(database)/documents/leagues/$(leagueId)/claims/$(me()); }
+      function keyPath()       { return /databases/$(database)/documents/leagues/$(leagueId)/private/admin; }
+
+      // Used by the SUBCOLLECTION rules, where the league is not `resource`.
+      function isOwner()       { return signedIn() && exists(leaguePath()) && get(leaguePath()).data.owner == me(); }
+      function memberIsAdmin() { return signedIn() && exists(memberPath(me())) && get(memberPath(me())).data.role == 'admin'; }
+      function keyMatches()    { return signedIn() && exists(claimPath()) && exists(keyPath())
+                                        && get(claimPath()).data.key == get(keyPath()).data.key; }
+
+      function validLeague(d) {
+        return d.keys().hasAll(['state', 'rev', 'owner', 'game', 'name', 'schema', 'updatedAt'])
+          && d.owner is string && d.rev is int && d.rev >= 0 && d.schema is int
+          && d.name is string && d.name.size() <= 40
+          && d.game is string && d.game.size() <= 20
+          && d.state is map && d.updatedAt is number;
+      }
+
+      allow get:    if signedIn();          // knowing the ID is the read capability
+      allow list:   if false;               // the ID must never be enumerable
+      allow create: if signedIn() && validLeague(request.resource.data)
+                    && request.resource.data.owner == me() && request.resource.data.rev == 0;
+      allow update: if signedIn() && validLeague(request.resource.data)
+                    && request.resource.data.rev == resource.data.rev + 1
+                    && request.resource.data.game == resource.data.game
+                    && (
+                         // the owner: anything, and may hand ownership to an existing member
+                         (resource.data.owner == me()
+                          && (request.resource.data.owner == resource.data.owner
+                              || exists(memberPath(request.resource.data.owner))))
+                         // an admin: anything except the owner field
+                      || (request.resource.data.owner == resource.data.owner && memberIsAdmin())
+                    );
+      allow delete: if signedIn() && resource.data.owner == me();
+
+      // The Admin Key. The owner may read it back (a new phone has no other way
+      // to show it); nobody else may read it at all.
+      match /private/admin {
+        allow read:   if isOwner();
+        allow create, update: if isOwner()
+                              && request.resource.data.keys().hasOnly(['key'])
+                              && request.resource.data.key is string
+                              && request.resource.data.key.size() == 16;
+        allow delete: if isOwner();
+      }
+
+      // A write-only mailbox: an account presents the key it was given here,
+      // and the member rule below compares it with the real one. Never readable,
+      // and deleted by the client once the claim has gone through.
+      match /claims/{uid} {
+        allow read:   if false;
+        allow create, update: if signedIn() && me() == uid
+                              && request.resource.data.keys().hasOnly(['key', 'at'])
+                              && request.resource.data.key is string
+                              && request.resource.data.key.size() <= 32;
+        allow delete: if signedIn() && (isOwner() || me() == uid);
+      }
+
+      // Who is in the league and what they may do. Readable by anyone signed in
+      // (a roster is not a secret to the people in it); an account may add
+      // itself as a viewer, or as an admin when its claim matches the key; the
+      // owner may set anyone's role or remove anyone; anyone may leave.
+      match /members/{uid} {
+        function validMember(d) {
+          return d.keys().hasOnly(['role', 'name', 'playerId', 'joinedAt'])
+            && d.role in ['admin', 'viewer']
+            && d.name is string && d.name.size() <= 40
+            && (!('playerId' in d) || (d.playerId is string && d.playerId.size() <= 64));
+        }
+        allow read:   if signedIn();
+        allow create: if signedIn() && me() == uid && exists(leaguePath())
+                      && validMember(request.resource.data)
+                      && (request.resource.data.role == 'viewer' || keyMatches());
+        allow update: if signedIn() && validMember(request.resource.data) && (
+                         isOwner()
+                      || (me() == uid && request.resource.data.role == resource.data.role)
+                      || (me() == uid && request.resource.data.role == 'admin' && keyMatches()));
+        allow delete: if signedIn() && (isOwner() || me() == uid);
+      }
+    }
+
+    // The family's per-account document: which leagues this account has
+    // joined, so "Your leagues" follows a Google account to a new phone. Ids
+    // and names only — never a key.
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // Everything else is denied by default: there is deliberately no
+    // `match /{document=**}` catch-all, and the app touches no other path.
+  }
+}

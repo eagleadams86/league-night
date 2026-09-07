@@ -7,11 +7,12 @@ league's ID can follow it, and anyone with the admin key can run it.
 
 **Live: https://eagleadams86.github.io/league-night/**
 
-> **Status (7 September 2026): the league itself works, on one device.** Players and teams,
-> seasons with generated fixtures, leg-by-leg scoring, the standings table and knock-out
-> tournaments are all live. Sharing a league across devices — sign-in, the League ID and Admin
-> Key, invites and QR codes — and the live dart-by-dart scorer are the next phases. Until then a
-> league lives in the browser it was made in, like every other app in this family.
+> **Status (7 September 2026): the league works, and sharing is built but not yet switched on.**
+> Players and teams, seasons with generated fixtures, leg-by-leg scoring, the standings table
+> and knock-out tournaments are all live. Sharing a league across devices — sign-in, the League
+> ID and Admin Key, members and ownership — is written and tested, and waits on the Firebase
+> project being created (see *Setting up the cloud* below). Invites by text, email and QR
+> code, and the live dart-by-dart scorer, are the next phases.
 
 ## What it does today
 
@@ -34,11 +35,61 @@ league's ID can follow it, and anyone with the admin key can run it.
   the matches, a read-only snapshot link, Find (⌘K), and on a phone a bottom bar with the five
   views a thumb away.
 
+## Sharing a league
+
+A league starts life in the browser it was made in. Once the cloud side is set up, its owner
+can **Share** it from the League tab, and from then on:
+
+- **The League ID** (`LN-` and eight letters or numbers) is how others find it. Anyone who signs
+  in to Google and enters it can follow the league — the table, the fixtures, the tournaments —
+  on their own phone, live. Leagues can never be listed, so an ID is a key, not a hint.
+- **The Admin Key** (sixteen letters or numbers) is how others get to run it. Enter it once and
+  your Google account becomes an admin: you can score matches, run seasons and draw
+  tournaments. The key is compared on the server, in a document nobody can read.
+- **The owner** is whoever shared the league. Only the owner can make or unmake admins, remove
+  members, hand ownership to another member, make a new Admin Key, or delete the league.
+- **Both keys are kept by your password manager**, never by the app's sync, backups or share
+  links: the Invite card is a real login form whose username is the League ID and whose
+  password is the Admin Key, so iCloud Keychain or your browser carries the pair to your next
+  phone end to end encrypted. The app never learns whether it was saved.
+- **Every change is a transaction.** Two admins scoring two matches at once both land; the
+  same match scored on two phones resolves to the later tap. Offline, a change is saved on the
+  phone and goes up on its own when the network is back.
+- **Removing a member is honest about what it does:** they come off the list, and anyone who
+  still has the ID can rejoin as a viewer. A league that must be closed to someone is a new
+  league with a new ID.
+
+`firestore.rules` in this repo is the checked-in copy of the security rules and argues every
+clause. It must be pasted into the Firebase console before anyone signs in.
+
+### Setting up the cloud
+
+The sync module at the foot of `index.html` ships with `FIREBASE_CONFIG = null` and
+`GOOGLE_CLIENT_ID = null`; while either is null the app is fully local and nothing cloud-only
+is offered. To switch sharing on:
+
+1. **Create a Firebase project** (its own — one project per app is the family's rule, so a
+   rules mistake in one app can never reach another). Add a *web app* to it and copy the
+   `firebaseConfig` object into `FIREBASE_CONFIG`.
+2. **Authentication → Sign-in method:** enable **Google** and nothing else. Anonymous must stay
+   off — the rules treat any signed-in account as able to read a league by its ID.
+3. **Authentication → Settings → Authorized domains:** add `eagleadams86.github.io`.
+4. **Firestore Database:** create it (production mode), then **Rules → paste `firestore.rules`
+   from this repo → Publish.** Do this before the first sign-in.
+5. **Google Cloud Console → APIs & Services → Credentials → the OAuth 2.0 client named "Web
+   client (auto created by Google Service)":** copy its client ID into `GOOGLE_CLIENT_ID`, and
+   under **Authorized JavaScript origins** add `https://eagleadams86.github.io` and
+   `http://localhost:8024` — exact, port included, or Google refuses with `origin_mismatch`.
+6. Commit the two constants. The config is Firebase's public client config, not a secret;
+   access is enforced by the rules.
+
+Then prove it with two Google accounts: one shares a league, the other joins with the ID and
+sees the table; the second enters the Admin Key and can score; the first makes the second the
+owner; a viewer's attempt to score is refused on the sync button with the rules' own message.
+
 ## What is coming
 
-- **Sharing a league.** Sign in to Google; a League ID lets anyone signed in follow the league
-  and an Admin Key lets them run it. Owners can make co-admins, hand ownership on, rotate the
-  key, or delete the league. Invites by text, email or QR code.
+- **Invites.** A join link you can text or email, and a QR code drawn in the app.
 - **A live x01 scorer.** Dart by dart, with bust detection and checkout hints, feeding the
   averages, 180s and high checkouts automatically.
 - **Other games.** Cornhole, shuffleboard, bowling and golf — one entry each in the game registry;

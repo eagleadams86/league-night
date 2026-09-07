@@ -40,11 +40,20 @@
      disappears. worker-src would otherwise fall through worker-src → child-src →
      script-src and inherit whatever hosts script-src ever gains.
 
+     THE ONLY EXTERNAL ORIGINS ARE GOOGLE'S, for the optional sign-in and the
+     shared league: the Firebase SDK from www.gstatic.com, the sign-in client
+     and its popup from accounts.google.com (script, connect AND frame, all
+     three), and the four Google APIs the SDK talks to. Exactly Golf
+     Handicap's list; tests.html pins it. firebaseapp.com and apis.google.com
+     are deliberately absent — sign-in never goes near Firebase's hosted
+     popup, and initializeAuth keeps the gapi iframe out. A new endpoint here
+     is a decision, and the first question is whether it is needed at all.
+
      'unsafe-inline' is unavoidable: single-file apps, no build step, no hashes.
      form-action is 'self' rather than 'none' because dialogs submit with
      method="dialog", which some browsers have checked against form-action.
      frame-ancestors is ignored in a meta tag; it needs a real header. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://accounts.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://accounts.google.com; manifest-src 'self'; worker-src 'self'; frame-src https://accounts.google.com; base-uri 'none'; form-action 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <!-- NEVER maximum-scale=1 or user-scalable=no. They stop iOS zooming on a
      focused field by taking pinch-zoom from everyone, which is an accessibility
@@ -1163,6 +1172,15 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
      rebuilds under a box being typed in. Wider than the family's 560px
      default for the two that hold a grid. */
   #matchDialog, #bracketDialog, #scheduleDialog, #playerDialog { max-width: 700px; }
+
+  /* ── What only exists once the cloud does ────────────────────────────────
+     The sync module stamps data-cloud on <html> when it has a config to
+     work with; until then Join, Share and the Members card are not offered,
+     rather than offered and refused. */
+  html:not([data-cloud]) .cloud-only { display: none !important; }
+  .prow.static { cursor: default; }
+  .prow.static:hover { background: none; }
+  #keyForm .row > input.code { flex: 1 1 16ch; }
 </style>
 </head>
 <body>
@@ -1190,6 +1208,11 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
        is already the whole label. EVERYTHING IS WRITTEN AT ITS FINAL SIZE. -->
   <div class="headbar">
     <h1 class="brand"><img class="mark" src="favicon.ico?v=2" width="22" height="22" alt="">League Night <span>&middot; standings, fixtures and brackets</span></h1>
+    <!-- Far left, because its label changes width. Hidden until the sync
+         module finds a Firebase config; its label is rewritten with
+         textContent (an account name reaches it), so the accessible name is
+         restated in every branch rather than carried by an aria-hidden glyph. -->
+    <button class="no-print" id="syncBtn" aria-label="Sign In to Share" hidden>☁️ Sign In to Share</button>
     <button class="no-print" id="findBtn" title="Search everything (⌘K / Ctrl+K)"><span aria-hidden="true">⌕</span> Find</button>
     <!-- The record picker: which league is on screen. A device can hold
          several. -->
@@ -1251,11 +1274,15 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
         this browser only.</p>
       <p class="actions">
         <button type="button" class="primary" id="firstCreate">Create a League</button>
+        <button type="button" id="firstJoin" class="cloud-only">Join a League</button>
         <button type="button" id="firstDemo">Try the Demo</button>
         <button type="button" id="firstRestore">Restore a Backup</button></p>
       <p><strong>Create a League</strong> asks for a name and whether it is played as singles or
         in teams, and opens on the Players tab — add the people, start a season, and the
         fixtures generate themselves.</p>
+      <p class="cloud-only"><strong>Join a League</strong> asks for the League ID someone sent you — and the
+        Admin Key, if they want you running it — and signs you in to Google, because a shared league
+        is tied to real accounts.</p>
       <p><strong>Try the Demo</strong> loads two invented leagues — a singles league with a
         season under way, handicaps, a finished knockout and a double-elimination cup in
         progress, and a doubles league with team matches — so every tab has something on it.</p>
@@ -1373,11 +1400,49 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
     <div class="card">
       <h2>Invite
         <button class="tile-help" type="button" data-help="invite" aria-label="How sharing a league works">i</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn-small no-print" id="shareLeagueBtn" hidden>↑ Share This League</button>
       </h2>
       <div class="field"><label for="leagueIdBox">League ID</label>
         <span class="row"><input type="text" id="leagueIdBox" readonly class="code" aria-describedby="inviteNote">
           <button type="button" class="btn-small no-print" id="copyIdBtn">Copy</button></span></div>
+      <!-- ── The Admin Key, carried by the password manager ───────────────
+           A real <form> whose username is the League ID and whose password
+           is the Admin Key, so a password manager files the pair as one
+           login and carries it to the next phone end to end encrypted — the
+           app's sync, backups and share links never see it (Money Map's
+           Twelve Data key pattern). The username field is readonly, out of
+           the tab order and hidden from assistive technology: it is
+           bookkeeping for the browser, and it lives in a clipped WRAPPER
+           because .row > input would out-specify .sr-only on the input.
+           autocomplete="current-password", never "new-password", or Safari
+           offers to invent a key instead of filling the one you were given. -->
+      <form id="keyForm" hidden autocomplete="on">
+        <div class="field"><label for="ln_adminKey">Admin Key</label>
+          <span class="row">
+            <span class="sr-only"><input type="text" id="keyAccount" autocomplete="username" readonly tabindex="-1" aria-hidden="true"></span>
+            <input type="password" id="ln_adminKey" class="code" name="admin-key" autocomplete="current-password"
+                   spellcheck="false" autocapitalize="off" autocorrect="off" maxlength="40" aria-describedby="inviteNote">
+            <button type="button" class="btn-small" id="keyShowBtn" aria-label="Show Admin Key">Show</button>
+          </span></div>
+        <div class="row no-print" id="keyOwnerRow" hidden>
+          <button type="button" class="btn-small" id="keyCopyBtn">Copy Key</button>
+          <button type="button" class="btn-small" id="keyRotateBtn">Rotate…</button>
+        </div>
+        <div class="row no-print" id="keyClaimRow" hidden>
+          <button type="submit" class="btn-small primary" id="keyClaimBtn">Become an Admin</button>
+        </div>
+        <p class="hint" id="keyAdminNote" hidden>You have used this key: your account runs the league.</p>
+      </form>
       <p class="hint" id="inviteNote"></p>
+    </div>
+
+    <div class="card cloud-only" id="membersCard" hidden>
+      <h2>Members</h2>
+      <p class="lede">Everyone who has joined with the League ID. The owner decides who may run the league.</p>
+      <div id="membersWrap"></div>
+      <div class="field" id="meLinkWrap" hidden style="margin-top:var(--sp-5)"><label for="meLink">That’s me on the roster</label>
+        <select id="meLink"></select></div>
     </div>
 
     <div class="card">
@@ -1387,6 +1452,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
       <p class="hint" id="sizeMeter"></p>
       <div class="row no-print">
         <button type="button" id="newLeagueBtn">＋ Create Another League</button>
+        <button type="button" id="joinBtn" class="cloud-only" hidden>Join a League…</button>
         <button type="button" id="forgetBtn">Forget This League</button>
         <button type="button" class="danger" id="deleteLeagueBtn">Delete This League…</button>
       </div>
@@ -1446,6 +1512,27 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
     <button type="button" id="leagueCancel">Cancel</button>
     <button type="button" class="primary" id="leagueSave">Create</button>
   </div>
+</dialog>
+
+<!-- Joining: the same username/password pairing as the Invite card, so a
+     manager that saved a league's keys offers them back here. -->
+<dialog id="joinDialog" aria-labelledby="joinTitle">
+  <h2 id="joinTitle">Join a League</h2>
+  <p>Enter the League ID you were sent. Add the Admin Key if you are to run the league; leave it blank
+    to follow. You will be asked to sign in to Google.</p>
+  <form id="joinForm" autocomplete="on">
+    <div class="field"><label for="jn_id">League ID</label>
+      <input type="text" id="jn_id" class="code" name="league-id" autocomplete="username" maxlength="40"
+             spellcheck="false" autocapitalize="characters" autocorrect="off" placeholder="LN-XXXXXXXX"></div>
+    <div class="field"><label for="jn_key">Admin Key <span class="hint">(optional)</span></label>
+      <input type="password" id="jn_key" class="code" name="admin-key" autocomplete="current-password" maxlength="40"
+             spellcheck="false" autocapitalize="off" autocorrect="off"></div>
+    <p class="warn-line" id="joinWarn" role="status"></p>
+    <div class="row-actions">
+      <button type="button" id="joinCancel">Cancel</button>
+      <button type="submit" class="primary" id="joinSave">Join</button>
+    </div>
+  </form>
 </dialog>
 
 <dialog id="addDialog" aria-labelledby="ad_title">
@@ -2689,6 +2776,10 @@ function normalizeDevice(raw) {
       game: GAMES[l.game] ? l.game : 'darts',
       role: ['owner', 'admin', 'viewer'].indexOf(l.role) === -1 ? 'viewer' : l.role,
       cloud: l.cloud === true,
+      /* The cloud revision this device last adopted, and whether it holds an
+         edit the cloud has not seen. Both meaningless for a local league. */
+      rev: Number.isFinite(Number(l.rev)) && Number(l.rev) > 0 ? Math.round(Number(l.rev)) : 0,
+      dirty: l.dirty === true,
     }))
     .filter((l, i, a) => a.findIndex((x) => x.id === l.id) === i);
   const cur = String(raw.current || '');
@@ -2810,22 +2901,33 @@ function load() {
 /* THE SINGLE WRITE PATH, and the single place to stop it. The device record
    and the league on screen are written together; a league's own key is
    written only while it is the one on screen, so a switch never writes a
-   league it has just left. */
-function save() {
+   league it has just left.
+
+   save() is an EDIT: it counts, marks a shared league as holding something
+   the cloud has not seen, and asks the sync module to push. saveLocal() is
+   the same write with none of that — what the sync module calls when it is
+   the cloud that changed, or nothing would ever come clean. */
+function saveLocal() {
   if (viewOnly) return;
   device.version = SCHEMA;
   try {
-    localStorage.setItem(DEVICE_KEY, JSON.stringify(device));
     if (state) {
       state.schema = SCHEMA;
       const entry = device.leagues.find((l) => l.id === state.league.id);
       if (entry) { entry.name = state.league.name; entry.game = state.league.game; }
       localStorage.setItem(LEAGUE_KEY(state.league.id), JSON.stringify(state));
-      localStorage.setItem(DEVICE_KEY, JSON.stringify(device));
     }
+    localStorage.setItem(DEVICE_KEY, JSON.stringify(device));
   } catch (e) {
     toast('Could not save — this browser refused to store the data.');
   }
+}
+function save() {
+  if (viewOnly) return;
+  editSeq += 1;
+  const entry = state ? device.leagues.find((l) => l.id === state.league.id) : null;
+  if (entry && entry.cloud) entry.dirty = true;
+  saveLocal();
   if (typeof window.cloudPush === 'function') window.cloudPush();
 }
 
@@ -2878,8 +2980,9 @@ function openLeague(id) {
   state = st;
   noteU(maxU(state));
   seasonPick = null;
-  save();
+  saveLocal();
   render();
+  if (typeof window.cloudOpen === 'function') window.cloudOpen(id);
 }
 /* A league arriving on this device: created here, joined, restored from a
    backup, or the demo. Additive — a league already known is replaced under its
@@ -2896,16 +2999,19 @@ function adoptLeague(st, role, cloud) {
   render();
 }
 function forgetLeague(id) {
+  const entry = device.leagues.find((l) => l.id === id);
+  if (entry && entry.cloud && typeof window.cloudForget === 'function') window.cloudForget(id);
   device.leagues = device.leagues.filter((l) => l.id !== id);
-  try { localStorage.removeItem(LEAGUE_KEY(id)); } catch (e) {}
+  try { localStorage.removeItem(LEAGUE_KEY(id)); localStorage.removeItem('ln-key-' + id); } catch (e) {}
   if (device.current === id) {
     device.current = device.leagues[0] ? device.leagues[0].id : null;
     state = device.current ? loadLeague(device.current) : null;
     if (state) noteU(maxU(state));
   }
   seasonPick = null;
-  save();
+  saveLocal();
   render();
+  if (typeof window.cloudOpen === 'function') window.cloudOpen(device.current);
 }
 
 /* ═══════════════════════════ Copy and CSV ═══════════════════════════════════
@@ -3661,18 +3767,16 @@ function renderLeagueTab() {
       + (sn.status === 'done' ? ' <span class="pill">closed</span>' : ' <span class="pill ok">active</span>') + '</span>'
       + '<span class="pstat">from ' + esc(fmtDate(sn.startsOn)) + ' · ' + (n ? played + ' of ' + plural(n, 'match', 'matches') + ' played' : 'no fixtures yet') + '</span></button>';
   }).join('') + '</div>' : '<p class="empty">No seasons yet' + (canEdit() ? ' — start one above.' : '.') + '</p>';
-  /* Invite */
-  $('leagueIdBox').value = state.league.id;
-  const entry = myEntry();
-  $('inviteNote').textContent = entry && entry.cloud
-    ? 'Anyone signed in to Google who enters this ID can follow the league.'
-    : 'This league lives on this device for now. Keep the ID: it is how others will find the league once it is shared.';
+  /* Invite and Members */
+  renderInvite();
   /* This device */
   const bytes = JSON.stringify(state).length;
   $('sizeMeter').textContent = 'League data: ' + (bytes < 10000 ? (bytes / 1024).toFixed(1) : Math.round(bytes / 1024)) + ' KB of the 1,000 KB a league may hold.';
   $('sizeMeter').className = 'hint' + (bytes > 600000 ? ' warn-text' : '');
   $('deleteLeagueBtn').hidden = !isOwner();
   $('forgetBtn').hidden = viewOnly;
+  $('forgetBtn').textContent = (myEntry() && myEntry().cloud && myRole() !== 'owner') ? 'Leave This League' : 'Forget This League';
+  $('joinBtn').hidden = !(window.lnCloud && window.lnCloud.on);
 }
 
 /* ═══════════════════════════════ Editors ═════════════════════════════════
@@ -4535,7 +4639,9 @@ $('clearConfirm').addEventListener('click', () => {
   if (!state) return;
   const name = state.league.name, id = state.league.id;
   clearDialog.close();
-  if (typeof window.cloudDelete === 'function') window.cloudDelete(id);
+  const entry = myEntry();
+  if (entry && entry.cloud && typeof window.cloudDelete === 'function') window.cloudDelete(id);
+  device.leagues.forEach((l) => { if (l.id === id) l.cloud = false; });   /* so forget does not also "leave" */
   forgetLeague(id);
   toast(name + ' deleted');
 });
@@ -4955,6 +5061,300 @@ function loadDemo() {
   toast('Two demo leagues loaded — switch between them in the header');
 }
 
+
+/* ═══════════════════════════ The cloud, from this side ═════════════════════
+   The sync module at the foot of the page is a <script type="module"> and
+   cannot see this script's consts, so everything it needs is handed over on
+   `window` here, and everything it learns comes back the same way. Nothing
+   below talks to Firebase; it keeps the device record honest and draws the
+   Members and Invite cards. */
+
+/* ── The Admin Key on this device ──────────────────────────────────────────
+   Kept in localStorage under its own key, NEVER in `state`: state syncs to
+   every member and rides in every backup and share link, and a credential
+   belongs in none of them. The password box in the Invite card is what lets
+   the browser's password manager carry it to another phone, end to end
+   encrypted, on a path the app never touches — Money Map's Twelve Data key
+   pattern. The app never learns whether the manager saved it, so this copy is
+   the only one it knows about. */
+const KEY_KEY = (id) => 'ln-key-' + id;
+function adminKeyFor(id) { try { return localStorage.getItem(KEY_KEY(id)) || ''; } catch (e) { return ''; } }
+function setAdminKey(id, key) {
+  try { if (key) localStorage.setItem(KEY_KEY(id), key); else localStorage.removeItem(KEY_KEY(id)); } catch (e) {}
+}
+
+let cloudUser = null;        /* { uid, name, email } while signed in */
+let members = [];            /* the members of the league on screen, from the cloud */
+let membersFor = null;       /* which league they belong to */
+let meDoc = null;            /* this account's member document */
+let editSeq = 0;             /* counts local edits, so a push knows if it is stale */
+
+function isCloudLeague() { const e = myEntry(); return !!(e && e.cloud); }
+
+window.lnGet = () => state;
+window.lnLeagueId = () => (state ? state.league.id : null);
+window.lnEntry = () => myEntry();
+window.lnDevice = () => device;
+window.lnSchema = () => SCHEMA;
+window.lnIsLeagueId = (id) => LEAGUE_ID_RE.test(String(id || ''));
+window.lnNewAdminKey = newAdminKey;
+window.lnKey = adminKeyFor;
+window.lnSetKey = setAdminKey;
+window.lnEditSeq = () => editSeq;
+window.lnMerge = mergeLeague;
+window.lnHalt = haltForNewerData;
+window.lnRender = render;
+/* The cloud copy is stored VERBATIM before a halt: it is the newest copy there
+   is, and the fresh build reads localStorage next load. */
+window.lnStoreVerbatim = (id, st) => { try { localStorage.setItem(LEAGUE_KEY(id), JSON.stringify(st)); } catch (e) {} };
+
+/* A league arriving from the cloud — joined, shared from here, or found on the
+   account at sign-in. `state` may be absent when the league is already on this
+   device (sharing it); then only the record changes. */
+window.lnRegisterCloud = (o) => {
+  let entry = device.leagues.find((l) => l.id === o.id);
+  if (o.state) {
+    const st = normalizeLeague(o.state);
+    st.league.id = o.id;
+    noteU(maxU(st));
+    try { localStorage.setItem(LEAGUE_KEY(o.id), JSON.stringify(st)); } catch (e) {}
+    if (!entry) { entry = { id: o.id, name: st.league.name, game: st.league.game, role: o.role || 'viewer', cloud: true, rev: 0, dirty: false }; device.leagues.push(entry); }
+    entry.name = st.league.name; entry.game = st.league.game;
+    if (o.current || (state && state.league.id === o.id)) { state = st; device.current = o.id; seasonPick = null; }
+  } else if (!entry) {
+    return;
+  }
+  entry.cloud = true;
+  if (o.role) entry.role = o.role;
+  if (o.rev != null) entry.rev = Number(o.rev) || 0;
+  entry.dirty = false;
+  saveLocal();
+  render();
+};
+window.lnSetRole = (id, role) => {
+  const entry = device.leagues.find((l) => l.id === id);
+  if (!entry) return;
+  entry.role = role;
+  saveLocal();
+  render();
+};
+/* A newer copy arrived from the cloud. Adopted whole when this device has
+   nothing unsent; merged into the local copy when it has, and the merge is
+   pushed straight back so the two converge. */
+window.lnRemote = (id, remoteState, rev, iAmOwner) => {
+  const entry = device.leagues.find((l) => l.id === id);
+  if (!entry) return;
+  if (iAmOwner && entry.role !== 'owner') entry.role = 'owner';
+  else if (!iAmOwner && entry.role === 'owner') entry.role = 'admin';
+  if (rev <= (entry.rev || 0)) { saveLocal(); render(); return; }
+  const incoming = normalizeLeague(remoteState);
+  incoming.league.id = id;
+  const onScreen = state && state.league.id === id;
+  if (entry.dirty && onScreen) {
+    state = mergeLeague(state, incoming);
+    state.league.id = id;
+    entry.rev = rev;
+    noteU(maxU(state));
+    saveLocal();
+    render();
+    if (typeof window.cloudPush === 'function') window.cloudPush();
+    return;
+  }
+  entry.rev = rev;
+  entry.name = incoming.league.name;
+  noteU(maxU(incoming));
+  if (onScreen) { state = incoming; saveLocal(); render(); toast('Updated from the league ☁️'); }
+  else { try { localStorage.setItem(LEAGUE_KEY(id), JSON.stringify(incoming)); } catch (e) {} saveLocal(); render(); }
+};
+/* The result of this device's own push: the merged copy the transaction
+   committed. Clean only if nothing was edited while it was in flight. */
+window.lnAdopt = (id, merged, rev, seq) => {
+  const entry = device.leagues.find((l) => l.id === id);
+  if (!entry) return;
+  entry.rev = rev;
+  if (state && state.league.id === id) {
+    const st = normalizeLeague(merged);
+    st.league.id = id;
+    if (seq === editSeq) { state = st; entry.dirty = false; }
+    else { state = mergeLeague(state, st); state.league.id = id; }
+    noteU(maxU(state));
+  }
+  saveLocal();
+  render();
+  if (entry.dirty && typeof window.cloudPush === 'function') window.cloudPush();
+};
+window.lnCloudGone = (id) => {
+  const entry = device.leagues.find((l) => l.id === id);
+  if (!entry || !entry.cloud) return;
+  entry.cloud = false; entry.role = 'owner'; entry.dirty = false;
+  saveLocal(); render();
+  toast('This league was deleted by its owner — your copy stays on this device');
+};
+window.lnCloudUser = (u) => { cloudUser = u; render(); };
+window.lnMe = (doc) => { meDoc = doc; renderMembers(); };
+window.lnMembers = (id, list) => { membersFor = id; members = list; renderMembers(); };
+
+/* ── The Invite card and the Members card ──────────────────────────────── */
+function renderInvite() {
+  const on = !!(window.lnCloud && window.lnCloud.on);
+  const entry = myEntry();
+  const cloud = !!(entry && entry.cloud);
+  const role = myRole();
+  const demo = isDemoId(state.league.id);
+  $('leagueIdBox').value = state.league.id;
+  $('shareLeagueBtn').hidden = !on || cloud || !isOwner() || demo;
+  $('keyForm').hidden = !on || !cloud;
+  $('keyAccount').value = state.league.id;
+  const key = adminKeyFor(state.league.id);
+  const kb = $('ln_adminKey');
+  if (document.activeElement !== kb) kb.value = key;
+  const owner = role === 'owner', admin = role === 'admin';
+  $('keyOwnerRow').hidden = !owner;
+  $('keyClaimRow').hidden = owner || admin;
+  $('keyAdminNote').hidden = !admin;
+  kb.readOnly = owner || admin;
+  $('inviteNote').textContent = demo ? 'The demo lives on this device and cannot be shared.'
+    : !on ? 'This league lives on this device. Sharing arrives once the cloud side is set up.'
+    : !cloud ? 'This league lives on this device. Share it and anyone signed in to Google who enters the ID can follow it.'
+    : owner ? 'Anyone signed in with the League ID can follow the league. Give someone the Admin Key too and they can run it with you.'
+    : admin ? 'You are an admin: you can score matches, run seasons and tournaments. Only the owner changes who is a member.'
+    : 'You are following this league. Its owner can give you the Admin Key if you should be running it too.';
+  $('membersCard').hidden = !on || !cloud;
+  renderMembers();
+}
+function renderMembers() {
+  if (!state) return;
+  const wrap = $('membersWrap');
+  if (!wrap || membersFor !== state.league.id) { if (wrap) wrap.innerHTML = '<p class="hint">Loading members…</p>'; return; }
+  const owner = isOwner();
+  const me = cloudUser ? cloudUser.uid : null;
+  const sorted = members.slice().sort((a, b) => (a.role === b.role ? 0 : a.role === 'admin' ? -1 : 1) || a.name.localeCompare(b.name));
+  wrap.innerHTML = sorted.length ? '<div class="plist">' + sorted.map((m) => {
+    const isMe = m.uid === me;
+    const player = m.playerId ? playerById(m.playerId) : null;
+    const roleWord = m.uid === ownerUid() ? 'owner' : m.role;
+    return '<div class="prow static"><span class="pname">' + esc(m.name || 'A member') + (isMe ? ' <span class="pill">you</span>' : '')
+      + ' <span class="pill' + (roleWord === 'owner' ? ' ok' : '') + '">' + esc(roleWord) + '</span>'
+      + (player ? ' <span class="hint">plays as ' + esc(player.name) + '</span>' : '') + '</span>'
+      + (owner && !isMe ? '<span class="row no-print" style="gap:6px">'
+          + (m.role === 'admin' ? '<button type="button" class="btn-small" data-role="viewer" data-uid="' + esc(m.uid) + '">Make viewer</button>'
+                                : '<button type="button" class="btn-small" data-role="admin" data-uid="' + esc(m.uid) + '">Make admin</button>')
+          + '<button type="button" class="btn-small" data-owner="' + esc(m.uid) + '">Make owner</button>'
+          + '<button type="button" class="icon-btn danger" data-remove="' + esc(m.uid) + '" aria-label="Remove ' + esc(m.name) + '"><span aria-hidden="true">×</span></button></span>' : '')
+      + '</div>';
+  }).join('') + '</div>' : '<p class="hint">Nobody has joined yet.</p>';
+  /* "That's me": which roster player this account is. */
+  const sel = $('meLink');
+  const mine = me ? members.find((m) => m.uid === me) : null;
+  sel.innerHTML = '<option value="">Not on the roster</option>' + state.players.slice().sort((a, b) => a.name.localeCompare(b.name))
+    .map((p) => '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>').join('');
+  sel.value = mine && mine.playerId && playerById(mine.playerId) ? mine.playerId : '';
+  $('meLinkWrap').hidden = !mine;
+}
+function ownerUid() {
+  /* The owner's uid is not in `state`; the module tells us through the role
+     the league doc gave us, so only "am I the owner" is known here. The
+     Members list marks the owner from the member list when it can. */
+  return isOwner() && cloudUser ? cloudUser.uid : null;
+}
+$('membersWrap').addEventListener('click', async (e) => {
+  if (!isOwner() || !window.lnCloud) return;
+  const role = e.target.closest('[data-role]');
+  if (role) {
+    const m = members.find((x) => x.uid === role.dataset.uid);
+    if (m && await window.lnCloud.setRole(m.uid, role.dataset.role)) toast(m.name + (role.dataset.role === 'admin' ? ' can run the league now' : ' is a viewer now'));
+    return;
+  }
+  const own = e.target.closest('[data-owner]');
+  if (own) {
+    const m = members.find((x) => x.uid === own.dataset.owner);
+    if (!m) return;
+    if (!confirm('Make ' + m.name + ' the owner of ' + state.league.name + '?\n\nThey alone will be able to change members and the Admin Key from then on. You stay an admin.')) return;
+    if (await window.lnCloud.transferOwner(m.uid)) toast(m.name + ' owns the league now');
+    return;
+  }
+  const rem = e.target.closest('[data-remove]');
+  if (rem) {
+    const m = members.find((x) => x.uid === rem.dataset.remove);
+    if (!m) return;
+    if (!confirm('Remove ' + m.name + '?\n\nThey come off the list. Anyone who still has the League ID can rejoin as a viewer — a league that must be closed to someone is a new league.')) return;
+    if (await window.lnCloud.removeMember(m.uid)) toast(m.name + ' removed');
+  }
+});
+$('meLink').addEventListener('change', async () => {
+  if (!window.lnCloud) return;
+  if (await window.lnCloud.linkPlayer($('meLink').value || null)) toast($('meLink').value ? 'Linked — that’s you on the roster' : 'Unlinked');
+});
+$('shareLeagueBtn').addEventListener('click', async () => {
+  if (!window.lnCloud || !state) return;
+  if (!confirm('Share ' + state.league.name + '?\n\nIt goes up to the cloud under your Google account. Anyone signed in who has its League ID can follow it; anyone you give the Admin Key to can run it.')) return;
+  $('shareLeagueBtn').disabled = true;
+  try { await window.lnCloud.share(); } finally { $('shareLeagueBtn').disabled = false; }
+});
+$('keyShowBtn').addEventListener('click', () => {
+  const kb = $('ln_adminKey');
+  const shown = kb.type === 'text';
+  kb.type = shown ? 'password' : 'text';
+  $('keyShowBtn').textContent = shown ? 'Show' : 'Hide';
+  $('keyShowBtn').setAttribute('aria-label', (shown ? 'Show' : 'Hide') + ' Admin Key');
+});
+$('keyCopyBtn').addEventListener('click', async () => {
+  const key = adminKeyFor(state.league.id) || (window.lnCloud && await window.lnCloud.fetchKey());
+  if (!key) { toast('The key is not on this device — Rotate makes a new one'); return; }
+  if (await copyText(key)) toast('Admin Key copied'); else toast('Could not copy');
+});
+$('keyRotateBtn').addEventListener('click', async () => {
+  if (!window.lnCloud || !isOwner()) return;
+  if (!confirm('Make a new Admin Key?\n\nThe old one stops working for anyone who has not used it yet. Admins who already joined keep their role.')) return;
+  const key = await window.lnCloud.rotateKey();
+  if (key) { renderInvite(); toast('New Admin Key — save it to your password manager'); }
+});
+$('keyClaimBtn').addEventListener('click', async (e) => {
+  e.preventDefault();
+  if (!window.lnCloud) return;
+  const key = cleanCode($('ln_adminKey').value);
+  if (!ADMIN_KEY_RE.test(key)) { toast('An Admin Key is sixteen letters and numbers'); return; }
+  $('keyClaimBtn').disabled = true;
+  try {
+    const r = await window.lnCloud.claim(key);
+    if (r === 'admin') toast('You can run this league now');
+    else if (r === 'bad-key') toast('That is not this league’s Admin Key');
+  } finally { $('keyClaimBtn').disabled = false; }
+});
+$('keyForm').addEventListener('submit', (e) => e.preventDefault());
+
+/* ── Joining ─────────────────────────────────────────────────────────────── */
+function openJoin() {
+  $('jn_id').value = '';
+  $('jn_key').value = '';
+  $('joinWarn').textContent = '';
+  openModal($('joinDialog'));
+  $('jn_id').focus();
+}
+$('joinForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!window.lnCloud) return;
+  const id = 'LN-' + cleanCode($('jn_id').value, 'LN');
+  if (!LEAGUE_ID_RE.test(id)) { $('joinWarn').textContent = 'A League ID is LN- and eight letters or numbers, like LN-7KQ4M2XR.'; $('jn_id').focus(); return; }
+  const key = cleanCode($('jn_key').value);
+  if (key && !ADMIN_KEY_RE.test(key)) { $('joinWarn').textContent = 'An Admin Key is sixteen letters and numbers — leave it blank to follow the league.'; $('jn_key').focus(); return; }
+  $('joinSave').disabled = true;
+  $('joinWarn').textContent = 'Joining…';
+  try {
+    const r = await window.lnCloud.join(id, key || null);
+    if (r === 'no-signin') { $('joinWarn').textContent = 'Sign in to Google to join a league.'; return; }
+    if (r === 'not-found') { $('joinWarn').textContent = 'No league has that ID. Check it with whoever sent it.'; return; }
+    if (r === 'error') { $('joinWarn').textContent = 'Could not join — see the note at the foot of the page.'; return; }
+    $('joinDialog').close();
+    setTab('standings');
+    toast(r === 'admin' ? 'Joined as an admin' : r === 'bad-key' ? 'Joined as a viewer — that key was not the league’s' : 'Joined — you are following this league');
+  } finally { $('joinSave').disabled = false; }
+});
+$('joinCancel').addEventListener('click', () => $('joinDialog').close());
+$('firstJoin').addEventListener('click', openJoin);
+$('joinBtn').addEventListener('click', openJoin);
+closeOnBackdropClick($('joinDialog'));
+
 /* ═══════════════════════════════ Boot ═════════════════════════════════════ */
 async function boot() {
   if (shareToken) {
@@ -4979,7 +5379,11 @@ async function boot() {
   render();
 }
 
-boot();
+/* A boot that throws is recorded where the suite can read it. boot() is
+   async, so a throw inside it is a rejected promise that the page survives
+   with nothing drawn — and a suite that plants its own data afterwards would
+   never know. */
+boot().catch((e) => { window.__lnBootError = String(e && e.stack || e); console.error(e); });
 
 /* The test harness reaches the `const` values through this; function
    declarations it finds on window by itself. `__plant` replaces the league
@@ -5021,6 +5425,505 @@ window.__lnTestHooks = {
   csvMatches: csvMatches, csvCell: csvCell, toCsv: toCsv, toTsv: toTsv, FORMULA_LEAD: FORMULA_LEAD, PLAIN_NUMBER: PLAIN_NUMBER,
   tableToRows: tableToRows, cellText: cellText, raisesKeyboard: raisesKeyboard, esc: esc, todayISO: todayISO,
   searchApp: searchApp, SEARCH_CAP: SEARCH_CAP, slug: slug, tableFor: tableFor, trendFor: trendFor,
+};
+</script>
+
+<script type="module">
+/* ───────────────────────── Sharing a league across devices ──────────────────
+   Google sign-in + ONE FIRESTORE DOCUMENT PER LEAGUE that many accounts can
+   read and a few can write. This is the first app in the family whose cloud
+   documents are shared; every sibling keeps one private document per account,
+   and their sync module (Golf Handicap's, which this is ported from) decides
+   "which copy wins" once at sign-in. Here nothing ever asks that: every write
+   is a TRANSACTION that merges the two copies entity by entity
+   (mergeLeague, pure, in the classic script) and raises `rev` by one, and the
+   rules refuse any update whose rev is not exactly one ahead.
+
+   The config below is Firebase's PUBLIC client config, not a secret — access
+   is enforced by firestore.rules, not by hiding this key. While it is null the
+   app is fully local: the button hides, Share and Join hide, and nothing is
+   ever sent anywhere. localStorage is the source of truth either way.
+
+   Access, in one paragraph: knowing a League ID is the READ capability (any
+   signed-in account may `get` a league by id; nobody may list them);
+   presenting the Admin Key is the WRITE capability (it lives in a document
+   nobody can read, and an account claims admin by writing the key it was given
+   into its own write-only mailbox); the OWNER is a field on the league only the
+   owner can change. The rules file argues every clause.
+──────────────────────────────────────────────────────────────────────────── */
+
+/* Set this to the project's web client config once the console side exists —
+   README, "Setting up the cloud". Until then: null, and the app is local. */
+const FIREBASE_CONFIG = null;
+
+/* ⚠️ NOT part of FIREBASE_CONFIG and not derivable from it: Google Cloud
+   Console → APIs & Services → Credentials → "Web client (auto created by
+   Google Service)", whose Authorized JavaScript origins must list
+   https://eagleadams86.github.io and http://localhost:8024 (exact, port
+   included) or Google refuses with origin_mismatch. Sign-in goes through
+   Google Identity Services rather than Firebase's hosted popup, because
+   corporate filters block individual firebaseapp.com hostnames — the whole
+   family switched on 2026-08-07. */
+const GOOGLE_CLIENT_ID = null;
+
+const SDK = 'https://www.gstatic.com/firebasejs/12.18.0/';
+const GIS = 'https://accounts.google.com/gsi/client';
+const btn = document.getElementById('syncBtn');
+const privacyNote = document.getElementById('privacyNote');
+
+let A, F, auth, db, user = null, tokenClient = null, syncError = null;
+let pushTimer = null, relistenTimer = null;
+let unsubs = [];            /* the listeners on the league on screen */
+let listening = null;       /* which league they are on */
+let signInWaiters = [];     /* promises resolved by the next auth report */
+
+const inTestHarness = (() => {
+  try { return !!(window.frameElement && window.frameElement.hasAttribute('data-ln-tests')); }
+  catch (e) { return false; }
+})();
+
+/* ── When Google's code is fetched ──────────────────────────────────────────
+   Not on every visit. A returning signed-in reader has to be recognised
+   without clicking anything, and only Firebase knows whether this browser
+   holds a live session — so the app records the answer itself in `ln-sync-live`
+   on every auth report. A first-time reader's browser talks to nobody until
+   they press the button. Golf Handicap's arrangement. */
+const SYNC_LIVE = 'ln-sync-live';
+function shouldBootSync() {
+  try { return localStorage.getItem(SYNC_LIVE) === '1'; } catch (e) { return false; }
+}
+let initPromise = null;
+function ensureInit() { if (!initPromise) initPromise = init(); return initPromise; }
+function armSync() { ensureInit().catch(() => { /* onClick reports it */ }); }
+
+const cloudOn = !!(FIREBASE_CONFIG && GOOGLE_CLIENT_ID && !inTestHarness && !window.lnViewOnly);
+document.documentElement.toggleAttribute('data-cloud', cloudOn);
+if (cloudOn) {
+  btn.hidden = false;
+  if (shouldBootSync()) ensureInit().catch((e) => { console.warn('Sync unavailable:', e); btn.hidden = true; });
+  else for (const ev of ['pointerenter', 'pointerdown', 'focus']) btn.addEventListener(ev, armSync, { once: true, passive: true });
+  btn.addEventListener('click', onClick);
+} else {
+  btn.hidden = true;
+}
+
+function loadGis() {
+  return new Promise((resolve, reject) => {
+    if (window.google?.accounts?.oauth2) return resolve();
+    const s = document.createElement('script');
+    s.src = GIS; s.async = true; s.defer = true;
+    s.onload = () => window.google?.accounts?.oauth2 ? resolve() : reject(new Error('Google sign-in client loaded but exposed no oauth2 API'));
+    s.onerror = () => reject(new Error('Could not load Google sign-in client'));
+    document.head.appendChild(s);
+  });
+}
+
+async function init() {
+  const [{ initializeApp }, authMod, fsMod] = await Promise.all([
+    import(SDK + 'firebase-app.js'), import(SDK + 'firebase-auth.js'), import(SDK + 'firebase-firestore.js'), loadGis(),
+  ]);
+  A = authMod; F = fsMod;
+  const app = initializeApp(FIREBASE_CONFIG);
+  /* initializeAuth rather than getAuth, to keep apis.google.com out of the
+     page — getAuth wires in a popup resolver nothing here reads. The three
+     persistences are getAuth's own, in its order. Golf Handicap's note. */
+  auth = A.initializeAuth(app, {
+    persistence: [A.indexedDBLocalPersistence, A.browserLocalPersistence, A.browserSessionPersistence],
+  });
+  db = F.getFirestore(app);
+  A.onAuthStateChanged(auth, (u) => {
+    user = u;
+    try { localStorage.setItem(SYNC_LIVE, u ? '1' : '0'); } catch (e) {}
+    clearSyncError();
+    stopListening();
+    updateUI();
+    const waiters = signInWaiters; signInWaiters = [];
+    waiters.forEach((w) => w(u));
+    if (u) onSignedIn().catch(setSyncError);
+    else { window.lnCloudUser(null); }
+  });
+  tokenClient = window.google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: 'openid email profile',
+    callback: (resp) => {
+      if (!resp || !resp.access_token) { onSignInFailed(resp); return; }
+      const cred = A.GoogleAuthProvider.credential(null, resp.access_token);
+      A.signInWithCredential(auth, cred).catch(onSignInFailed);
+    },
+    error_callback: (err) => {
+      if (err && /popup_closed|user_cancel/.test(String(err.type))) { failWaiters(); return; }
+      onSignInFailed(err);
+    },
+  });
+  btn.hidden = false;
+}
+
+function failWaiters() { const w = signInWaiters; signInWaiters = []; w.forEach((r) => r(null)); }
+function onSignInFailed(e) {
+  console.warn('sign-in error', e);
+  const s = String((e && (e.type || e.code || e.message)) || e || '');
+  if (s.includes('origin_mismatch') || s.includes('idpiframe') || s.includes('invalid_client'))
+    window.toast('Sign-in rejected — this site isn’t an authorised origin for the Google client');
+  else if (s.includes('popup_failed_to_open'))
+    window.toast('Sign-in popup was blocked — allow popups for this site and try again');
+  else window.toast('Sign-in failed — check the Firebase setup');
+  failWaiters();
+}
+
+/* Signs in if needed and resolves with the user, or null if they gave up. */
+async function requireSignIn() {
+  if (user) return user;
+  if (!cloudOn) return null;
+  try { await ensureInit(); } catch (e) { window.toast('Couldn’t reach Google — sharing is unavailable right now'); return null; }
+  if (user) return user;
+  return new Promise((resolve) => {
+    signInWaiters.push(resolve);
+    tokenClient.requestAccessToken();
+    setTimeout(() => { const i = signInWaiters.indexOf(resolve); if (i !== -1) { signInWaiters.splice(i, 1); resolve(null); } }, 120000);
+  });
+}
+
+async function onClick() {
+  if (user) {
+    if (confirm('Sign out? Your leagues stay on this device; shared ones stop updating until you sign in again.')) A.signOut(auth);
+    return;
+  }
+  await requireSignIn();
+}
+
+/* ── Errors, said plainly ─────────────────────────────────────────────────── */
+function describeSyncError(e) {
+  const code = String((e && e.code) || '');
+  if (code.indexOf('permission-denied') !== -1) return {
+    reason: 'The cloud refused this account’s write.',
+    fix: 'A viewer cannot change a league; an admin can. If you should be an admin, check firestore.rules is deployed and enter the Admin Key again.' };
+  if (code.indexOf('unauthenticated') !== -1) return { reason: 'The sign-in has expired.', fix: 'Signing out and back in usually clears it.' };
+  if (code.indexOf('unavailable') !== -1) return {
+    reason: 'There is no connection to Firebase.',
+    fix: 'Nothing is lost — your changes are saved on this phone and go up on their own once you are back online.' };
+  if (code.indexOf('resource-exhausted') !== -1) return {
+    reason: 'The free Firebase quota for today is used up.', fix: 'It resets tomorrow; everything is still saved in this browser until then.' };
+  if (code.indexOf('invalid-argument') !== -1) {
+    const detail = String((e && e.message) || '');
+    if (/maximum allowed size|exceeds|too large|longer than|bytes/i.test(detail)) return {
+      reason: 'This league has grown past what one cloud document can hold.',
+      fix: 'Back up first, then close an old season on the League tab to trim it — sync picks up again on the next change.' };
+    return { reason: 'The cloud refused this copy of the league — that’s a fault in the app, not in what you entered.',
+             fix: 'Nothing is lost: everything is still here and still saved. Reloading the page usually clears it.' };
+  }
+  if (code === 'ln/gone') return { reason: 'This league was deleted by its owner.', fix: 'Your copy stays on this device as a local league.' };
+  if (code === 'ln/newer') return { reason: 'The cloud copy was saved by a newer version of the app.', fix: 'Reload to pick it up.' };
+  return { reason: 'Something unexpected went wrong while syncing.', fix: 'The league is still saved in this browser. The browser console has the detail.' };
+}
+function setSyncError(e) {
+  const was = syncError;
+  syncError = describeSyncError(e);
+  console.warn('sync error', e);
+  updateUI();
+  if (!was) window.toast('⚠️ Not syncing — see the note at the foot of the page');
+}
+function clearSyncError() { if (syncError) { syncError = null; updateUI(); } }
+
+function updateUI() {
+  const entry = window.lnEntry();
+  const dirty = !!(entry && entry.cloud && entry.dirty);
+  if (syncError && user) {
+    btn.textContent = '⚠️ Not syncing';
+    btn.setAttribute('aria-label', 'Not syncing');
+    btn.title = syncError.reason + ' ' + syncError.fix;
+    privacyNote.textContent = '⚠️ Not syncing — ' + syncError.reason + ' ' + syncError.fix;
+  } else if (user) {
+    const who = user.displayName ? user.displayName.split(' ')[0] : user.email;
+    btn.textContent = dirty ? '☁️ ' + who + ' · saved here, will sync' : '☁️ ' + who;
+    btn.setAttribute('aria-label', 'Signed in as ' + who + (dirty ? ', changes waiting to sync' : ''));
+    btn.title = 'Signed in with Google — tap to sign out';
+    privacyNote.textContent = '☁️ Signed in as ' + user.email + ' — shared leagues sync to everyone in them and still work offline; a league you have not shared stays on this device.';
+  } else {
+    btn.textContent = '☁️ Sign In to Share';
+    btn.setAttribute('aria-label', 'Sign In to Share');
+    btn.title = 'Sign in with Google to share a league or join one';
+    privacyNote.textContent = '🔒 Private — a league is stored in this browser until you sign in and share it. No account is required to use the app.';
+  }
+  window.lnCloudUser(user ? { uid: user.uid, name: user.displayName || user.email || '', email: user.email || '' } : null);
+}
+
+/* ── Paths ─────────────────────────────────────────────────────────────────── */
+const leagueRef = (id) => F.doc(db, 'leagues', id);
+const memberRef = (id, uid) => F.doc(db, 'leagues', id, 'members', uid);
+const claimRef = (id) => F.doc(db, 'leagues', id, 'claims', user.uid);
+const keyRef = (id) => F.doc(db, 'leagues', id, 'private', 'admin');
+const userRef = () => F.doc(db, 'users', user.uid);
+const forCloud = (s) => JSON.parse(JSON.stringify(s));
+const myName = () => String(user.displayName || user.email || 'A member').slice(0, 40);
+
+/* ── After sign-in: the account's leagues follow it to this device ─────────── */
+async function onSignedIn() {
+  const snap = await F.getDoc(userRef());
+  const mine = (snap.exists() && Array.isArray(snap.data().leagues)) ? snap.data().leagues : [];
+  const known = new Set(window.lnDevice().leagues.map((l) => l.id));
+  for (const l of mine) {
+    if (!l || !window.lnIsLeagueId(l.id) || known.has(l.id)) continue;
+    try {
+      const doc = await F.getDoc(leagueRef(l.id));
+      if (!doc.exists()) continue;
+      await adoptCloudLeague(l.id, doc.data(), false);
+    } catch (e) { console.warn('could not fetch', l.id, e); }
+  }
+  /* And this device's shared leagues onto the account. */
+  const deviceCloud = window.lnDevice().leagues.filter((l) => l.cloud).map((l) => ({ id: l.id, name: l.name, game: l.game }));
+  const merged = mine.filter((l) => l && !deviceCloud.some((d) => d.id === l.id)).concat(deviceCloud);
+  await F.setDoc(userRef(), { leagues: merged, updatedAt: Date.now() });
+  const cur = window.lnEntry();
+  if (cur && cur.cloud) { listenTo(cur.id); if (cur.dirty) window.cloudPush(); }
+  window.lnRender();
+}
+async function noteUserLeague(id, name, game, remove) {
+  const snap = await F.getDoc(userRef());
+  let list = (snap.exists() && Array.isArray(snap.data().leagues)) ? snap.data().leagues.filter((l) => l && l.id !== id) : [];
+  if (!remove) list.push({ id: id, name: name, game: game });
+  await F.setDoc(userRef(), { leagues: list, updatedAt: Date.now() });
+}
+
+/* Who this account is in a league: the owner if the league says so, else what
+   its member document says, else a viewer. */
+async function roleIn(id, data) {
+  if (data && data.owner === user.uid) return 'owner';
+  const m = await F.getDoc(memberRef(id, user.uid));
+  return m.exists() && m.data().role === 'admin' ? 'admin' : 'viewer';
+}
+async function adoptCloudLeague(id, data, makeCurrent) {
+  if (Number(data.schema || 1) > window.lnSchema()) { window.lnStoreVerbatim(id, data.state); window.lnHalt(data.schema); return; }
+  const role = await roleIn(id, data);
+  window.lnRegisterCloud({ id: id, name: data.name, game: data.game, role: role, rev: Number(data.rev) || 0, state: data.state, current: !!makeCurrent });
+}
+
+/* ── Share: this device's league goes up, and this account owns it ───────── */
+async function shareLeague() {
+  if (!(await requireSignIn())) return false;
+  const st = window.lnGet();
+  if (!st || !window.lnIsLeagueId(st.league.id)) { window.toast('The demo cannot be shared — create a league of your own.'); return false; }
+  const id = st.league.id;
+  const key = window.lnKey(id) || window.lnNewAdminKey();
+  try {
+    await F.setDoc(leagueRef(id), { state: forCloud(st), rev: 0, owner: user.uid, game: st.league.game,
+                                    name: st.league.name, schema: window.lnSchema(), updatedAt: Date.now() });
+    await F.setDoc(keyRef(id), { key: key });
+    await F.setDoc(memberRef(id, user.uid), { role: 'admin', name: myName(), joinedAt: Date.now() });
+    await noteUserLeague(id, st.league.name, st.league.game, false);
+  } catch (e) { setSyncError(e); return false; }
+  window.lnSetKey(id, key);
+  window.lnRegisterCloud({ id: id, role: 'owner', rev: 0, current: true });
+  listenTo(id);
+  clearSyncError();
+  window.toast('Shared — anyone signed in with the League ID can follow it');
+  return true;
+}
+
+/* ── Join: the League ID opens a league, the Admin Key runs it ───────────── */
+async function joinLeague(id, key) {
+  if (!(await requireSignIn())) return 'no-signin';
+  let snap;
+  try { snap = await F.getDoc(leagueRef(id)); }
+  catch (e) { setSyncError(e); return 'error'; }
+  if (!snap.exists()) return 'not-found';
+  const data = snap.data();
+  try {
+    const m = await F.getDoc(memberRef(id, user.uid));
+    if (!m.exists() && data.owner !== user.uid) await F.setDoc(memberRef(id, user.uid), { role: 'viewer', name: myName(), joinedAt: Date.now() });
+    await adoptCloudLeague(id, data, true);
+    await noteUserLeague(id, data.name, data.game, false);
+  } catch (e) { setSyncError(e); return 'error'; }
+  let claimed = 'viewer';
+  if (key) claimed = await claimAdmin(key, id);
+  listenTo(id);
+  window.lnRender();
+  return claimed === 'admin' ? 'admin' : claimed === 'bad-key' ? 'bad-key' : 'joined';
+}
+/* The claim: the key goes into this account's write-only mailbox, the member
+   document asks for the admin role, and the rules compare the two. The
+   mailbox is emptied afterwards. */
+async function claimAdmin(key, id) {
+  if (!(await requireSignIn())) return 'no-signin';
+  id = id || window.lnLeagueId();
+  try {
+    await F.setDoc(claimRef(id), { key: key, at: Date.now() });
+    const m = await F.getDoc(memberRef(id, user.uid));
+    if (m.exists()) await F.updateDoc(memberRef(id, user.uid), { role: 'admin' });
+    else await F.setDoc(memberRef(id, user.uid), { role: 'admin', name: myName(), joinedAt: Date.now() });
+  } catch (e) {
+    try { await F.deleteDoc(claimRef(id)); } catch (e2) {}
+    if (String(e && e.code).indexOf('permission-denied') !== -1) return 'bad-key';
+    setSyncError(e); return 'error';
+  }
+  try { await F.deleteDoc(claimRef(id)); } catch (e) {}
+  window.lnSetKey(id, key);
+  const entry = window.lnDevice().leagues.find((l) => l.id === id);
+  if (entry && entry.role !== 'owner') window.lnSetRole(id, 'admin');
+  window.lnRender();
+  return 'admin';
+}
+
+/* ── The owner's controls ─────────────────────────────────────────────────── */
+async function setRole(uid, role) {
+  try { await F.updateDoc(memberRef(window.lnLeagueId(), uid), { role: role }); return true; }
+  catch (e) { setSyncError(e); return false; }
+}
+async function removeMember(uid) {
+  try { await F.deleteDoc(memberRef(window.lnLeagueId(), uid)); return true; }
+  catch (e) { setSyncError(e); return false; }
+}
+async function transferOwner(uid) {
+  const id = window.lnLeagueId();
+  try {
+    await F.runTransaction(db, async (tx) => {
+      const snap = await tx.get(leagueRef(id));
+      if (!snap.exists()) throw Object.assign(new Error('gone'), { code: 'ln/gone' });
+      tx.update(leagueRef(id), { owner: uid, rev: snap.data().rev + 1, updatedAt: Date.now() });
+    });
+    window.lnSetRole(id, 'admin');
+    return true;
+  } catch (e) { setSyncError(e); return false; }
+}
+async function rotateKey() {
+  const id = window.lnLeagueId();
+  const key = window.lnNewAdminKey();
+  try { await F.setDoc(keyRef(id), { key: key }); }
+  catch (e) { setSyncError(e); return null; }
+  window.lnSetKey(id, key);
+  return key;
+}
+/* The owner may read the key back — a new phone has no other way to show it. */
+async function fetchKey() {
+  const id = window.lnLeagueId();
+  try { const s = await F.getDoc(keyRef(id)); if (s.exists()) { window.lnSetKey(id, s.data().key); return s.data().key; } }
+  catch (e) { /* not the owner, or offline */ }
+  return null;
+}
+async function linkPlayer(playerId) {
+  const id = window.lnLeagueId();
+  try { await F.updateDoc(memberRef(id, user.uid), playerId ? { playerId: playerId } : { playerId: F.deleteField() }); return true; }
+  catch (e) { setSyncError(e); return false; }
+}
+/* Leaving: this account's member document goes, and the device forgets. */
+async function leaveLeague(id) {
+  try { await F.deleteDoc(memberRef(id, user.uid)); await noteUserLeague(id, '', '', true); } catch (e) { /* best effort */ }
+}
+/* Deleting, as the owner: everything under the league and the league itself,
+   in ONE batch — the rules read the pre-batch state, so the order inside does
+   not matter and it is atomic. Deleting the league document on its own would
+   leave every member document undeletable forever. */
+async function deleteLeague(id) {
+  if (!user) return false;
+  try {
+    const members = await F.getDocs(F.collection(db, 'leagues', id, 'members'));
+    const batch = F.writeBatch(db);
+    members.forEach((d) => batch.delete(d.ref));
+    batch.delete(keyRef(id));
+    batch.delete(claimRef(id));
+    batch.delete(leagueRef(id));
+    await batch.commit();
+    await noteUserLeague(id, '', '', true);
+    return true;
+  } catch (e) { setSyncError(e); return false; }
+}
+
+/* ── Listening to the league on screen ─────────────────────────────────────── */
+function stopListening() { unsubs.forEach((u) => u()); unsubs = []; listening = null; clearTimeout(relistenTimer); relistenTimer = null; }
+const RELISTEN_MS = 60000;
+function onListenError(e) {
+  setSyncError(e);
+  stopListening();
+  relistenTimer = setTimeout(() => { relistenTimer = null; const cur = window.lnEntry(); if (user && cur && cur.cloud) listenTo(cur.id); }, RELISTEN_MS);
+}
+function listenTo(id) {
+  if (!user || !F || !id) return;
+  if (listening === id) return;
+  stopListening();
+  listening = id;
+  unsubs.push(F.onSnapshot(leagueRef(id), (s) => {
+    if (s.metadata.hasPendingWrites) return;
+    if (!s.exists()) { window.lnCloudGone(id); return; }
+    const r = s.data();
+    if (!r || !r.state || typeof r.state !== 'object') return;
+    if (Number(r.schema || 1) > window.lnSchema()) { window.lnStoreVerbatim(id, r.state); window.lnHalt(r.schema); return; }
+    window.lnRemote(id, r.state, Number(r.rev) || 0, r.owner === user.uid);
+  }, onListenError));
+  unsubs.push(F.onSnapshot(memberRef(id, user.uid), (s) => {
+    const entry = window.lnDevice().leagues.find((l) => l.id === id);
+    if (!entry || entry.role === 'owner') return;
+    const role = s.exists() && s.data().role === 'admin' ? 'admin' : 'viewer';
+    if (entry.role !== role) { window.lnSetRole(id, role); window.toast(role === 'admin' ? 'You are an admin of this league now' : 'You are a viewer of this league now'); }
+    window.lnMe(s.exists() ? s.data() : null);
+  }, onListenError));
+  unsubs.push(F.onSnapshot(F.collection(db, 'leagues', id, 'members'), (q) => {
+    const list = [];
+    q.forEach((d) => { const m = d.data(); list.push({ uid: d.id, name: String(m.name || '').slice(0, 40), role: m.role === 'admin' ? 'admin' : 'viewer', playerId: m.playerId || null }); });
+    window.lnMembers(id, list);
+  }, onListenError));
+}
+/* Called when the league on screen changes. */
+window.cloudOpen = (id) => {
+  const entry = window.lnDevice().leagues.find((l) => l.id === id);
+  if (user && entry && entry.cloud) listenTo(id); else stopListening();
+};
+
+/* ── Pushing: a transaction that merges, never a blind write ──────────────── */
+async function pushNow() {
+  const entry = window.lnEntry();
+  if (!user || !entry || !entry.cloud || entry.role === 'viewer') return;
+  const id = entry.id;
+  const mine = forCloud(window.lnGet());
+  const seq = window.lnEditSeq();
+  const out = await F.runTransaction(db, async (tx) => {
+    const snap = await tx.get(leagueRef(id));
+    if (!snap.exists()) throw Object.assign(new Error('league gone'), { code: 'ln/gone' });
+    const cloud = snap.data();
+    if (Number(cloud.schema || 1) > window.lnSchema()) throw Object.assign(new Error('newer build'), { code: 'ln/newer' });
+    const merged = window.lnMerge(mine, cloud.state);
+    tx.update(leagueRef(id), { state: forCloud(merged), rev: cloud.rev + 1, updatedAt: Date.now(),
+                               name: merged.league.name, schema: window.lnSchema() });
+    return { merged: merged, rev: cloud.rev + 1 };
+  });
+  window.lnAdopt(id, out.merged, out.rev, seq);
+  clearSyncError();
+  updateUI();
+  if (listening !== id) listenTo(id);
+}
+function pushOrKeep() {
+  pushNow().catch((e) => {
+    const code = String((e && e.code) || '');
+    if (code === 'ln/gone') { window.lnCloudGone(window.lnLeagueId()); return; }
+    if (code === 'ln/newer') { window.lnHalt(9999); return; }
+    setSyncError(e);
+    /* Left dirty: the next edit, the next `online`, the next look at the
+       page, or the minute timer tries again. */
+  });
+}
+window.cloudPush = () => {
+  const entry = window.lnEntry();
+  if (!entry || !entry.cloud || !window.lnIsLeagueId(entry.id)) return;
+  if (!user) return;                            /* dirty stays set; sign-in pushes */
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(() => { pushTimer = null; pushOrKeep(); }, 1200);
+  updateUI();
+};
+const flushPending = () => { if (user && pushTimer) { clearTimeout(pushTimer); pushTimer = null; pushOrKeep(); } };
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') flushPending();
+  else { const e = window.lnEntry(); if (user && e && e.cloud && e.dirty) pushOrKeep(); }
+});
+addEventListener('pagehide', flushPending);
+addEventListener('online', () => { const e = window.lnEntry(); if (user && e && e.cloud && e.dirty) pushOrKeep(); });
+setInterval(() => { const e = window.lnEntry(); if (user && e && e.cloud && e.dirty && !pushTimer) pushOrKeep(); }, RELISTEN_MS);
+
+window.cloudDelete = (id) => { if (user) deleteLeague(id); };
+window.cloudForget = (id) => { if (user) leaveLeague(id); };
+window.lnCloud = {
+  on: cloudOn,
+  signedIn: () => !!user,
+  signIn: requireSignIn,
+  share: shareLeague, join: joinLeague, claim: claimAdmin, setRole: setRole, removeMember: removeMember,
+  transferOwner: transferOwner, rotateKey: rotateKey, fetchKey: fetchKey, linkPlayer: linkPlayer,
 };
 </script>
 
