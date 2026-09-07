@@ -1360,7 +1360,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
         <button class="tile-help" type="button" data-help="handicap" aria-label="How handicaps work">i</button>
         <span class="spacer"></span>
         <span class="pill" id="playerCount"></span>
-        <button type="button" class="btn-small no-print" id="addPlayerBtn">＋ Add Player</button>
+        <button type="button" class="btn-small no-print no-edit" id="addPlayerBtn">＋ Add Player</button>
       </h2>
       <div id="playersWrap"></div>
     </div>
@@ -1368,7 +1368,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
       <h2>Teams
         <span class="spacer"></span>
         <span class="pill" id="teamCount"></span>
-        <button type="button" class="btn-small no-print" id="addTeamBtn">＋ Add Team</button>
+        <button type="button" class="btn-small no-print no-edit" id="addTeamBtn">＋ Add Team</button>
       </h2>
       <div id="teamsWrap"></div>
     </div>
@@ -1419,7 +1419,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
     <div class="card">
       <h2>Seasons
         <span class="spacer"></span>
-        <button type="button" class="btn-small no-print" id="addSeasonBtn">＋ Start a Season</button>
+        <button type="button" class="btn-small no-print no-edit" id="addSeasonBtn">＋ Start a Season</button>
       </h2>
       <div id="seasonsWrap"></div>
     </div>
@@ -3944,6 +3944,9 @@ function suggestSeasonName() {
   return name;
 }
 $('addSave').addEventListener('click', () => {
+  /* A viewer's add would land locally and be refused by the cloud — the
+     buttons are hidden for them, and this is the guard behind the buttons. */
+  if (!canEdit()) { $('addDialog').close(); toast('Only an admin can change the league'); return; }
   const name = $('ad_name').value.trim().slice(0, NAME_MAX);
   if (!name) { $('addWarn').textContent = 'Give it a name.'; $('ad_name').focus(); return; }
   if (addKind === 'player') {
@@ -4794,6 +4797,7 @@ $('importFile').addEventListener('change', () => {
     if (!raw || typeof raw !== 'object' || !raw.league) { toast('That file is not a League Night backup.'); return; }
     const incoming = normalizeLeague(raw);
     const known = device.leagues.find((l) => l.id === incoming.league.id);
+    if (known && known.cloud && known.role === 'viewer') { toast('You follow ' + known.name + ' — only an admin can restore a backup into it.'); return; }
     const what = incoming.league.name + ': ' + plural(incoming.players.length, 'player') + ', ' + plural(incoming.matches.length, 'match', 'matches');
     if (!confirm((known ? 'Replace ' + known.name + ' on this device with the backup?\n\n' : 'Add this league to this device?\n\n') + what)) return;
     adoptLeague(incoming, known ? known.role : 'owner', known ? known.cloud : false);

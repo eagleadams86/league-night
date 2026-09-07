@@ -1092,6 +1092,12 @@ function define() {
       D.querySelector('.prow[data-player="fx-alpha"]').click();
       ok(D.getElementById('sideDialog').open && !D.getElementById('playerDialog').open, 'a player opens their page, not the editor');
       D.getElementById('sideDialog').close();
+      ['addPlayerBtn', 'addTeamBtn', 'addSeasonBtn'].forEach((id) =>
+        eq(W.getComputedStyle(D.getElementById(id)).display, 'none', id + ' is hidden for a viewer — reported by Charles 2026-09-07'));
+      const n = H.__state().players.length;
+      D.getElementById('ad_name').value = 'Sneaky Viewer';
+      D.getElementById('addSave').click();
+      eq(H.__state().players.length, n, 'and the add itself is refused behind the button');
     } finally { H.__setRole('owner'); W.setTab('standings'); }
   });
   t('a player with matches cannot be deleted, only retired', () => {
