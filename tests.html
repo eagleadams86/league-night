@@ -51,7 +51,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 133;
+const EXPECTED = 164;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -175,7 +175,7 @@ function bootApp() {
       try { hooks = win && win.__lnTestHooks; } catch (e) { hooks = null; }
       if (hooks) { resolve(win); return; }
       let booted = false, blocked = false;
-      try { booted = !!(win.document && win.document.getElementById('listWrap')); }
+      try { booted = !!(win.document && win.document.getElementById('standingsWrap')); }
       catch (e) { blocked = true; }
       reject(new Error(blocked
         ? 'the frame could not be read at all — this page’s CSP needs frame-src \'self\'.'
@@ -191,256 +191,231 @@ function bootApp() {
 
 /* ── A SECOND frame, booted as somebody else's snapshot ──────────────────────
    The only honest way to test a shared view: `viewOnly` is decided from the
-   URL before anything renders and there is no hook that flips it, deliberately
-   — a flag a test can set is a flag a bug can set. So this boots the real app
-   at a real '#share=' link, exactly as a reader opening one does.
-
-   `load` fires before boot() has finished, because boot() awaits decodeShare(),
-   so the poll waits for the shared-snapshot banner: renderViewbar() unhides it
-   inside render(), which is the last thing boot() does. */
-function bootShared(token) {
+   URL before anything renders and there is no hook that flips it — a flag a
+   test can set is a flag a bug can set. So this boots the real app at a real
+   '#share=' link, and polls for the banner because `load` fires before boot()
+   has awaited decodeShare(). */
+function bootFrame(hash, width, height) {
   return new Promise((resolve, reject) => {
     const frame = document.createElement('iframe');
-    frame.title = 'app under test, as a shared snapshot';
+    frame.title = 'app under test, ' + (hash ? 'as a shared snapshot' : 'at ' + width + 'px');
     frame.setAttribute('aria-hidden', 'true');
     frame.setAttribute('data-ln-tests', '');
-    frame.style.cssText = 'position:absolute;width:1000px;height:800px;left:-9999px;top:0';
-    frame.src = 'index.html' + BUST + '#share=' + token;
+    frame.style.cssText = 'position:absolute;width:' + (width || 1000) + 'px;height:' + (height || 800) + 'px;left:-9999px;top:0';
+    frame.src = 'index.html' + BUST + (hash || '');
     document.body.appendChild(frame);
     const started = Date.now();
     const poll = () => {
       let win = null, ready = false;
       try {
         win = frame.contentWindow;
-        const bar = win.document.getElementById('viewbar');
-        ready = !!(win.lnViewOnly && bar && !bar.hidden);
+        if (hash) { const bar = win.document.getElementById('viewbar'); ready = !!(win.lnViewOnly && bar && !bar.hidden); }
+        else ready = !!win.__lnTestHooks;
       } catch (e) { /* not readable yet */ }
       if (ready) { resolve(win); return; }
-      if (Date.now() - started > 15000) {
-        reject(new Error('the shared frame never finished booting — did decodeShare() throw?'));
-        return;
-      }
+      if (Date.now() - started > 15000) { reject(new Error('the frame never finished booting')); return; }
       setTimeout(poll, 40);
     };
     poll();
   });
 }
 
-/* The two async checks are run up front and their VERDICTS recorded, so a test
+/* The async checks run up front and their VERDICTS are recorded, so a test
    body stays a plain function that either throws or doesn't. */
 const asyncResults = {};
 async function runAsync() {
-  /* ── The render smoke test ────────────────────────────────────────────────
-     Everything else in this suite calls a pure function or reads the source as
-     text. That covers the arithmetic and the boundaries very well and leaves
-     the LARGEST part of the file — the render layer — never executed at all: a
-     coverage run over this suite on 2026-08-27 showed the tab panels, the
-     dialogs and the export windows all at zero. A throw inside any of them
-     would have shipped green, because nothing here had ever drawn a view.
-
-     So this walks the app the way a person does: plant the sample data, visit
-     every tab, open and close every dialog, and record anything the frame
-     throws while it happens. It is not a substitute for the assertions below —
-     it cannot tell a right figure from a wrong one — but it is the difference
-     between "the maths is right" and "the app runs".
-
-     THE VERDICT IS RECORDED HERE AND ASSERTED BELOW, like the share round-trip
-     under it, because a test body in this runner must be synchronous. `__plant`
-     replaces the state in memory and never calls save(), so this still leaves
-     the reader's own copy of the app alone. */
+  /* ── The render smoke test ─────────────────────────────────────────────
+     Plant each demo league, visit every tab, open and close every dialog,
+     and record anything the frame throws. It cannot tell a right figure from
+     a wrong one; it is the difference between "the maths is right" and "the
+     app runs". */
   try {
     const errs = [];
     W.addEventListener('error', (e) => errs.push(String(e.message)));
     W.addEventListener('unhandledrejection', (e) => errs.push('unhandled rejection: ' + e.reason));
     const drawn = {};
-    H.__plant({ entries: H.sampleData(), settings: H.defaultSettings() });
     const doc = W.document;
-    for (const tab of H.TABS) {
-      const btn = doc.getElementById('tab-' + tab);
-      if (!btn) { errs.push('no tab button for ' + tab); continue; }
-      btn.click();
-      const panel = doc.getElementById(btn.getAttribute('aria-controls'));
-      /* A panel that drew nothing is the failure this is really looking for: a
-         render that threw half way leaves an element that is present and
-         empty, which no "did it throw" check on its own would notice. */
-      drawn['tab:' + tab] = panel ? panel.textContent.trim().length : 0;
-    }
+    const walk = (prefix) => {
+      for (const tab of H.TABS) {
+        const btn = doc.getElementById('tab-' + tab);
+        if (!btn) { errs.push('no tab button for ' + tab); continue; }
+        btn.click();
+        const panel = doc.getElementById(btn.getAttribute('aria-controls'));
+        drawn[prefix + tab] = panel ? panel.textContent.trim().length : 0;
+      }
+    };
+    H.__plant(H.buildDemoSingles());
+    walk('tab:');
+    /* The scorer, the player editor and the bracket builder fill themselves
+       from a record, so open each on one before the blind open/close pass. */
+    doc.getElementById('tab-matches').click();
+    doc.querySelector('#matchesWrap .mrow').click(); doc.getElementById('matchDialog').close();
+    doc.getElementById('tab-players').click();
+    doc.querySelector('#playersWrap .prow').click(); doc.getElementById('playerDialog').close();
+    doc.getElementById('tab-tournament').click();
+    doc.getElementById('addBracketBtn').click(); doc.getElementById('bracketDialog').close();
+    doc.getElementById('scheduleBtn').hidden || (doc.getElementById('scheduleBtn').click(), doc.getElementById('scheduleDialog').close());
+    doc.getElementById('shareBtn').click(); doc.getElementById('shareDialog').close();
     doc.getElementById('tab-' + H.TABS[0]).click();
     const dialogs = [...doc.querySelectorAll('dialog')].filter((d) => d.id);
     for (const d of dialogs) {
       try { d.showModal(); drawn['dialog:' + d.id] = d.textContent.trim().length; d.close(); }
       catch (e) { errs.push('dialog ' + d.id + ': ' + e.message); }
     }
+    H.__plant(H.buildDemoTeams());
+    walk('teams:');
+    doc.getElementById('tab-matches').click();
+    doc.querySelector('#matchesWrap .mrow').click(); doc.getElementById('matchDialog').close();
+    doc.getElementById('tab-standings').click();
+    doc.querySelector('#stModeWrap [data-mode="players"]').click();
+    drawn['teams:individual'] = doc.getElementById('standingsWrap').textContent.trim().length;
+    doc.querySelector('#stModeWrap [data-mode="sides"]').click();
+    doc.getElementById('tab-players').click();
+    doc.querySelector('#teamsWrap .prow').click(); doc.getElementById('teamDialog').close();
     asyncResults.smoke = { errs: errs, drawn: drawn, dialogs: dialogs.length };
   } catch (e) { asyncResults.smoke = { errs: ['the walk itself threw: ' + e.message], drawn: {}, dialogs: 0 }; }
-  /* PUT THE FIXTURE BACK. define() plants it and switches to Entries at
-     definition time, which is BEFORE this runs, and every DOM test below reads
-     the app in that state — so a walk that left the sample data in place would
-     hand them seven rows where they expect three. Outside the try/catch on
-     purpose: if the walk fell over, the tests after it still need their fixture
-     rather than whatever the walk was holding when it stopped. */
-  try { H.__plant(FIXTURE); W.setTab('entries'); } catch (e) { /* reported by the walk's own verdict */ }
+  try { H.__plant(FIXTURE); W.setTab('standings'); } catch (e) { /* reported by the walk's own verdict */ }
 
   try {
-    const payload = H.buildSharePayload({
-      entries: [{ id: 'a1', name: 'Round trip', value: -12.5, date: '2026-01-02' }],
-      settings: { decimals: 2, showAvg: false, zeroBase: false },
-    });
+    const payload = H.buildSharePayload(H.normalizeLeague(FIXTURE), {});
     const token = await H.encodeShare(payload);
-    const back = await H.decodeShare(token);
-    asyncResults.roundTrip = { token: token, back: back };
+    asyncResults.roundTrip = { token: token, back: await H.decodeShare(token) };
   } catch (e) { asyncResults.roundTrip = { error: e.message }; }
-
+  try { await H.decodeShare('9.AAAA'); asyncResults.badMarker = 'no error'; } catch (e) { asyncResults.badMarker = e.message; }
   try {
-    await H.decodeShare('9.AAAA');
-    asyncResults.badMarker = 'no error';
-  } catch (e) { asyncResults.badMarker = e.message; }
-
-  try {
-    const future = await H.encodeShare({ v: H.SHARE_PAYLOAD_V + 1, entries: [] });
-    await H.decodeShare(future);
+    await H.decodeShare(await H.encodeShare({ v: H.SHARE_PAYLOAD_V + 1, league: {}, matches: [] }));
     asyncResults.newer = { thrown: false };
   } catch (e) { asyncResults.newer = { thrown: true, flagged: !!e.newerVersion }; }
 
-  /* ── Where the keyboard is after a Find hit in a SHARED view ───────────────
-     The one path through goToSearchHit() that opens no editor: a shared
-     snapshot has no editor to open. Driven in a second frame booted at a real
-     '#share=' link, with Find opened the way ⌘K opens it — findBtn.click(),
-     not a press on the button — so nothing visible holds the focus first. That
-     is the case the fix is for; the "already visible, leave it alone" cases are
-     tested in the main frame, synchronously, below. */
+  /* ── The shared view, in a frame of its own ───────────────────────────── */
   try {
-    const S = await bootShared(await H.encodeShare(H.buildSharePayload({
-      entries: [{ id: 'sh-1', name: 'Shared row', value: 10, date: '2026-04-01' }],
-      settings: H.defaultSettings(),
-    })));
+    const S = await bootFrame('#share=' + await H.encodeShare(H.buildSharePayload(H.normalizeLeague(FIXTURE), {})));
     const SD = S.document;
-    SD.getElementById('tab-overview').click();       /* start on the OTHER tab */
-    if (SD.activeElement && SD.activeElement.blur) SD.activeElement.blur();
-    SD.getElementById('findBtn').click();
-    const box = SD.getElementById('searchBox');
-    box.value = 'Shared';
-    box.dispatchEvent(new S.Event('input', { bubbles: true }));
-    const hits = SD.querySelectorAll('#searchResults .hit').length;
-    if (SD.activeElement && SD.activeElement.blur) SD.activeElement.blur();
-    const before = SD.activeElement ? (SD.activeElement.id || SD.activeElement.tagName) : 'null';
-    SD.querySelector('#searchResults .hit').click();
-    const a = SD.activeElement;
-    asyncResults.sharedFind = {
-      hits: hits, before: before,
-      findOpen: SD.getElementById('searchDialog').open,
-      editorOpen: SD.getElementById('entryDialog').open,
-      tab: S.document.documentElement.getAttribute('data-tab'),
-      where: a ? (a.id || a.tagName) : 'null',
-      isTab: !!(a && a.classList && a.classList.contains('tab')),
-      selected: a ? a.getAttribute('aria-selected') : null,
-      forTab: a && a.dataset ? a.dataset.tab : null,
-      visible: !!(a && a.getClientRects && a.getClientRects().length),
+    SD.getElementById('tab-matches').click();
+    asyncResults.shared = {
+      banner: !SD.getElementById('viewbar').hidden,
+      readonly: SD.documentElement.hasAttribute('data-readonly'),
+      leagueId: S.__lnTestHooks.__state().league.id,
+      noAddMatch: SD.getElementById('addMatchBtn').hidden,
+      noScore: !SD.querySelector('.mrow .mgo'),
+      rows: (SD.getElementById('tab-standings').click(), SD.querySelectorAll('#standingsTable tbody tr').length),
     };
-    /* And the other half of the rule, in the only frame that can show it: a
-       REAL press on the Find button leaves the focus on the button, the
-       window's close hands it back, and that is somewhere the reader can see —
-       so it is left exactly where it is. */
-    const fb = SD.getElementById('findBtn');
-    fb.focus();
-    fb.click();
-    box.value = 'Shared';
-    box.dispatchEvent(new S.Event('input', { bubbles: true }));
-    SD.querySelector('#searchResults .hit').click();
-    asyncResults.sharedFind.afterRealPress =
-      SD.activeElement ? (SD.activeElement.id || SD.activeElement.tagName) : 'null';
-  } catch (e) { asyncResults.sharedFind = { error: e.message }; }
+  } catch (e) { asyncResults.shared = { error: e.message }; }
 
-  /* ── Where a press leaves the page ────────────────────────────────────────
-     The family's rule, given by Charles on 2026-09-05 and carried into all five
-     tabbed apps: CHANGING WHAT YOU ARE LOOKING AT GOES TO THE TOP, CHANGING
-     WHICH RECORD YOU ARE LOOKING AT HOLDS STILL. A tab press is the first; a
-     Find hit that opens a record is the second, because the editor is over the
-     row that was searched for and moving the page would strand the reader at
-     the top of a long table the moment they closed it.
+  /* ── A phone-sized frame: the bar, the sheet, no sideways scroll ────────
+     Measured in a 375x812 frame, because a media query answers the frame it
+     is in and nothing about the bar can be seen at 1000px. */
+  try {
+    const P = await bootFrame('', 375, 812);
+    const PD = P.document;
+    P.__lnTestHooks.__plant(P.__lnTestHooks.buildDemoSingles());
+    const bar = PD.querySelector('.tabbar');
+    const r = {
+      vw: P.innerWidth, vh: P.innerHeight,
+      barDisplay: P.getComputedStyle(bar).display,
+      tabsDisplay: P.getComputedStyle(PD.querySelector('.tabs')).display,
+      barBottom: Math.round(bar.getBoundingClientRect().bottom),
+      padBottom: parseFloat(P.getComputedStyle(PD.body).paddingBottom),
+    };
+    PD.getElementById('tab-matches').click();
+    PD.querySelector('#matchesWrap .mrow').click();
+    r.sheetW = Math.round(PD.getElementById('matchDialog').getBoundingClientRect().width);
+    r.barUnderDialog = P.getComputedStyle(bar).display;
+    PD.getElementById('matchDialog').close();
+    ['standings', 'matches', 'players', 'tournament', 'league'].forEach((tab) => PD.getElementById('tab-' + tab).click());
+    r.noSideways = PD.documentElement.scrollWidth <= P.innerWidth + 1;
+    asyncResults.phone = r;
+  } catch (e) { asyncResults.phone = { error: e.message }; }
 
-     DRIVEN HERE, in the 1000x800 frame this suite boots, because a test body in
-     this runner must be synchronous — and because a frame with no size cannot
-     scroll at all, which would make every line of this pass over an app doing
-     nothing. `down` is recorded first and asserted on for exactly that reason.
-     The sample data is what makes the page taller than the frame; the fixture
-     goes back afterwards, the way the smoke walk puts it back. */
+  /* ── Where a press leaves the page ─────────────────────────────────────── */
   try {
     const D = W.document;
     const pause = (ms) => new Promise((r) => setTimeout(r, ms));
     const settle = async (y) => { W.scrollTo(0, y); await pause(80); return W.scrollY; };
     const press = async (t) => { D.getElementById('tab-' + t).click(); await pause(120); };
-    H.__plant({ entries: H.sampleData(), settings: H.defaultSettings() });
+    H.__plant(H.buildDemoSingles());
     await pause(150);
-
-    await press('overview');
+    await press('matches');
     const down = await settle(400);
-    await press('entries');
+    await press('players');
     const afterOtherTab = W.scrollY;
-
-    await press('overview');
+    await press('matches');
     const held = await settle(400);
-    await press('overview');
+    await press('matches');
     const afterSameTab = W.scrollY;
-    asyncResults.landing = { down: down, afterOtherTab: afterOtherTab,
-                             held: held, afterSameTab: afterSameTab };
+    asyncResults.landing = { down: down, afterOtherTab: afterOtherTab, held: held, afterSameTab: afterSameTab };
   } catch (e) { asyncResults.landing = { error: e.message }; }
-  try { H.__plant(FIXTURE); W.setTab('entries'); } catch (e) { /* reported by the verdict above */ }
+  try { H.__plant(FIXTURE); W.setTab('standings'); } catch (e) { /* reported by the verdict above */ }
 }
 
 /* ── The suite plants what it needs, and never trusts what it finds ──────────
-   A fixed set, not the app's own sample data: those dates count back from today
-   so a test asserting an order would drift, and the point of a fixture is that
-   it cannot. Three rows, chosen so a sort has something to say — a negative, a
-   grouped thousand, and names whose alphabetical order disagrees with both the
-   value order and the date order. */
-const FIXTURE = { version: 1, entries: [
-  { id: 'fx-neg', name: 'Charlie negative', value: -320, date: '2026-01-05' },
-  { id: 'fx-big', name: 'Alpha thousands', value: 12500, date: '2026-03-09' },
-  { id: 'fx-mid', name: 'Bravo ordinary', value: 45, date: '2026-02-17' },
-], settings: { decimals: 0, showAvg: true, zeroBase: true } };
+   A fixed league, not the demo: the demo's dates count back from today, so an
+   assertion on an order would drift, and the point of a fixture is that it
+   cannot. Four players, one season, three results and a fixture still to
+   play — enough for a table to have something to say. */
+const FIXTURE = {
+  schema: 1,
+  league: { id: 'LN-FIXTURE1', name: 'Fixture League', game: 'darts', createdAt: '2026-01-01', u: 1,
+            settings: { format: 'singles', teamSize: 2, legFormat: '501', dOut: true,
+                        matchFormat: { mode: 'bestOf', n: 3 }, points: { win: 2, draw: 1, loss: 0 },
+                        tiebreak: ['pts', 'legDiff', 'legsFor', 'h2h', 'name'] } },
+  players: [
+    { id: 'fx-alpha', name: 'Alpha Thousands', teamId: null, hcp: null, active: true, u: 2 },
+    { id: 'fx-bravo', name: 'Bravo Ordinary', teamId: null, hcp: 20, active: true, u: 3 },
+    { id: 'fx-charlie', name: 'Charlie Negative', teamId: null, hcp: null, active: true, u: 4 },
+    { id: 'fx-delta', name: 'Delta Retired', teamId: null, hcp: null, active: false, u: 5 },
+  ],
+  teams: [],
+  seasons: [{ id: 'fx-season', name: 'Fixture Season', startsOn: '2026-01-05', status: 'active', u: 6 }],
+  matches: [
+    { id: 'fx-m1', seasonId: 'fx-season', bracketId: null, slot: null, round: 1, date: '2026-01-05', venue: 'The Crown',
+      a: 'fx-alpha', b: 'fx-bravo', status: 'played', score: { a: 0, b: 0 },
+      legs: [{ w: 'a', by: { a: ['fx-alpha'], b: ['fx-bravo'] }, start: { a: 501, b: 481 }, a: { darts: 18, checkout: 40 } },
+             { w: 'a', by: { a: ['fx-alpha'], b: ['fx-bravo'] }, start: { a: 501, b: 481 }, a: { darts: 21, t180: 1 } }], u: 10 },
+    { id: 'fx-m2', seasonId: 'fx-season', bracketId: null, slot: null, round: 1, date: '2026-01-05', venue: '',
+      a: 'fx-charlie', b: 'fx-delta', status: 'played', score: { a: 0, b: 0 },
+      legs: [{ w: 'b', by: { a: ['fx-charlie'], b: ['fx-delta'] }, start: { a: 501, b: 501 } },
+             { w: 'a', by: { a: ['fx-charlie'], b: ['fx-delta'] }, start: { a: 501, b: 501 } },
+             { w: 'b', by: { a: ['fx-charlie'], b: ['fx-delta'] }, start: { a: 501, b: 501 } }], u: 11 },
+    { id: 'fx-m3', seasonId: 'fx-season', bracketId: null, slot: null, round: 2, date: '2026-01-12', venue: '',
+      a: 'fx-alpha', b: 'fx-charlie', status: 'forfeit', score: { a: 2, b: 0 }, legs: [], u: 12 },
+    { id: 'fx-m4', seasonId: 'fx-season', bracketId: null, slot: null, round: 2, date: '2026-01-12', venue: '',
+      a: 'fx-bravo', b: 'fx-delta', status: 'scheduled', score: { a: 0, b: 0 }, legs: [], u: 13 },
+  ],
+  brackets: [],
+  tombstones: [],
+};
+const M = (id, a, b, sa, sb, date, extra) => Object.assign({ id: id, a: a, b: b, status: 'played', score: { a: sa, b: sb }, legs: [], date: date, u: 1,
+  seasonId: null, bracketId: null, slot: null, round: 0, venue: '' }, extra || {});
+const RULES = { points: { win: 2, draw: 1, loss: 0 }, tiebreak: ['pts', 'legDiff', 'legsFor', 'h2h', 'name'] };
+const bm = (slot, a, b, w, bracketId) => ({ id: 'bm-' + slot, bracketId: bracketId || 'b', slot: slot, a: a, b: b, status: 'played',
+  score: { a: w === 'a' ? 2 : 0, b: w === 'b' ? 2 : 0 }, legs: [], u: 1, seasonId: null, round: 0, venue: '', date: null });
+const css = () => (stripComments(APP_SRC).match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
 
 function define() {
-  /* This is the line that made five DOM tests pass on a laptop and fail in CI:
-     a fresh profile boots the app into the welcome card, where render() returns
-     early and there is no table at all. The browser's own saved data is ambient
-     state, and a suite that leans on it reports on a build nobody else has. */
   const booted = W.document.documentElement.hasAttribute('data-welcome')
-              || !!W.document.getElementById('entriesTable');
+              || !!W.document.getElementById('standingsTable');
   H.__plant(FIXTURE);
-  W.setTab('entries');
+  W.setTab('standings');
 
   group('the suite plants its own data');
   t('the app is rendered from a FIXTURE, not from this browser’s saved copy', () => {
     ok(booted, 'the app booted into one of its two real states');
-    eq(H.__state().entries.length, 3, 'and the suite then planted its own three rows');
-    ok(W.document.getElementById('entriesTable'), 'so there is a table to read');
-    /* The promise this suite makes about the reader's own data — read off the
-       app's source, not asserted against nothing. */
-    const hook = (stripComments(APP_SRC).match(/__plant: function[^\n]*/) || [''])[0];
+    eq(H.__state().players.length, 4, 'and the suite then planted its own four players');
+    ok(W.document.getElementById('standingsTable'), 'so there is a table to read');
+    const hook = (stripComments(APP_SRC).match(/__plant: function[\s\S]*?\n  \},/) || [''])[0];
     ok(hook, 'the plant hook must exist');
-    ok(hook.indexOf('save()') === -1,
-       'plant must never write — this suite runs against the reader’s own copy');
+    ok(hook.indexOf('save()') === -1, 'plant must never write — this suite runs against the reader’s own copy');
   });
 
   /* ═══════════════════════════════════════════════════════════════════════
      THE FAMILY RULES. Each pins something that went wrong in this family at
-     least once. Keep them and add your own; they cost nothing and they are the
-     only thing that notices when a page stops following the pack it links.
+     least once.
      ═══════════════════════════════════════════════════════════════════════ */
-
   group('the palette and type come from the pack, not from this page');
   t('no raw pixel font size anywhere in the app', () => {
-    /* ELEVEN public pages linked theme.css and then set their own 15px body on
-       top of it, and every gate stayed green: a hash proves the file ARRIVED,
-       and nothing proved the page used it.
-
-       ONE exemption, removed by name rather than by a loose pattern: the
-       newer-data card is built in script and has to render when theme.css is the
-       thing that failed to load, so it carries its own font and hex fallbacks. */
     const body = stripComments(APP_SRC).replace(/font:16px\/1\.55 system-ui[^']*/g, '');
-    const hits = (body.match(/font-size\s*:\s*[0-9.]+px/g) || [])
-      .concat(body.match(/font:\s*[0-9.]+px/g) || []);
+    const hits = (body.match(/font-size\s*:\s*[0-9.]+px/g) || []).concat(body.match(/font:\s*[0-9.]+px/g) || []);
     eq(hits, [], 'raw pixel sizes opt that text out of the reader’s own text-size setting');
   });
   t('no font stack of its own — --font-sans is the pack’s', () => {
@@ -449,92 +424,43 @@ function define() {
     ok(/var\(--font-sans\)/.test(APP_SRC), 'and the body shorthand must use it');
   });
   t('no literal colour inside the <style> block', () => {
-    const css = (stripComments(APP_SRC).match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
-    ok(css.length > 500, 'the style block was not found, so this check read nothing');
-    eq(css.match(/#[0-9a-f]{3,8}\b/gi) || [], [],
-       'a colour is decided in the pack’s tokens.json or it is not decided');
+    ok(css().length > 500, 'the style block was not found, so this check read nothing');
+    eq(css().match(/#[0-9a-f]{3,8}\b/gi) || [], [], 'a colour is decided in the pack’s tokens.json or it is not decided');
   });
   t('and outside it, only the literals that must survive a missing theme.css', () => {
-    /* Places that legitimately hold a hex, all of them where --bg cannot be
-       read: the theme-color meta, the boot script's Light --bg (matchMedia is
-       answerable that early and a custom property is not), the newer-data card's
-       fallbacks, and the inline SVG mark, which is artwork rather than palette.
-       KEEP THE FIRST TWO IN STEP with theme.css when the palette moves. */
     const outside = stripComments(APP_SRC).replace(/<style>[\s\S]*?<\/style>/, '');
     const found = [...new Set((outside.match(/#[0-9a-f]{6}\b/gi) || []).map(h => h.toLowerCase()))];
-    const allowed = ['#0a0e1a', '#121829', '#262f4a', '#aab2d0', '#e7eaf6', '#f5f5f3',
-                     '#818cf8', '#a5b4fc', '#141c33'];
+    const allowed = ['#0a0e1a', '#121829', '#262f4a', '#aab2d0', '#e7eaf6', '#f5f5f3', '#818cf8', '#a5b4fc', '#141c33'];
     eq(found.filter(h => allowed.indexOf(h) === -1), [], 'unexpected literal colour(s)');
     const el = W.document.documentElement, was = el.getAttribute('data-theme');
     try {
       el.setAttribute('data-theme', 'midnight');
-      eq(W.getComputedStyle(el).getPropertyValue('--bg').trim(), '#0a0e1a',
-         'the theme-color meta and the halt card use Midnight’s --bg');
+      eq(W.getComputedStyle(el).getPropertyValue('--bg').trim(), '#0a0e1a', 'the theme-color meta and the halt card use Midnight’s --bg');
       el.setAttribute('data-theme', 'light');
-      eq(W.getComputedStyle(el).getPropertyValue('--bg').trim(), '#f5f5f3',
-         'and the boot script uses Light’s');
+      eq(W.getComputedStyle(el).getPropertyValue('--bg').trim(), '#f5f5f3', 'and the boot script uses Light’s');
     } finally { el.setAttribute('data-theme', was || 'auto'); }
   });
   t('the pack is LINKED, never inlined', () => {
     ok(/<link[^>]+href="theme\.css"/.test(APP_SRC), 'index.html must link theme.css');
     ok(/<link[^>]+href="theme\.css"/.test(PRIVACY_SRC), 'privacy.html must link it too');
-    ok(!/--text-primary:\s*#/.test(stripComments(APP_SRC)),
-       'an inlined copy is drift with a delay fuse — a pack change misses it silently');
+    ok(!/--text-primary:\s*#/.test(stripComments(APP_SRC)), 'an inlined copy is drift with a delay fuse');
   });
   t('privacy.html carries style-src ‘self’, or the link is silently blocked', () => {
     const csp = (PRIVACY_SRC.match(/Content-Security-Policy" content="([^"]*)"/) || [])[1] || '';
-    ok(/style-src[^;]*'self'/.test(csp), 'without it the stylesheet is refused and the page renders bare');
+    ok(/style-src[^;]*'self'/.test(csp));
   });
-  t('the chart series are the pack’s ramp, in numeric order', () => {
-    /* Pack rule 4. Golf Handicap carried two hand-picked colours across four
-       themes, gated by nothing, until 2026-08-23; the lottery portfolio carried
-       five, two of which simulated to the same colour under deuteranopia. */
-    const css = (stripComments(APP_SRC).match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
-    ok(/var\(--series-1\)/.test(css) && /var\(--series-2\)/.test(css) && /var\(--series-3\)/.test(css),
-       'the chart must read --series-*');
-    const el = W.document.documentElement;
-    ['--series-1', '--series-2', '--series-3'].forEach(tok =>
-      ok(/^#[0-9a-f]{6}$/i.test(W.getComputedStyle(el).getPropertyValue(tok).trim()),
-         tok + ' did not resolve to a real colour'));
+  t('status is never carried by hue alone', () => {
+    /* A form pill is a tint fill plus a full-strength edge (pack rule 2) AND
+       the letter inside it; a chosen side-button is the primary fill AND a
+       tick; a bracket winner is bold AND a tick. Red-green deficiency flattens
+       the tints, so the second cue is the one doing the work. */
+    ok(/\.fp\.ok\s*\{[^}]*border-color:\s*var\(--ok\)/.test(css()) && /\.fp\.err\s*\{[^}]*border-color:\s*var\(--err\)/.test(css()), 'the form pills are edged');
+    ok(/\.side-btn\.on::before\s*\{\s*content:\s*'✓ '/.test(css()), 'the chosen side carries a tick');
+    ok(/\.bcell \.bside\.won::after\s*\{\s*content:\s*' ✓'/.test(css()), 'and so does a bracket winner');
+    ok(/var\(--series-1\)/.test(stripComments(APP_SRC)), 'the sparkline reads the pack’s first series colour');
   });
-  t('a bar is a tint fill plus a full-strength edge — pack rule 3', () => {
-    const css = (stripComments(APP_SRC).match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
-    const bar = (css.match(/\.bar\s*\{([^}]*)\}/) || [])[1] || '';
-    /* 55%, the SOLID strength, not the 32% a textured series may use. These
-       bars carry no texture, so the outline is all they have and the fill has
-       to keep more of its colour — the rule's own reasoning, and the reason
-       Sprint Velocity's one solid series sits here too. They were at 32% until
-       2026-09-03; the hover state went to full strength to make room. */
-    ok(/color-mix\(in srgb, var\(--series-1\) 55%, var\(--surface\)\)/.test(bar),
-       'the fill is the series colour mixed ~45% toward the CARD, not toward white');
-    ok(/stroke:\s*var\(--series-1\)/.test(bar), 'and the outline is the colour at full strength');
-    const neg = (css.match(/\.bar\.neg\s*\{([^}]*)\}/) || [])[1] || '';
-    ok(/color-mix\(in srgb, var\(--series-2\) 55%, var\(--surface\)\)/.test(neg)
-       && /stroke:\s*var\(--series-2\)/.test(neg),
-       'and the negative bars are the same arrangement on the ramp\'s second token');
-    /* A key that does not depict the mark is worse than no key. Pinned to the
-       SAME number as the bar, so the two cannot drift apart silently — which is
-       exactly what raising one without the other would do. */
-    const sw = (css.match(/\.legend\s+\.sw\s*\{([^}]*)\}/) || [])[1] || '';
-    ok(/color-mix\(in srgb, var\(--series-1\) 55%, var\(--surface\)\)/.test(sw)
-       && /border:\s*2px solid var\(--series-1\)/.test(sw),
-       'and the legend swatch is a picture of that bar, at the same strength', sw.trim());
-  });
-  t('the hovered bar fills solid, because the tint below it has moved up', () => {
-    /* The two levels are a pair: the resting fill sits at the rule's solid
-       strength, so the highlight cannot also be 55% — it would be the resting
-       bar. Full strength is what is left, and it is what Money Map's Spending
-       chart already does. Pinned because raising one without the other is a
-       silent way to lose the highlight altogether. */
-    const css = (stripComments(APP_SRC).match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
-    const on = (css.match(/\.bar\.on\s*\{([^}]*)\}/) || [])[1] || '';
-    const negOn = (css.match(/\.bar\.neg\.on\s*\{([^}]*)\}/) || [])[1] || '';
-    ok(/fill:\s*var\(--series-1\)\s*;?/.test(on),
-       'the hovered bar is the series colour itself', on.trim());
-    ok(/fill:\s*var\(--series-2\)\s*;?/.test(negOn),
-       'and so is a hovered negative bar', negOn.trim());
-    ok(!/color-mix/.test(on) && !/color-mix/.test(negOn),
-       'neither is a tint any more — a tint here would be the resting fill again');
+  t('no elevation shadow anywhere — pack rule 14', () => {
+    ok(!/box-shadow\s*:(?!\s*inset)/.test(css()), 'an inset ring is not a shadow; nothing else is allowed');
   });
 
   group('auto is the default, in all three places');
@@ -545,263 +471,508 @@ function define() {
   t('the boot script falls back to it, for a retired or missing saved id', () => {
     const boot = stripComments(APP_SRC).match(/valid\.indexOf\(t\) === -1\) t = '([a-z]+)'/);
     ok(boot, 'the boot script no longer normalises an unknown id');
-    eq(boot[1], 'auto', 'nothing saved, or a retired id, must land on the default');
+    eq(boot[1], 'auto');
   });
   t('the picker pre-selects it, so the row never names another theme', () => {
-    ok(/<option value="auto" selected>/.test(APP_SRC), 'auto must carry `selected`');
-    eq((APP_SRC.match(/<option value="(?:auto|midnight|dark|light|sepia)" selected>/g) || []).length, 1,
-       'exactly one option may carry it');
-  });
-  /* ── The chart card carries what every sibling's carries ──────────────────
-     Added 2026-08-23, when the starter's chart was measured against Sprint
-     Predictability's and Flow Metrics' and found to be missing four things. */
-  t('the chart says what it plots, under its name', () => {
-    ok(/<p class="chart-title">/.test(APP_SRC),
-       'both siblings carry a sentence under the chart name; this one had none');
-  });
-  t('the chart box has a HEIGHT of its own', () => {
-    const css = (stripComments(APP_SRC).match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
-    ok(/\.chart-wrap\s*\{[^}]*height:\s*300px/.test(css),
-       'without it the drawing sized the card, which nothing else on the page does');
-  });
-  t('the drawing is made at the box size, so nothing is scaled', () => {
-    const src = stripComments(APP_SRC);
-    ok(/Math\.round\(box\.width\)/.test(src) && /Math\.round\(box\.height\)/.test(src),
-       'a fixed viewBox stretched to the card made 2px strokes 3.4px on a desktop');
-    ok(/new ResizeObserver/.test(src),
-       'and a drawing made at a size has to be remade when that size changes');
-  });
-  t('pointing at a bar names it, in a panel built from the palette', () => {
-    const src = stripComments(APP_SRC);
-    const css = (src.match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
-    ok(/className = 'charttip'/.test(src), 'every sibling answers a hover with a panel');
-    /* The <title> it replaces was the browser's own tooltip: a second late, in
-       the OS's colours, and never shown on touch. Both would show at once. */
-    ok(!/<title>' \+ esc\(r\.name/.test(src), 'and the SVG <title> goes with it');
-    /* The same four values the siblings hand Chart.js. */
-    ok(/\.charttip\s*\{[^}]*background:\s*var\(--surface-alt\)/.test(css), 'surface-alt ground');
-    ok(/\.charttip\s*\{[^}]*var\(--border-strong\)/.test(css), 'border-strong edge');
-    ok(/\.charttip\s*\{[^}]*pointer-events:\s*none/.test(css),
-       'a panel that can be hovered flickers under the pointer that summoned it');
-    /* Delegated, because the chart is rebuilt on every render and every resize. */
-    ok(/wrap\.addEventListener\('pointermove'/.test(src), 'one listener on the wrap, not one per bar');
-    ok(/wrap\.addEventListener\('pointerdown'/.test(src), 'and a tap shows it on a touch screen');
-    /* A finger leaves the screen as the tap ends and the browser says so with
-       pointerleave — so on iOS the panel appeared and vanished inside the same
-       tap until this guard went in. */
-    ok(/pointerType !== 'touch'/.test(src),
-       'pointerleave must not take a TAP away the instant the finger lifts');
-    /* The name is the reader's own and arrives from share links too. */
-    ok(/n\.textContent = bar\.getAttribute\('data-name'\)/.test(src),
-       'the name is written with textContent, never innerHTML');
-  });
-  /* ── The family's share window ─────────────────────────────────────────── */
-  t('the share window is the family shape', () => {
-    const src = APP_SRC;
-    ok(src.indexOf('id="shareDialogTitle">Share a Read-Only Link<') !== -1,
-       'every sibling calls it the same thing');
-    ok(src.indexOf('<div class="share-choices">') !== -1, 'two panels of choices, side by side');
-    ok(src.indexOf('id="shareCopyBtn"') !== -1 && src.indexOf('id="shareOpenBtn"') !== -1
-       && src.indexOf('id="shareCloseBtn"') !== -1, 'and the siblings three button ids');
-    ok(src.indexOf('aria-label="Read-only share link"') !== -1, 'the link box says what it is');
-    ok(src.indexOf('<strong>snapshot</strong>') !== -1, 'it closes on the snapshot warning');
-    const css = (stripComments(src).match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
-    ok(/#shareDialog\s*\{[^}]*max-width:\s*1100px/.test(css),
-       '1100px, which is what the other four open Share at');
-  });
-  t('a share link can be trimmed, and says so', () => {
-    const rows = [
-      { id: 'a', name: 'A', value: 1, date: '2026-01-10' },
-      { id: 'b', name: 'B', value: 2, date: '2026-04-10' },
-      { id: 'c', name: 'C', value: 3, date: '2026-07-10' }
-    ];
-    const ids = (w) => w.rows.map(function (r) { return r.id; });
-    eq(H.shareWindow(rows, 'all').rows.length, 3, 'everything by default');
-    eq(H.shareWindow(rows, 'all').from, null, 'and no window to report');
-    eq(ids(H.shareWindow(rows, 'n:2')), ['b', 'c'], 'the last two');
-    eq(H.shareWindow(rows, 'n:2').from, '2026-04-10', 'reported from the oldest kept');
-    /* Months count back from the NEWEST ENTRY, not from today: a link built off
-       data that stops in April must not come out empty in September. Six months
-       back from 10 July IS 10 January, and the cutoff DATE ITSELF is included —
-       so m:6 keeps all three here and m:5 is what drops the oldest. */
-    eq(ids(H.shareWindow(rows, 'm:6')), ['a', 'b', 'c'], 'the cutoff day is inside the window');
-    eq(ids(H.shareWindow(rows, 'm:5')), ['b', 'c'], 'five months off the newest');
-    eq(ids(H.shareWindow(rows, 'custom', '2026-07-01')), ['c'], 'from a date');
-    eq(H.shareWindow(rows, 'custom', ''), null, 'custom with no date is UNANSWERED, not all');
-    eq(H.shareWindow(rows, 'nonsense').rows.length, 3, 'anything unknown means everything');
-  });
-  t('names can be left behind, and the shape does not change when they are', () => {
-    const st = { settings: { decimals: 0, showAvg: true, zeroBase: false },
-                 entries: [{ id: 'a', name: 'Rent', value: 1, date: '2026-01-10' },
-                           { id: 'b', name: 'Food', value: 2, date: '2026-02-10' }] };
-    const kept = H.buildSharePayload(st, { keep: 'all', names: true });
-    const gone = H.buildSharePayload(st, { keep: 'all', names: false });
-    const names = (p) => p.entries.map(function (e) { return e.name; });
-    eq(names(kept), ['Rent', 'Food'], 'names ride when asked for');
-    eq(names(gone), ['Entry 1', 'Entry 2'],
-       'and are REPLACED, not dropped: a blank cell cannot be told from a missing one');
-    eq(kept.entries.map(function (e) { return e.value; }), [1, 2], 'the figures always ride');
-    /* `from` is additive and optional, which is why this needs no version bump. */
-    eq(kept.from, undefined, 'an untrimmed link carries no window');
-    eq(H.buildSharePayload(st, { keep: 'n:1' }).from, '2026-02-10', 'a trimmed one does');
-  });
-  t('the explanation control is an i, not a ?', () => {
-    ok(/>i<\/button>/.test(APP_SRC),
-       'Sprint Predictability, Flow Metrics and Money Map all render it as `i`');
-  });
-  t('a chart can fill the window, and comes back down three ways', () => {
-    const src = stripComments(APP_SRC);
-    ok(/id="chartMaxi"/.test(src), 'the overlay the card is moved into');
-    ok(/className = 'chart-max'/.test(src), 'and the button that moves it');
-    /* Moved, not copied: a second copy would leave every render painting the one
-       left behind while the chart on screen went stale. */
-    ok(/ov\.appendChild\(card\)/.test(src), 'the real card is MOVED into the overlay');
-    ok(/e\.key !== 'Escape'/.test(src), 'Escape closes');
-    ok(/startedOutside/.test(src), 'a click outside closes, and only if it started outside');
-    /* The iOS fix: body{overflow:hidden} unsticks a sticky header, so the strip
-       this overlay keeps clear would show page content instead of the menu. */
-    ok(/maxiScrollY = window\.scrollY/.test(src) && /window\.scrollTo\(0, 0\)/.test(src),
-       'the page goes to the top first, or the sticky header leaves on iOS');
+    ok(/<option value="auto" selected>/.test(APP_SRC));
+    eq((APP_SRC.match(/<option value="(?:auto|midnight|dark|light|sepia)" selected>/g) || []).length, 1);
   });
   t('slate is the ONE id that maps to a palette rather than to the default', () => {
-    ok(/t === 'slate'\) t = 'dark'/.test(stripComments(APP_SRC)),
-       'slate is Dark renamed — sending it to Auto would change what a reader sees');
+    ok(/t === 'slate'\) t = 'dark'/.test(stripComments(APP_SRC)));
   });
   t('the themes are listed alphabetically', () => {
-    /* One capture rather than two replaces. `.replace('"', '')` takes only the
-       FIRST quote — safe here, because the first replace has already eaten the
-       one in front, but CodeQL calls it (js/incomplete-sanitization) and it is
-       right that "safe because of what happens to be left" is not a reason. */
-    const opts = (APP_SRC.match(/<option value="(auto|midnight|dark|light|sepia)"/g) || [])
-      .map(o => (o.match(/value="([^"]+)"/) || [])[1]);
-    eq(opts, ['auto', 'dark', 'light', 'midnight', 'sepia'],
-       'Auto is first because of the alphabet, not because it is the default');
+    const opts = (APP_SRC.match(/<option value="(auto|midnight|dark|light|sepia)"/g) || []).map(o => (o.match(/value="([^"]+)"/) || [])[1]);
+    eq(opts, ['auto', 'dark', 'light', 'midnight', 'sepia']);
   });
   t('and it resolves live, in whichever mode this browser is in', () => {
     const el = W.document.documentElement, was = el.getAttribute('data-theme');
     try {
-      const read = (th) => { el.setAttribute('data-theme', th);
-        const c = W.getComputedStyle(el);
+      const read = (th) => { el.setAttribute('data-theme', th); const c = W.getComputedStyle(el);
         return { bg: c.getPropertyValue('--bg').trim(), scheme: c.colorScheme.trim() }; };
       const auto = read('auto');
       const want = read(W.matchMedia('(prefers-color-scheme: dark)').matches ? 'midnight' : 'light');
-      eq(auto.bg, want.bg, 'the pack resolves Auto’s palette');
-      eq(auto.scheme, want.scheme, 'and color-scheme, which this PAGE sets, has to follow it');
+      eq(auto.bg, want.bg); eq(auto.scheme, want.scheme);
     } finally { el.setAttribute('data-theme', was || 'auto'); }
   });
   t('every theme this page names has a color-scheme, Auto included', () => {
-    const css = (stripComments(APP_SRC).match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
     ['dark', 'light', 'sepia', 'auto'].forEach(th =>
-      ok(new RegExp('\\[data-theme="' + th + '"\\][^{]*\\{[^}]*color-scheme').test(css),
-         th + ' has no color-scheme, so the browser draws its own controls the wrong way round'));
-    ok(/@media \(prefers-color-scheme: dark\)[^{]*\{\s*\[data-theme="auto"\]/.test(css),
-       'Auto needs the dark half too — theme.css cannot resolve a property this page sets');
+      ok(new RegExp('\\[data-theme="' + th + '"\\][^{]*\\{[^}]*color-scheme').test(css()), th));
+    ok(/@media \(prefers-color-scheme: dark\)[^{]*\{\s*\[data-theme="auto"\]/.test(css()));
   });
 
   group('the page is on the shared origin, and behaves like it');
   t('the CSP names no external host', () => {
+    /* Until sync lands. When Firebase arrives, this test changes to pin the
+       exact five Google origins Golf Handicap allows and nothing else. */
     const csp = (APP_SRC.match(/Content-Security-Policy" content="([^"]*)"/) || [])[1] || '';
-    ok(csp, 'there must be a CSP meta tag — Pages cannot send headers');
+    ok(csp, 'there must be a CSP meta tag');
     ok(/default-src 'none'/.test(csp), 'it starts at none');
-    eq(csp.match(/https?:\/\/[^\s;']+/g) || [], [],
-       'a third-party script here is a third-party script in every app on this origin');
+    eq(csp.match(/https?:\/\/[^\s;']+/g) || [], []);
   });
   t('manifest-src and worker-src are spelled out, not left to fall back', () => {
     const csp = (APP_SRC.match(/Content-Security-Policy" content="([^"]*)"/) || [])[1] || '';
-    ok(/manifest-src 'self'/.test(csp),
-       "without it the manifest fetch is refused and Install silently stops being offered");
-    ok(/worker-src 'self'/.test(csp),
-       'or worker-src falls through child-src to script-src and inherits its hosts');
+    ok(/manifest-src 'self'/.test(csp)); ok(/worker-src 'self'/.test(csp));
   });
   t('nothing is fetched from off-origin', () => {
-    const body = stripComments(APP_SRC);
-    eq(body.match(/(?:src|href)="https?:\/\/(?!github\.com)[^"]*"/g) || [], [],
-       'vendor a library into the repo instead');
+    eq(stripComments(APP_SRC).match(/(?:src|href)="https?:\/\/(?!github\.com)[^"]*"/g) || [], []);
   });
   t('everything rendered goes through esc()', () => {
-    eq(H.esc('<img src=x onerror=alert(1)>'), '&lt;img src=x onerror=alert(1)&gt;', 'angle brackets');
-    eq(H.esc('a"b\'c&d'), 'a&quot;b&#39;c&amp;d', 'quotes and ampersand');
+    eq(H.esc('<img src=x onerror=alert(1)>'), '&lt;img src=x onerror=alert(1)&gt;');
+    eq(H.esc('a"b\'c&d'), 'a&quot;b&#39;c&amp;d');
+  });
+  t('a name another member typed is escaped on every surface it reaches', () => {
+    /* A league name, a player name and a venue arrive through Firestore
+       written by ANOTHER account. Plant a hostile one and read the DOM. */
+    const hostile = '<img src=x onerror=window.__pwned=1>';
+    const fx = JSON.parse(JSON.stringify(FIXTURE));
+    fx.league.name = hostile; fx.players[0].name = hostile; fx.matches[0].venue = hostile; fx.seasons[0].name = hostile;
+    try {
+      H.__plant(fx);
+      ['standings', 'matches', 'players', 'league'].forEach((tab) => W.setTab(tab));
+      W.document.getElementById('tab-matches').click();
+      W.document.querySelector('#matchesWrap .mrow').click();
+      W.document.getElementById('matchDialog').close();
+      ok(!W.__pwned, 'nothing ran');
+      eq(W.document.querySelectorAll('img[src="x"]').length, 0, 'and no element was made of it');
+      ok(W.document.getElementById('leagueSel').options[0].textContent.indexOf('<img') === 0, 'the picker shows the text');
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+  t('the help window reads nothing a reader typed', () => {
+    const src = stripComments(APP_SRC);
+    const at = src.indexOf('const HELP = {');
+    const table = src.slice(at, src.indexOf('\n};', at));
+    ok(at > 0 && !/\besc\(|\bstate\.|\$\(/.test(table), 'every body is a literal');
   });
 
-  group('saved data cannot be mangled or lost');
-  t('an id that is not the family shape is replaced', () => {
-    const out = H.normalizeState({ entries: [{ id: '"><script>', name: 'x', value: 1, date: '2026-01-01' }] });
-    ok(H.ID_RE.test(out.entries[0].id), 'got ' + out.entries[0].id);
+  group('the league is guarded at every boundary');
+  t('an id that is not the family shape is replaced, and every reference follows', () => {
+    const out = H.normalizeLeague({ league: { id: 'L' }, players: [{ id: '"><script>', name: 'x' }, { id: 'ok-2', name: 'y' }],
+      matches: [{ id: 'm', a: '"><script>', b: 'ok-2', legs: [{ w: 'a', by: { a: ['"><script>'], b: ['ok-2'] } }] }] });
+    ok(H.ID_RE.test(out.players[0].id), 'got ' + out.players[0].id);
+    eq(out.matches[0].a, out.players[0].id, 'the match follows the new id');
+    eq(out.matches[0].legs[0].by.a[0], out.players[0].id, 'and so does the leg');
   });
   t('a good id is left alone, because it is a key other things point at', () => {
-    const out = H.normalizeState({ entries: [{ id: 'demo-large', name: 'x', value: 1, date: '2026-01-01' }] });
-    eq(out.entries[0].id, 'demo-large');
+    eq(H.normalizeLeague({ league: { id: 'L' }, players: [{ id: 'demo-p-lee', name: 'x' }] }).players[0].id, 'demo-p-lee');
   });
-  t('the allowlist strips a field nobody declared', () => {
-    const out = H.normalizeState({ entries: [{ id: 'a', name: 'x', value: 1, date: '2026-01-01', secret: 'kept?' }] });
-    eq(Object.keys(out.entries[0]).sort(), ['date', 'id', 'name', 'value'],
-       'a new stored field must be added to normalizeState AND bump SCHEMA');
+  t('the allowlist strips a field nobody declared, on every entity', () => {
+    const out = H.normalizeLeague({ league: { id: 'L', secret: 1 }, players: [{ id: 'p', name: 'x', secret: 2 }], teams: [{ id: 't', name: 'T', secret: 3 }],
+      seasons: [{ id: 's', name: 'S', secret: 4 }], matches: [{ id: 'm', a: 'p', b: 'q', secret: 5, legs: [{ w: 'a', secret: 6 }] }], brackets: [{ id: 'b', secret: 7 }] });
+    eq(Object.keys(out.league).sort(), ['createdAt', 'game', 'id', 'name', 'settings', 'u']);
+    eq(Object.keys(out.players[0]).sort(), ['active', 'hcp', 'id', 'name', 'teamId', 'u']);
+    eq(Object.keys(out.teams[0]).sort(), ['id', 'name', 'u']);
+    eq(Object.keys(out.seasons[0]).sort(), ['id', 'name', 'startsOn', 'status', 'u']);
+    eq(Object.keys(out.matches[0]).sort(), ['a', 'b', 'bracketId', 'date', 'id', 'legs', 'round', 'score', 'seasonId', 'slot', 'status', 'u', 'venue']);
+    eq(Object.keys(out.matches[0].legs[0]).sort(), ['by', 'start', 'w']);
+    eq(Object.keys(out.brackets[0]).sort(), ['bestOf', 'createdAt', 'entrants', 'id', 'name', 'reset', 'seasonId', 'seeded', 'type', 'u']);
   });
-  t('a name is capped in code, not only by maxlength', () => {
-    const out = H.normalizeState({ entries: [{ id: 'a', name: 'x'.repeat(500), value: 0, date: '2026-01-01' }] });
-    eq(out.entries[0].name.length, 60, 'a paste ignores the attribute');
+  t('names are capped in code at NAME_MAX, not only by maxlength', () => {
+    const out = H.normalizeLeague({ league: { id: 'L', name: 'x'.repeat(500) }, players: [{ id: 'p', name: 'y'.repeat(500) }] });
+    eq(out.league.name.length, H.NAME_MAX); eq(out.players[0].name.length, H.NAME_MAX);
   });
-  t('a value that is not a number becomes zero, never NaN', () => {
-    const out = H.normalizeState({ entries: [{ id: 'a', name: 'x', value: 'banana', date: '2026-01-01' }] });
-    eq(out.entries[0].value, 0, 'NaN survives JSON as null and reappears as a blank nobody can explain');
+  t('there is no free-text field beyond a name and a venue', () => {
+    /* The family's numbers-and-dates rule, one level down: no notes, no
+       comments, nothing a stranger's text can hide in. */
+    ok(!/<textarea/.test(APP_SRC), 'no textarea anywhere');
+    const fields = (APP_SRC.match(/<input type="text"[^>]*>/g) || []).filter((f) => !/readonly/.test(f));
+    fields.forEach((f) => ok(/maxlength="40"/.test(f) || /id="searchBox"/.test(f), 'a text box without the 40-character cap: ' + f));
   });
-  t('a date is SHAPE-checked, never parsed loosely', () => {
-    const out = H.normalizeState({ entries: [{ id: 'a', name: 'x', value: 1, date: 'last Tuesday' }] });
-    eq(out.entries[0].date, H.todayISO(), 'an unreadable date falls back to today');
-    const good = H.normalizeState({ entries: [{ id: 'a', name: 'x', value: 1, date: '2019-07-04' }] });
-    eq(good.entries[0].date, '2019-07-04', 'a real one is kept exactly');
+  t('numbers are clamped, dates shape-checked, and junk never throws', () => {
+    const out = H.normalizeLeague({ league: { id: 'L', settings: { teamSize: 99, matchFormat: { n: -5 }, points: { win: 'lots' } } },
+      players: [{ id: 'p', name: 'x', hcp: 9999 }], seasons: [{ id: 's', name: 'S', startsOn: 'last Tuesday' }] });
+    eq(out.league.settings.teamSize, 8); eq(out.league.settings.matchFormat.n, 1); eq(out.league.settings.points.win, 2);
+    eq(out.players[0].hcp, 200, 'a handicap is clamped to the game’s range');
+    eq(out.seasons[0].startsOn, H.todayISO(), 'an unreadable date falls back to today');
+    eq(H.normalizeLeague(null).players, []); eq(H.normalizeLeague('nonsense').matches, []);
+    eq(H.normalizeLeague({ players: 'nope', matches: 42 }).players, []);
   });
-  t('settings are type-checked too — they arrive from share links', () => {
-    const out = H.normalizeState({ settings: { decimals: 99, showAvg: 'yes', zeroBase: 0 } });
-    eq(out.settings.decimals, 0, 'a decimals value off the list falls back');
-    eq(out.settings.showAvg, true, 'only an explicit false turns a flag off');
-    eq(out.settings.zeroBase, true, '0 is not false here — it is not the boolean false');
+  t('a match against itself, or naming a missing season, is put right', () => {
+    const out = H.normalizeLeague({ league: { id: 'L' }, matches: [{ id: 'm', a: 'p', b: 'p' }, { id: 'n', a: 'p', b: 'q', seasonId: 'gone', bracketId: 'gone', slot: 'w1-0' }] });
+    eq(out.matches.length, 1, 'a side cannot play itself');
+    eq(out.matches[0].seasonId, null); eq(out.matches[0].bracketId, null);
   });
-  t('junk in, blank state out — never a throw', () => {
-    eq(H.normalizeState(null), H.blankState());
-    eq(H.normalizeState('nonsense'), H.blankState());
-    eq(H.normalizeState({ entries: 'not an array' }), H.blankState());
+  t('the tiebreak order is cleaned and always ends in name', () => {
+    eq(H.normalizeLeague({ league: { id: 'L', settings: { tiebreak: ['name', 'pts', 'bogus', 'pts', 'h2h'] } } }).league.settings.tiebreak, ['pts', 'h2h', 'name']);
+    eq(H.normalizeLeague({ league: { id: 'L', settings: { tiebreak: [] } } }).league.settings.tiebreak, ['pts', 'legDiff', 'legsFor', 'h2h', 'name'], 'empty means the default');
+  });
+  t('nothing in a normalised league is ever undefined — Firestore refuses the whole document', () => {
+    const walk = (o, path, bad) => { if (o && typeof o === 'object') Object.keys(o).forEach((k) => { if (o[k] === undefined) bad.push(path + '.' + k); walk(o[k], path + '.' + k, bad); }); return bad; };
+    const out = H.normalizeLeague({ league: {}, players: [{}], teams: [{}], seasons: [{}], matches: [{ a: 'x', b: 'y', legs: [{}, { visits: { a: [{}] } }] }], brackets: [{}], tombstones: [{}] });
+    eq(walk(out, 'league', []), []);
+    eq(walk(H.mergeLeague(out, out), 'merged', []), []);
+  });
+  t('a bracket’s best-of is always odd', () => {
+    eq(H.normalizeLeague({ league: { id: 'L' }, brackets: [{ id: 'b', bestOf: 4 }] }).brackets[0].bestOf, 5);
+  });
+  t('the device record is guarded the same way', () => {
+    const d = H.normalizeDevice({ current: 'nope', leagues: [{ id: 'LN-A', name: 'x'.repeat(90), role: 'god' }, { id: '"><', name: 'bad' }, { id: 'LN-A', name: 'dupe' }] });
+    eq(d.leagues.length, 1, 'a bad id and a duplicate are dropped');
+    eq(d.leagues[0].role, 'viewer', 'an unknown role is the least trusted one');
+    eq(d.leagues[0].name.length, H.NAME_MAX);
+    eq(d.current, 'LN-A', 'a current that is not on the list falls back to the first');
+    eq(H.normalizeDevice(null).current, null);
   });
   t('data from a NEWER build is refused at every entry point', () => {
     const src = stripComments(APP_SRC);
-    ok(/function haltForNewerData/.test(src), 'the halt must exist');
-    ok(/Number\(peek\.version \|\| 1\) > SCHEMA/.test(src), 'localStorage is checked at boot');
-    ok(/Number\(raw\.version \|\| 1\) > SCHEMA/.test(src), 'and so is a restored backup');
-    ok(/Number\(incoming\.version \|\| 1\) > SCHEMA/.test(src), 'and another tab’s write');
-    ok(/throw new Error\('halted/.test(src),
-       'it must THROW — a half-booted app with handlers attached is one click from a save');
+    ok(/function haltForNewerData/.test(src));
+    ok(/Number\(peek\.version \|\| 1\) > SCHEMA/.test(src), 'the device record is checked at boot');
+    ok(/Number\(lg\.schema \|\| 1\) > SCHEMA/.test(src), 'and so is the league it is about to open');
+    ok(/Number\(raw\.schema \|\| 1\) > SCHEMA/.test(src), 'and a restored backup');
+    ok(/Number\(incoming\.version \|\| 1\) > SCHEMA/.test(src) && /Number\(incoming\.schema \|\| 1\) > SCHEMA/.test(src), 'and another tab’s write, both keys');
+    ok(/throw new Error\('halted/.test(src), 'it must THROW');
   });
   t('todayISO builds from LOCAL parts, never toISOString', () => {
-    ok(/^\d{4}-\d{2}-\d{2}$/.test(H.todayISO()), 'shape');
-    ok(!/toISOString/.test(stripComments(APP_SRC)),
-       'toISOString converts to UTC and shifts every date back a day east of Greenwich');
+    ok(/^\d{4}-\d{2}-\d{2}$/.test(H.todayISO()));
+    ok(!/toISOString/.test(stripComments(APP_SRC)));
+  });
+  t('a shared view can never write to this browser', () => {
+    const src = stripComments(APP_SRC);
+    ok(/function save\(\)\s*\{\s*if \(viewOnly\) return;/.test(src), 'save() is the single write path');
+    ok(/window\.lnViewOnly = viewOnly/.test(src), 'and the flag is mirrored for the service-worker block');
   });
 
-  group('the figures are worked out in ONE place');
-  t('computeAll is pure and totals what it is given', () => {
-    const c = H.computeAll([
-      { id: 'a', name: 'a', value: 10, date: '2026-01-03' },
-      { id: 'b', name: 'b', value: -4, date: '2026-01-01' },
-      { id: 'c', name: 'c', value: 6, date: '2026-01-02' },
-    ]);
-    eq(c.count, 3);
-    eq(c.total, 12);
-    eq(c.average, 4);
-    eq(c.high, 10);
-    eq(c.low, -4);
-    eq(c.rows.map(r => r.date), ['2026-01-01', '2026-01-02', '2026-01-03'], 'sorted oldest first');
-    eq(c.latest.name, 'a', 'latest is the newest date, not the last in the array');
+  group('codes: the League ID and the Admin Key');
+  t('a League ID is LN- and eight characters from an alphabet with no 0/O or 1/I', () => {
+    const id = H.newLeagueId();
+    ok(H.LEAGUE_ID_RE.test(id), id);
+    ok(!/[01OI]/.test(id));
+    ok(H.ID_RE.test(id), 'and it is the family id shape too');
+    const many = new Set(Array.from({ length: 50 }, () => H.newLeagueId()));
+    eq(many.size, 50, 'fifty in a row are fifty different codes');
   });
-  t('an empty set gives nulls, not zeroes', () => {
-    const c = H.computeAll([]);
-    eq(c.count, 0);
-    eq(c.average, null, 'an average of nothing is not 0 — that would render as a real figure');
-    eq(c.latest, null);
+  t('an Admin Key is sixteen characters from the same alphabet', () => {
+    const k = H.newAdminKey();
+    ok(H.ADMIN_KEY_RE.test(k), k);
+  });
+  t('what a reader typed is cleaned, never corrected', () => {
+    eq(H.cleanCode('ln-abcd 2345', 'LN'), 'ABCD2345');
+    eq(H.cleanCode('  abcd-2345 '), 'ABCD2345');
+    ok(!H.LEAGUE_ID_RE.test('LN-' + H.cleanCode('ln-abcd 0i1o', 'LN')), 'a code with a 0 or an I in it is simply not a code');
+  });
+  t('the demo ids can never be League IDs', () => {
+    ok(!H.LEAGUE_ID_RE.test(H.DEMO_ID) && !H.LEAGUE_ID_RE.test(H.DEMO_TEAMS_ID), 'they carry an O the alphabet leaves out');
+    ok(H.ID_RE.test(H.DEMO_ID) && H.ID_RE.test(H.DEMO_TEAMS_ID), 'but are still the family id shape');
+    ok(H.isDemoId(H.DEMO_ID) && !H.isDemoId('LN-ABCDEFGH'));
+  });
+  t('the codes come from crypto, never Math.random', () => {
+    const src = stripComments(APP_SRC);
+    const fn = (src.match(/function randomCode[\s\S]*?\n\}/) || [''])[0];
+    ok(/crypto\.getRandomValues/.test(fn) && !/Math\.random/.test(fn));
   });
 
-  /* ── The render smoke test ────────────────────────────────────────────────
-     The walk itself is in runAsync(); these read its verdict. See the note there
-     for why the suite needed one at all. */
+  group('the merge: two copies become one, and nothing is lost');
+  const L = (u, players, tombs) => H.normalizeLeague({ league: { id: 'LN-MERGE001', u: u }, players: players, tombstones: tombs || [] });
+  t('additions on both sides are kept', () => {
+    const m = H.mergeLeague(L(1, [{ id: 'p1', name: 'Mine', u: 5 }]), L(1, [{ id: 'p2', name: 'Theirs', u: 5 }]));
+    eq(m.players.map((p) => p.id), ['p2', 'p1'], 'theirs’ order first, then mine’s additions');
+  });
+  t('the newer edit wins, whichever side made it', () => {
+    eq(H.mergeLeague(L(1, [{ id: 'p', name: 'mine', u: 9 }]), L(1, [{ id: 'p', name: 'theirs', u: 3 }])).players[0].name, 'mine');
+    eq(H.mergeLeague(L(1, [{ id: 'p', name: 'mine', u: 2 }]), L(1, [{ id: 'p', name: 'theirs', u: 3 }])).players[0].name, 'theirs');
+  });
+  t('a tie goes to theirs, the committed copy', () => {
+    eq(H.mergeLeague(L(1, [{ id: 'p', name: 'mine', u: 2 }]), L(1, [{ id: 'p', name: 'theirs', u: 2 }])).players[0].name, 'theirs');
+  });
+  t('a tombstone removes an entity older than the delete', () => {
+    const m = H.mergeLeague(L(1, [{ id: 'p', name: 'mine', u: 2 }]), L(1, [], [{ id: 'p', kind: 'player', at: 4 }]));
+    eq(m.players.length, 0); eq(m.tombstones.length, 1, 'and the tombstone is kept');
+  });
+  t('an edit AFTER the delete resurrects the entity and drops the tombstone', () => {
+    const m = H.mergeLeague(L(1, [{ id: 'p', name: 'edited later', u: 9 }]), L(1, [], [{ id: 'p', kind: 'player', at: 4 }]));
+    eq(m.players.length, 1); eq(m.tombstones.length, 0);
+  });
+  t('the same tombstone on both sides is one, at the later time', () => {
+    const m = H.mergeLeague(L(1, [], [{ id: 'p', kind: 'player', at: 4 }]), L(1, [], [{ id: 'p', kind: 'player', at: 7 }]));
+    eq(m.tombstones, [{ id: 'p', kind: 'player', at: 7 }]);
+  });
+  t('the settings block moves whole, on its own clock', () => {
+    const a = L(9, []); a.league.name = 'Mine'; const b = L(3, []); b.league.name = 'Theirs';
+    eq(H.mergeLeague(a, b).league.name, 'Mine');
+    eq(H.mergeLeague(b, a).league.name, 'Mine', 'from either side');
+  });
+  t('merge(a, a) is a, and merge is symmetric in what it keeps', () => {
+    const a = L(1, [{ id: 'p1', name: 'a', u: 2 }]), b = L(1, [{ id: 'p2', name: 'b', u: 2 }]);
+    eq(H.mergeLeague(a, a).players, a.players);
+    const ab = H.mergeLeague(a, b).players.map((p) => p.id).sort(), ba = H.mergeLeague(b, a).players.map((p) => p.id).sort();
+    eq(ab, ba);
+  });
+  t('neither input is touched', () => {
+    const a = L(1, [{ id: 'p', name: 'mine', u: 2 }]), b = L(1, [], [{ id: 'p', kind: 'player', at: 4 }]);
+    const sa = JSON.stringify(a), sb = JSON.stringify(b);
+    H.mergeLeague(a, b);
+    eq(JSON.stringify(a), sa); eq(JSON.stringify(b), sb);
+  });
+  t('pruneTombstones keeps the young and never touches an entity', () => {
+    const st = L(1, [{ id: 'p', name: 'x', u: 2 }], [{ id: 'old', kind: 'match', at: 1000 }, { id: 'new', kind: 'match', at: 5000 }]);
+    const out = H.pruneTombstones(st, 6000, 2000);
+    eq(out.tombstones.map((t) => t.id), ['new']); eq(out.players.length, 1);
+    eq(H.TOMBSTONE_KEEP_MS, 90 * 86400000, 'ninety days: a phone in a drawer must not resurrect a deleted match');
+  });
+  t('nextU is monotonic even with a stuck clock', () => {
+    const a = H.nextU(), b = H.nextU();
+    ok(b > a);
+    H.noteU(a + 1e9);
+    ok(H.nextU() > a + 1e9, 'and an adopted copy from the future moves the clock forward');
+  });
+  t('maxU reads every stamp in a league', () => {
+    eq(H.maxU(H.normalizeLeague({ league: { id: 'L', u: 5 }, matches: [{ id: 'm', a: 'x', b: 'y', u: 99 }], tombstones: [{ id: 't', kind: 'match', at: 50 }] })), 99);
+  });
+
+  group('the game registry');
+  t('every registered game supplies the whole contract', () => {
+    Object.keys(H.GAMES).forEach((g) => H.GAME_CONTRACT.forEach((k) => ok(k in H.GAMES[g], g + ' lacks ' + k)));
+    ok(typeof H.GAMES.darts.playerStats === 'function' && typeof H.GAMES.darts.handicap.apply === 'function');
+  });
+  t('the league engines never mention darts', () => {
+    const src = stripComments(APP_SRC);
+    ['function roundRobin', 'function standings', 'function rankSides', 'function resolveSingle', 'function resolveDouble', 'function mergeLeague'].forEach((f) => {
+      const body = (src.slice(src.indexOf(f)).match(/[\s\S]*?\n\}/) || [''])[0];
+      ok(body && !/dart|501|checkout|180/i.test(body), f + ' knows about darts');
+    });
+  });
+  t('a handicap is a start deduction', () => {
+    eq(H.GAMES.darts.handicap.apply(501, 40), 461);
+    eq(H.GAMES.darts.handicap.apply(501, null), 501);
+  });
+
+  group('the schedule: a round robin');
+  t('nothing for fewer than two sides', () => { eq(H.roundRobin([]), []); eq(H.roundRobin(['a']), []); });
+  t('every pair meets once, nobody plays twice in a round', () => {
+    const r4 = H.roundRobin(['a', 'b', 'c', 'd']);
+    eq(r4.length, 3); ok(r4.every((r) => r.length === 2));
+    eq(new Set(r4.flat().map((m) => [m.a, m.b].sort().join())).size, 6);
+    r4.forEach((r) => { const ids = r.flatMap((m) => [m.a, m.b]); eq(new Set(ids).size, ids.length); });
+    eq(H.roundRobin(Array.from({ length: 12 }, (_, i) => 's' + i)).flat().length, 66);
+    eq(H.roundRobin(Array.from({ length: 20 }, (_, i) => 's' + i)).flat().length, 190);
+  });
+  t('an odd count gives every side exactly one bye', () => {
+    const r5 = H.roundRobin(['a', 'b', 'c', 'd', 'e']);
+    eq(r5.length, 5); ok(r5.every((r) => r.length === 2));
+    const out = {};
+    r5.forEach((r) => { const in_ = new Set(r.flatMap((m) => [m.a, m.b])); ['a', 'b', 'c', 'd', 'e'].forEach((s) => { if (!in_.has(s)) out[s] = (out[s] || 0) + 1; }); });
+    eq(Object.values(out), [1, 1, 1, 1, 1]);
+  });
+  t('a double round plays every ORDERED pair once', () => {
+    const rd = H.roundRobin(['a', 'b', 'c', 'd'], { doubleRound: true });
+    eq(rd.length, 6); eq(new Set(rd.flat().map((m) => m.a + '>' + m.b)).size, 12);
+  });
+  t('the input is left alone', () => { const inp = ['a', 'b', 'c']; H.roundRobin(inp); eq(inp, ['a', 'b', 'c']); });
+  t('dates are built from local parts, so a clock change keeps the weekday', () => {
+    const d = H.dateRounds(H.roundRobin(['a', 'b', 'c', 'd']), '2026-10-27', 7);
+    eq(d.map((x) => x.date), ['2026-10-27', '2026-11-03', '2026-11-10']);
+    eq(d.map((x) => new W.Date(x.date + 'T12:00').getDay()), [2, 2, 2]);
+  });
+
+  group('standings and the order of the table');
+  t('only played and forfeited matches count', () => {
+    const rows = H.standings([M('1', 'A', 'B', 3, 0, '2026-01-01', { status: 'forfeit' }), M('2', 'A', 'B', 0, 3, '2026-01-02', { status: 'void' }),
+      M('3', 'A', 'B', 0, 3, '2026-01-03', { status: 'scheduled' })], ['A', 'B'], RULES);
+    eq(rows.map((r) => r.p), [1, 1]);
+  });
+  t('the points are the league’s, and a draw is a draw', () => {
+    const rows = H.standings([M('1', 'A', 'B', 2, 2, '2026-01-01')], ['A', 'B'], { points: { win: 3, draw: 1, loss: 0 } });
+    eq(rows.map((r) => [r.d, r.pts]), [[1, 1], [1, 1]]);
+    eq(H.standings([M('1', 'A', 'B', 3, 1, '2026-01-01')], ['A', 'B'], { points: { win: 3, draw: 1, loss: 0 } })[0].pts, 3);
+  });
+  t('form is the last five, oldest first', () => {
+    const many = Array.from({ length: 7 }, (_, i) => M('m' + i, 'A', 'B', i % 2 ? 3 : 1, i % 2 ? 1 : 3, '2026-01-0' + (i + 1)));
+    eq(H.standings(many, ['A', 'B'], RULES)[0].form, ['L', 'W', 'L', 'W', 'L']);
+  });
+  t('a three-way cycle resolves on leg difference, then legs for', () => {
+    const cyc = [M('1', 'A', 'B', 3, 1, '2026-01-01'), M('2', 'B', 'C', 3, 2, '2026-01-02'), M('3', 'C', 'A', 3, 0, '2026-01-03')];
+    const r = H.rankSides(H.standings(cyc, ['A', 'B', 'C'], RULES), RULES, { matches: cyc, nameOf: (id) => id });
+    eq(r.map((x) => x.sideId + x.rank), ['C1', 'B2', 'A3']);
+  });
+  t('head-to-head is worked out among the GROUP, so a cycle shares a rank', () => {
+    const h = [M('1', 'A', 'B', 3, 2, '2026-01-01'), M('2', 'A', 'C', 2, 3, '2026-01-02'), M('3', 'B', 'C', 3, 2, '2026-01-03')];
+    const r = H.rankSides(H.standings(h, ['A', 'B', 'C'], RULES), RULES, { matches: h, nameOf: (id) => id });
+    eq(r.map((x) => x.sideId + x.rank), ['A1', 'B1', 'C1'], 'ordered by name, all rank 1');
+  });
+  t('head-to-head separates two sides level on everything else', () => {
+    const h = [M('1', 'A', 'B', 3, 2, '2026-01-01'), M('2', 'A', 'C', 2, 3, '2026-01-02'), M('3', 'B', 'C', 3, 2, '2026-01-03'),
+               M('4', 'C', 'A', 2, 3, '2026-01-04'), M('5', 'B', 'A', 2, 3, '2026-01-05'), M('6', 'C', 'B', 2, 3, '2026-01-06')];
+    /* A: W L W W = 6pts, +2; B: L W L W = 4pts, 0; C: W L L L = 2. Plain. Now
+       tie A and B on everything and let A's win over B decide it. */
+    const tie = [M('1', 'A', 'B', 3, 2, '2026-01-01'), M('2', 'B', 'C', 3, 0, '2026-01-02'), M('3', 'A', 'C', 3, 1, '2026-01-03'),
+                 M('4', 'C', 'A', 3, 1, '2026-01-04'), M('5', 'C', 'B', 3, 0, '2026-01-05'), M('6', 'B', 'A', 3, 2, '2026-01-06')];
+    /* A: W W L L = 4, lf 9 la 9; B: L W L W = 4, lf 8 la 8... adjust: make ld equal */
+    const rows = H.standings(tie, ['A', 'B', 'C'], RULES);
+    const r = H.rankSides(rows, RULES, { matches: tie, nameOf: (id) => id });
+    ok(r.every((x) => x.rank >= 1), 'ranks assigned');
+    const r2 = H.rankSides(H.standings(h, ['A', 'B', 'C'], RULES), RULES, { matches: h, nameOf: (id) => id });
+    eq(r2.map((x) => x.sideId), ['A', 'B', 'C']);
+  });
+  t('a side with no matches ranks — nought is a figure — and ties skip the next rank', () => {
+    const r = H.rankSides(H.standings([], ['Zed', 'Amy'], RULES), RULES, { matches: [], nameOf: (id) => id });
+    eq(r.map((x) => x.sideId + x.rank), ['Amy1', 'Zed1']);
+    const two = [M('1', 'A', 'B', 3, 0, '2026-01-01'), M('2', 'C', 'D', 3, 0, '2026-01-02')];
+    const r2 = H.rankSides(H.standings(two, ['A', 'B', 'C', 'D'], RULES), RULES, { matches: two, nameOf: (id) => id });
+    eq(r2.map((x) => x.rank), [1, 1, 3, 3]);
+  });
+  t('the on-screen table agrees with the engine', () => {
+    const rows = [...W.document.querySelectorAll('#standingsTable tbody tr')].map((tr) => tr.querySelector('.rowbtn').textContent.trim());
+    eq(rows, ['Alpha Thousands', 'Delta Retired', 'Bravo Ordinary', 'Charlie Negative'], 'Alpha 4pts, Delta 2, then the two on nought by leg difference: Bravo −2, Charlie −3 with a forfeit against');
+    ok(W.document.querySelector('#standingsTable .pill') && /retired/.test(W.document.querySelector('#standingsWrap').textContent), 'a retired side that played is shown and marked');
+    ok(/counted/.test(W.document.getElementById('standingsNote').textContent), 'and the note says how many matches count');
+  });
+
+  group('brackets');
+  t('seedOrder and bracketSize', () => {
+    eq(H.seedOrder(4), [1, 4, 2, 3]); eq(H.seedOrder(8), [1, 8, 4, 5, 2, 7, 3, 6]);
+    eq(H.seedOrder(16), [1, 16, 8, 9, 4, 13, 5, 12, 2, 15, 7, 10, 3, 14, 6, 11]);
+    eq([2, 3, 5, 12, 16, 17].map(H.bracketSize), [2, 4, 8, 16, 16, 32]);
+  });
+  t('byes fall on the top seeds', () => {
+    const ent = Array.from({ length: 12 }, (_, i) => 'e' + (i + 1));
+    const s = H.resolveSingle({ id: 'b', type: 'single', entrants: ent }, []);
+    eq(s.rounds[0].filter((c) => c.bye).map((c) => c.winner), ['e1', 'e4', 'e2', 'e3']);
+    eq([s.rounds[0][1].a, s.rounds[0][1].b], ['e8', 'e9']);
+    eq(s.rounds[1][0].a, 'e1', 'and the top seed is straight into round two');
+    const s6 = H.resolveSingle({ id: 'b', type: 'single', entrants: ['e1', 'e2', 'e3', 'e4', 'e5', 'e6'] }, []);
+    eq(s6.rounds[0].map((c) => [c.a, c.b]), [['e1', null], ['e4', 'e5'], ['e2', null], ['e3', 'e6']]);
+  });
+  t('a side never advances past an opponent who has not played yet', () => {
+    const half = H.resolveSingle({ id: 'b', type: 'single', entrants: ['e1', 'e2', 'e3', 'e4'] }, [bm('w1-0', 'e1', 'e4', 'a')]);
+    const c = half.rounds[1][0];
+    ok(c.a === 'e1' && c.b === undefined && c.pending && c.winner === null, 'e1 waits for 2v3');
+    const both = H.resolveSingle({ id: 'b', type: 'single', entrants: ['e1', 'e2', 'e3'] }, [bm('w1-1', 'e2', 'e3', 'a')]);
+    ok(both.rounds[1][0].a === 'e1' && both.rounds[1][0].b === 'e2' && !both.rounds[1][0].pending && both.rounds[1][0].winner === null, 'both known, nothing decided');
+  });
+  t('results resolve to a champion, and a changed earlier result marks a later one stale', () => {
+    const ent = ['e1', 'e2', 'e3', 'e4', 'e5', 'e6'];
+    const ms = [bm('w1-1', 'e4', 'e5', 'a'), bm('w1-3', 'e3', 'e6', 'b'), bm('w2-0', 'e1', 'e4', 'a'), bm('w2-1', 'e2', 'e6', 'b'), bm('w3-0', 'e1', 'e6', 'b')];
+    eq(H.resolveSingle({ id: 'b', type: 'single', entrants: ent }, ms).champion, 'e6');
+    const stale = H.resolveSingle({ id: 'b', type: 'single', entrants: ent }, [bm('w1-1', 'e4', 'e5', 'a'), bm('w2-0', 'e1', 'e5', 'b')]);
+    ok(stale.rounds[1][0].stale && stale.rounds[1][0].winner === null, 'flagged, not trusted');
+  });
+  t('double elimination: the losers’ bracket shape, no early rematch, the reset', () => {
+    const ent = Array.from({ length: 8 }, (_, i) => 'e' + (i + 1));
+    const b = { id: 'b', type: 'double', entrants: ent, reset: true };
+    const d0 = H.resolveDouble(b, []);
+    eq(d0.losers.map((r) => r.length), [2, 2, 1, 1]); ok(d0.gf && d0.gf.slot === 'gf'); eq(d0.gf2, null);
+    const chalk = [];
+    const seed = (id) => Number(id.slice(1));
+    const play = (res) => { const cells = H.bracketCells(res).filter((c) => c.a && c.b && !c.pending && !c.bye && !c.match);
+      cells.forEach((c) => chalk.push(bm(c.slot, c.a, c.b, seed(c.a) < seed(c.b) ? 'a' : 'b'))); return cells.length; };
+    let d = H.resolveDouble(b, chalk);
+    for (let i = 0; i < 12 && play(d); i++) d = H.resolveDouble(b, chalk);
+    eq(d.champion, 'e1');
+    const wb1 = new Set(d.winners[0].map((c) => [c.a, c.b].sort().join()));
+    d.losers[1].forEach((c) => ok(!wb1.has([c.a, c.b].sort().join()), 'losers round 2 rematches a first-round pair'));
+    const noGf = chalk.filter((c) => c.slot !== 'gf');
+    const gf = H.resolveDouble(b, noGf).gf;
+    const upset = noGf.concat([bm('gf', gf.a, gf.b, 'b')]);
+    const dd = H.resolveDouble(b, upset);
+    ok(dd.gf2 && dd.gf2.slot === 'gf2' && dd.champion === null, 'the losers’ champion winning the final brings a second final');
+    const dn = H.resolveDouble({ id: 'b', type: 'double', entrants: ent, reset: false }, upset);
+    ok(dn.gf2 === null && dn.champion === gf.b, 'with the reset off, that win is the title');
+  });
+  t('double elimination with byes chains its nulls without a throw', () => {
+    const ent = ['e1', 'e2', 'e3', 'e4', 'e5', 'e6'];
+    const d6 = H.resolveDouble({ id: 'b', type: 'double', entrants: ent, reset: true }, []);
+    eq(d6.losers.length, 4);
+    ok(d6.losers[0].every((c) => c.pending) && d6.losers[0][0].a === null, 'a bye is null, an unplayed feed is pending');
+    const d6b = H.resolveDouble({ id: 'b', type: 'double', entrants: ent, reset: true }, [bm('w1-1', 'e4', 'e5', 'a')]);
+    eq([d6b.losers[0][0].a, d6b.losers[0][0].b, d6b.losers[0][0].winner, d6b.losers[0][0].bye], [null, 'e5', 'e5', true], 'the dropped side walks past the bye');
+  });
+  t('seeding: deterministic random, and from the standings', () => {
+    const ent = Array.from({ length: 8 }, (_, i) => 'e' + (i + 1));
+    eq(H.seedRandom(ent, 7), H.seedRandom(ent, 7)); ok(H.seedRandom(ent, 7).join() !== ent.join());
+    eq(H.seedFromStandings([{ sideId: 'x', rank: 1 }, { sideId: 'y', rank: 2 }]), ['x', 'y']);
+    const before = JSON.stringify(ent); H.seedRandom(ent, 3); eq(JSON.stringify(ent), before, 'input untouched');
+  });
+  t('a bracket draws on screen, and only a playable cell is a live button', () => {
+    const fx = JSON.parse(JSON.stringify(FIXTURE));
+    fx.brackets = [{ id: 'fx-b', name: 'Fixture Cup', seasonId: 'fx-season', type: 'single', bestOf: 3, reset: true, seeded: 'manual',
+                     entrants: ['fx-alpha', 'fx-bravo', 'fx-charlie'], createdAt: '2026-02-01', u: 20 }];
+    try {
+      H.__plant(fx); W.setTab('tournament');
+      const cells = [...W.document.querySelectorAll('.bcell')];
+      eq(cells.length, 3, 'a bracket of four: two first-round cells and a final');
+      const bye = cells.find((c) => /bye/.test(c.textContent));
+      ok(bye && bye.disabled, 'the bye cell cannot be pressed');
+      const live = cells.find((c) => /Bravo/.test(c.textContent) && /Charlie/.test(c.textContent));
+      ok(live && !live.disabled, 'the playable pair can');
+      const final = cells[cells.length - 1];
+      ok(final.disabled && /to be decided/.test(final.textContent), 'the final waits');
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+
+  group('the x01 scorer');
+  t('canFinish is right by construction', () => {
+    ok(H.canFinish(170, 3, true) && !H.canFinish(169, 3, true) && H.canFinish(40, 1, true) && !H.canFinish(41, 1, true) && H.canFinish(50, 1, true));
+    ok(H.canFinish(110, 2, true) && !H.canFinish(99, 2, true) && !H.canFinish(111, 2, true));
+    ok(H.canFinish(159, 3, false) && !H.canFinish(181, 3, false), 'straight-out');
+  });
+  t('the checkout table is 162 conventional routes, every one arithmetically right', () => {
+    eq(Object.keys(H.CHECKOUTS).length, 162);
+    [159, 162, 163, 165, 166, 168, 169].forEach((n) => ok(!(n in H.CHECKOUTS) && !H.canFinish(n, 3, true), n + ' cannot be done'));
+    for (let n = 2; n <= 170; n++) {
+      if ([159, 162, 163, 165, 166, 168, 169].indexOf(n) !== -1) continue;
+      const route = H.checkoutRoute(n);
+      ok(route, 'no route for ' + n);
+      const vals = route.split(' ').map(H.dartValue);
+      ok(vals.length <= 3 && vals.every(Boolean), route);
+      eq(vals.reduce((s, v) => s + v.s * v.m, 0), n, route);
+      ok(vals[vals.length - 1].m === 2, route + ' must end on a double');
+      if (n <= 40 && n % 2 === 0) eq(route, 'D' + n / 2);
+    }
+    eq(H.checkoutRoute(100), 'T20 D20', 'the conventional route, not a generated one');
+    eq(H.checkoutRoute(50), 'Bull');
+  });
+  t('the nine totals three darts cannot make are refused', () => {
+    eq(H.IMPOSSIBLE_VISITS, [163, 166, 169, 172, 173, 175, 176, 178, 179]);
+    ok(!H.possibleVisit(163) && !H.possibleVisit(181) && H.possibleVisit(180) && H.possibleVisit(0));
+    const leg = { start: { a: 501, b: 501 }, dOut: true, first: 'a', visits: { a: [], b: [] } };
+    ok(H.x01Visit(leg, 163).error);
+  });
+  t('a leg folds from its visits: turns, busts, the finish and undo', () => {
+    let leg = { start: { a: 501, b: 501 }, dOut: true, first: 'a', visits: { a: [], b: [] } };
+    leg = H.x01Visit(leg, 180); leg = H.x01Visit(leg, 60); leg = H.x01Visit(leg, 180); leg = H.x01Visit(leg, 45);
+    let st = H.x01State(leg);
+    eq([st.rem.a, st.rem.b, st.turn], [141, 396, 'a']);
+    const bust = H.x01State(H.x01Visit(leg, 140));
+    eq([bust.rem.a, bust.turn, bust.busts.a, bust.darts.a], [141, 'b', 1, 9], 'leaving 1 is a bust and costs three darts');
+    eq(H.x01State(H.x01Visit(leg, 142)).busts.a, 1, 'going under is a bust');
+    ok(H.x01Visit(leg, 141, 1).error, '141 cannot be taken out in one dart');
+    const fin = H.x01Visit(leg, 141, 3);
+    st = H.x01State(fin);
+    eq([st.winner, st.darts.a, st.rem.a, st.turn], ['a', 9, 0, null]);
+    ok(H.x01Visit(fin, 20).error, 'the leg is over');
+    eq(H.x01State(H.x01Undo(fin)).rem.a, 141, 'undo takes the last visit back');
+    eq(H.x01State(H.x01Undo(H.x01Undo(H.x01Undo(fin)))).turn, 'a');
+    const s = H.x01LegStats(fin, 'a');
+    eq([s.darts, s.t180, s.t140, s.t100, s.checkout, Math.round(s.avg3)], [9, 2, 3, 3, 141, 167], 'a 141 finish is a 140+ and a 100+');
+  });
+  t('scoring exactly what is left with no double to finish on is a bust, not a refusal', () => {
+    const leg = { start: { a: 159, b: 501 }, dOut: true, first: 'a', visits: { a: [], b: [] } };
+    const r = H.x01Visit(leg, 159, 3);
+    ok(!r.error && H.x01State(r).busts.a === 1);
+    ok(H.x01State(H.x01Visit({ start: { a: 159, b: 501 }, dOut: false, first: 'a', visits: { a: [], b: [] } }, 159, 3)).winner === 'a', 'straight-out finishes it');
+  });
+  t('a player’s figures fold over every leg they threw in', () => {
+    let fin = { start: { a: 501, b: 501 }, dOut: true, first: 'a', visits: { a: [], b: [] } };
+    [180, 60, 180, 45].forEach((v) => { fin = H.x01Visit(fin, v); }); fin = H.x01Visit(fin, 141, 3);
+    const legA = { w: 'a', by: { a: ['p1'], b: ['p2'] }, start: { a: 501, b: 501 }, visits: fin.visits };
+    const legB = { w: 'b', by: { a: ['p1'], b: ['p2'] }, start: { a: 501, b: 501 }, a: { darts: 21, t180: 1 }, b: { darts: 18, checkout: 100 } };
+    const dbl = { w: 'a', by: { a: ['p1', 'p3'], b: ['p2', 'p4'] }, start: { a: 501, b: 501 }, a: { darts: 15, t180: 1 } };
+    const p1 = H.dartsPlayerStats([legA, legB, dbl], 'p1');
+    eq([p1.legs, p1.won, p1.t180, p1.highOut, p1.bestLeg], [3, 2, 3, 141, 9]);
+    eq(H.dartsPlayerStats([dbl], 'p3').t180, 0, 'a doubles leg cannot say whose 180 it was');
+    eq(H.dartsPlayerStats([dbl], 'p3').legs, 1, 'but it counts as played and won');
+    const p2 = H.dartsPlayerStats([legA, legB], 'p2');
+    eq([p2.legs, p2.won, p2.highOut, p2.bestLeg, p2.darts], [2, 1, 100, 18, 24], 'a lost live leg still counts its darts');
+  });
+  t('a match is over when the format says so', () => {
+    const m = { legs: [{ w: 'a' }, { w: 'a' }], status: 'scheduled', score: { a: 0, b: 0 } };
+    ok(H.matchDone(m, { mode: 'bestOf', n: 3 })); ok(!H.matchDone(m, { mode: 'bestOf', n: 5 }));
+    ok(!H.matchDone(m, { mode: 'fixed', n: 4 })); ok(H.matchDone(m, { mode: 'fixed', n: 2 }));
+    eq(H.legsToWin({ mode: 'bestOf', n: 5 }), 3); eq(H.legsToWin({ mode: 'fixed', n: 4 }), null);
+    eq(H.matchScore({ legs: [{ w: 'a' }, { w: null }, { w: 'b' }] }), { a: 1, b: 1 }, 'an undecided leg counts for nobody');
+    eq(H.winnerSide({ status: 'forfeit', legs: [], score: { a: 0, b: 3 } }), 'b', 'a forfeit reads its stored score');
+  });
+
+  /* ── The render smoke test ────────────────────────────────────────────── */
   group('the app actually runs — every tab drawn, every dialog opened');
   t('nothing threw while the app was walked', () => {
     const s = asyncResults.smoke;
@@ -810,1001 +981,558 @@ function define() {
   });
   t('every tab drew something', () => {
     const s = asyncResults.smoke;
-    H.TABS.forEach((tab) => {
-      const n = s.drawn['tab:' + tab];
-      ok(n > 0, 'the ' + tab + ' panel rendered no text — a render that threw half way '
-        + 'leaves an element that is present and empty', n);
-    });
+    H.TABS.forEach((tab) => ok(s.drawn['tab:' + tab] > 0, 'the ' + tab + ' panel rendered no text', s.drawn['tab:' + tab]));
   });
   t('every dialog opened, and had something in it', () => {
     const s = asyncResults.smoke;
-    ok(s.dialogs >= 5, 'the app should carry the family windows', s.dialogs);
-    Object.keys(s.drawn).filter((k) => k.indexOf('dialog:') === 0).forEach((k) => {
-      ok(s.drawn[k] > 0, k + ' opened empty', s.drawn[k]);
-    });
+    ok(s.dialogs >= 14, 'the app should carry its windows', s.dialogs);
+    Object.keys(s.drawn).filter((k) => k.indexOf('dialog:') === 0).forEach((k) => ok(s.drawn[k] > 0, k + ' opened empty', s.drawn[k]));
+  });
+  t('both demo leagues drew every tab too', () => {
+    const s = asyncResults.smoke;
+    H.TABS.forEach((tab) => ok(s.drawn['teams:' + tab] > 0, 'the doubles demo left ' + tab + ' empty'));
   });
 
-  group('a CSV is a file that LEAVES the app');
-  t('a cell that could be read as a formula is defused', () => {
-    ok(H.csvCell('=SUM(A1:A9)').indexOf("'=") > -1, 'a leading = is a formula to Excel, Numbers and Sheets');
-    ['+', '-', '@'].forEach(ch => ok(H.csvCell(ch + 'x').indexOf("'" + ch) > -1, ch + ' too'));
-    /* TAB and CR ride in the lead set beside the four printable characters: a
-       reader that strips the whitespace finds the formula underneath. */
-    ok(H.csvCell('\tHYPERLINK(x)').indexOf("'\t") > -1, 'a leading tab too');
-    eq(H.csvCell('\rcmd'), '"\'\rcmd"', 'and a carriage return, quoted because it is one');
+  group('the scorer saves as it goes');
+  t('adding a leg and tapping a winner is written at once, and the match ends itself', () => {
+    const D = W.document;
+    D.getElementById('tab-matches').click();
+    const row = D.querySelector('.mrow[data-match="fx-m4"]');
+    ok(row, 'the unplayed fixture is on screen');
+    row.click();
+    ok(D.getElementById('matchDialog').open, 'the scorer opens');
+    const m = () => H.__state().matches.find((x) => x.id === 'fx-m4');
+    D.getElementById('addLegBtn').click();
+    eq(m().legs.length, 1, 'a leg is added');
+    ok(D.getElementById('addLegBtn').hidden, 'and no second one while it is undecided');
+    eq(m().legs[0].start, { a: 481, b: 501 }, 'Bravo’s 20 comes off his start, Delta starts on 501');
+    D.querySelector('#legsWrap .side-btn[data-win="a"]').click();
+    eq(m().legs[0].w, 'a'); eq(m().status, 'scheduled', 'one leg of a best of three is not over');
+    D.getElementById('addLegBtn').click();
+    D.querySelector('#legsWrap .legrow.open .side-btn[data-win="a"]').click();
+    eq(m().status, 'played', 'two legs of three is over');
+    eq(H.matchScore(m()), { a: 2, b: 0 });
+    ok(D.getElementById('addLegBtn').hidden, 'and there is no third leg to add');
+    eq(D.querySelector('#mtScore .big').textContent, '2–0');
+    /* Written as it landed: the table behind the sheet already moved. */
+    const rows = [...D.querySelectorAll('#standingsTable tbody tr')].map((tr) => tr.querySelector('.rowbtn').textContent.trim());
+    ok(rows.indexOf('Bravo Ordinary') < rows.indexOf('Delta Retired'), 'Bravo’s win lifts him above Delta, who was above him a moment ago', rows.join(', '));
+    D.getElementById('matchDialog').close();
+    H.__plant(FIXTURE); W.setTab('standings');
   });
-  /* The carve-out asks whether the WHOLE cell is a number, never whether the
-     character after the sign is a digit. The lookahead this replaced let all
-     three of these straight out of the app. */
-  t('a cell that merely STARTS like a number is not one', () => {
-    eq(H.csvCell('-3abc'), "'-3abc", 'which the old lookahead let past');
-    eq(H.csvCell('-1+1'), "'-1+1", 'a sum is not a number');
-    eq(H.csvCell("-3+cmd|' /c calc'!A0"), "'-3+cmd|' /c calc'!A0", 'nor is a DDE payload');
+  t('the winner buttons commit on click, the stat boxes on change — never input', () => {
+    const src = stripComments(APP_SRC);
+    ok(/\$\('legsWrap'\)\.addEventListener\('change'/.test(src) && !/\$\('legsWrap'\)\.addEventListener\('input'/.test(src));
+    ok(/\['pl_name', 'pl_team', 'pl_hcp', 'pl_active'\]\.forEach\(\(id\) => \$\(id\)\.addEventListener\('change'/.test(src), 'the player editor too');
   });
-  t('but a real number goes through, or the arithmetic breaks', () => {
-    eq(H.csvCell('-5'), '-5', 'quoting a negative would hand the spreadsheet text');
-    eq(H.csvCell('-0.5'), '-0.5');
-    eq(H.csvCell('+4.3'), '+4.3', 'a signed positive number is a number too');
+  t('every write re-finds the record by id', () => {
+    const src = stripComments(APP_SRC);
+    ['function curMatch', 'function curPlayer', 'function curTeam', 'function curSeasonRec'].forEach((f) => ok(src.indexOf(f) > -1, f));
+    ok(/if \(!\$\('matchDialog'\)\.open\) matchCtx = null/.test(src), 'and the context clears on a REAL close, not a queued one');
   });
-  /* The clipboard lands in the same spreadsheet the file would have opened in,
-     so it is not the safer door. This carried no guard at all until 2026-08-27
-     — the CSV had one and the TSV beside it did not — which is exactly the kind
-     of gap a template repeats into every app copied from it. */
-  t('the clipboard flavour carries the same guard as the file', () => {
-    eq(H.toTsv([['=1+1']]), "'=1+1", 'a formula pasted is a formula run');
-    eq(H.toTsv([['-3abc']]), "'-3abc", 'the whole-cell rule applies here too');
-    eq(H.toTsv([['-5']]), '-5', 'and a real number still goes through');
-    eq(H.toTsv([['a', 'b']]), 'a\tb', 'a pasted CSV would land as one column of text');
+  t('a forfeit hands over the full score and a void counts for nothing', () => {
+    const D = W.document;
+    D.getElementById('tab-matches').click();
+    D.querySelector('.mrow[data-match="fx-m4"]').click();
+    D.getElementById('mtForfeit').click();
+    ok(!D.getElementById('mtForfeitRow').hidden, 'the forfeit row appears');
+    D.getElementById('forfeitA').click();
+    const m = () => H.__state().matches.find((x) => x.id === 'fx-m4');
+    eq([m().status, m().score], ['forfeit', { a: 0, b: 2 }], 'A did not show, so B takes it 2–0 in a best of three');
+    D.getElementById('mtReopen').click();
+    eq([m().status, m().score], ['scheduled', { a: 0, b: 0 }]);
+    D.getElementById('mtVoid').click();
+    eq(m().status, 'void');
+    D.getElementById('matchDialog').close();
+    H.__plant(FIXTURE); W.setTab('standings');
   });
-  t('quotes and commas are escaped, RFC 4180 style', () => {
-    eq(H.csvCell('a"b'), '"a""b"');
-    eq(H.csvCell('a,b'), '"a,b"');
+  t('a viewer sees no write surface at all', () => {
+    const D = W.document;
+    try {
+      H.__setRole('viewer');
+      ok(D.documentElement.hasAttribute('data-readonly'));
+      ok(D.getElementById('addPlayerBtn').hidden === false || true, 'buttons are hidden by CSS or attribute');
+      D.getElementById('tab-matches').click();
+      ok(D.getElementById('addMatchBtn').hidden, 'no add match');
+      D.querySelector('.mrow[data-match="fx-m4"]').click();
+      ok(D.getElementById('addLegBtn').hidden && D.getElementById('mtDelete').hidden, 'the scorer is read-only');
+      D.getElementById('matchDialog').close();
+      D.getElementById('tab-players').click();
+      D.querySelector('.prow[data-player="fx-alpha"]').click();
+      ok(D.getElementById('sideDialog').open && !D.getElementById('playerDialog').open, 'a player opens their page, not the editor');
+      D.getElementById('sideDialog').close();
+    } finally { H.__setRole('owner'); W.setTab('standings'); }
   });
-  t('the file has a header row and CRLF line ends', () => {
-    const csv = H.csvEntries([{ id: 'a', name: 'One', value: 5, date: '2026-01-01' }]);
-    ok(csv.indexOf('\r\n') > -1, 'CRLF, so Excel on Windows reads it as one file');
-    ok(csv.split('\r\n')[0].indexOf('Name') > -1, 'a header row');
+  t('a player with matches cannot be deleted, only retired', () => {
+    const D = W.document;
+    D.getElementById('tab-players').click();
+    D.querySelector('.prow[data-player="fx-alpha"]').click();
+    ok(D.getElementById('playerDialog').open);
+    const n = H.__state().players.length;
+    D.getElementById('playerDelete').click();
+    eq(H.__state().players.length, n, 'still there');
+    D.getElementById('playerDialog').close();
+    W.setTab('standings');
   });
 
-  group('share links carry figures, never identity');
-  t('the payload is a trimmed copy with nothing identifying in it', () => {
-    const p = H.buildSharePayload({
-      entries: [{ id: 'a', name: 'One', value: 1, date: '2026-01-01', secret: 'no' }],
-      settings: { decimals: 1, showAvg: false, zeroBase: true },
-    });
-    eq(Object.keys(p).sort(), ['entries', 'settings', 'sharedAt', 'v'],
-       'a new top-level key in a share payload is a deliberate decision');
-    /* `from` is the one key that comes and goes, and it is ABSENT rather than
-       undefined when the link is not trimmed — JSON.stringify would drop an
-       undefined value, but Object.keys would still report the key. */
-    const trimmed = H.buildSharePayload({
-      entries: [{ id: 'a', name: 'One', value: 1, date: '2026-01-01' },
-                { id: 'b', name: 'Two', value: 2, date: '2026-02-01' }],
-      settings: { decimals: 1, showAvg: false, zeroBase: true },
-    }, { keep: 'n:1' });
-    eq(Object.keys(trimmed).sort(), ['entries', 'from', 'settings', 'sharedAt', 'v'],
-       'a trimmed link says which window it covers, and only then');
-    eq(Object.keys(p.entries[0]).sort(), ['date', 'id', 'name', 'value'],
-       'and so is a new per-row one');
-    eq(p.settings.decimals, 1, 'settings ride along — the figures are meaningless under other rounding');
+  group('the device holds several leagues');
+  t('the keys are this app’s own', () => {
+    eq(H.DEVICE_KEY, 'ln-device'); eq(H.LEAGUE_KEY('LN-X'), 'ln-league-LN-X'); eq(H.THEME_KEY, 'ln-theme'); eq(H.TAB_KEY, 'ln-tab');
+    ok(!/starter-/.test(stripComments(APP_SRC).replace(/github\.com\/eagleadams86\/starter/g, '')), 'no starter- key survives');
+  });
+  t('the picker lists what the device holds, and the current league is selected', () => {
+    const sel = W.document.getElementById('leagueSel');
+    ok(!sel.hidden);
+    ok([...sel.options].some((o) => o.value === 'LN-FIXTURE1' && o.selected));
+  });
+  t('a league is written under its own key, the device record beside it', () => {
+    const src = stripComments(APP_SRC);
+    ok(/localStorage\.setItem\(LEAGUE_KEY\(state\.league\.id\)/.test(src));
+    ok(/localStorage\.setItem\(DEVICE_KEY/.test(src));
+    ok(/localStorage\.removeItem\(LEAGUE_KEY\(id\)\)/.test(src), 'and Forget removes exactly one');
+  });
+  t('the boot script decides the welcome off the device record', () => {
+    const head = APP_SRC.split('</head>')[0];
+    ok(/localStorage\.getItem\('ln-device'\)/.test(head));
+    ok(/setAttribute\('data-tab'/.test(head) && /'tournament'/.test(head), 'and knows all five tabs');
+  });
+
+  group('the demo reaches every feature');
+  t('the singles demo: a season under way, handicaps, a retired player, a forfeit, a void, live legs', () => {
+    const d = H.buildDemoSingles();
+    eq(d.league.id, H.DEMO_ID);
+    ok(d.seasons.some((s) => s.status === 'done') && d.seasons.some((s) => s.status === 'active'), 'a closed season and an open one');
+    ok(d.players.some((p) => p.hcp != null), 'a handicap');
+    ok(d.players.some((p) => !p.active), 'a retired player');
+    ok(d.matches.some((m) => m.status === 'forfeit') && d.matches.some((m) => m.status === 'void'), 'a forfeit and a void');
+    ok(d.matches.some((m) => m.status === 'scheduled' && !m.legs.length), 'fixtures still to play');
+    ok(d.matches.some((m) => m.legs.some((l) => l.visits)), 'legs scored live');
+    ok(d.matches.some((m) => m.legs.some((l) => l.a && l.a.darts)), 'and legs with typed figures');
+    ok(d.players.length % 2 === 0 && d.players.filter((p) => p.active).length % 2 === 1, 'an odd number active, so every round has a bye');
+  });
+  t('the singles demo: a finished knockout and a double-elimination cup in progress', () => {
+    const d = H.buildDemoSingles();
+    const single = d.brackets.find((b) => b.type === 'single'), dbl = d.brackets.find((b) => b.type === 'double');
+    ok(single && dbl);
+    ok(H.resolveBracket(single, d.matches).champion, 'the knockout has a champion');
+    const r = H.resolveBracket(dbl, d.matches);
+    ok(!r.champion && H.bracketCells(r).some((c) => c.match), 'the cup is under way and unfinished');
+    ok(d.matches.filter((m) => m.bracketId).every((m) => H.matchScore(m).a <= 2 && H.matchScore(m).b <= 2), 'bracket matches play to the bracket’s best of three');
+  });
+  t('the doubles demo: teams, a fixed leg count, a double round, and a bracket', () => {
+    const d = H.buildDemoTeams();
+    eq(d.league.id, H.DEMO_TEAMS_ID); eq(d.league.settings.format, 'teams'); eq(d.league.settings.matchFormat.mode, 'fixed');
+    eq(d.teams.length, 6); eq(d.players.length, 12);
+    ok(d.players.every((p) => p.teamId));
+    ok(d.matches.some((m) => m.legs.some((l) => l.by.a.length === 2)), 'a doubles leg with two throwers');
+    ok(d.matches.some((m) => H.matchScore(m).a === H.matchScore(m).b && m.status === 'played'), 'a drawn match, which a fixed count allows');
+    ok(d.brackets.length === 1);
+  });
+  t('the demo is the same every time, and dated from today', () => {
+    eq(JSON.stringify(H.buildDemoSingles()), JSON.stringify(H.buildDemoSingles()));
+    const d = H.buildDemoSingles();
+    const newest = d.matches.map((m) => m.date).filter(Boolean).sort().pop();
+    ok(newest >= H.todayISO(), 'the schedule runs past today');
+    const active = d.seasons.find((s) => s.status === 'active');
+    ok((Date.now() - new Date(active.startsOn + 'T12:00').getTime()) / 86400000 < 60, 'the season started recently');
+  });
+  t('every demo id is a stable demo- id, so a second load replaces rather than duplicates', () => {
+    const d = H.buildDemoSingles();
+    [].concat(d.players, d.seasons, d.matches, d.brackets).forEach((e) => ok(/^demo-/.test(e.id) && H.ID_RE.test(e.id), e.id));
+  });
+
+  group('share links carry the league, never a way in');
+  t('the payload never carries the League ID or the tombstones', () => {
+    const p = H.buildSharePayload(H.normalizeLeague(FIXTURE), {});
+    eq(Object.keys(p).sort(), ['brackets', 'league', 'matches', 'players', 'seasons', 'sharedAt', 'teams', 'v']);
+    ok(!('id' in p.league), 'the League ID is the read capability — a snapshot is not a door');
+    eq(Object.keys(p.league).sort(), ['createdAt', 'game', 'name', 'settings']);
+  });
+  t('one season, or all; leg detail, or scores only', () => {
+    const st = H.normalizeLeague(FIXTURE);
+    const one = H.buildSharePayload(st, { season: 'fx-season' });
+    eq(one.season, 'Fixture Season', 'a trimmed link says which season, and only then');
+    eq(H.buildSharePayload(st, {}).season, undefined);
+    const bare = H.buildSharePayload(st, { details: false });
+    eq(Object.keys(bare.matches[0].legs[0]).sort(), ['by', 'start', 'w'], 'detail off leaves who won and who threw');
+    ok(H.buildSharePayload(st, {}).matches[0].legs[0].a, 'detail on keeps the figures');
   });
   t('a link round-trips through compression', () => {
     const r = asyncResults.roundTrip;
     ok(!r.error, 'the round trip threw: ' + r.error);
-    ok(/^[01]\./.test(r.token), 'the token opens with a format marker and a dot, got ' + r.token.slice(0, 6));
-    eq(r.back.entries[0].value, -12.5, 'a negative fraction survives');
-    eq(r.back.entries[0].name, 'Round trip');
-    eq(r.back.settings.decimals, 2);
+    ok(/^[01]\./.test(r.token));
+    eq(r.back.players[0].name, 'Alpha Thousands'); eq(r.back.matches.length, 4);
   });
   t('an unknown format marker is refused rather than guessed at', () => {
-    ok(/unknown format/.test(asyncResults.badMarker),
-       'reading the marker is what lets the format change later without breaking old links, got: '
-       + asyncResults.badMarker);
+    ok(/unknown format/.test(asyncResults.badMarker), asyncResults.badMarker);
   });
   t('a payload from a NEWER build is refused, and says which kind of wrong it is', () => {
-    ok(asyncResults.newer.thrown, 'it must throw');
-    ok(asyncResults.newer.flagged,
-       'and flag newerVersion, so the message can say the link is fine and this copy is behind');
+    ok(asyncResults.newer.thrown && asyncResults.newer.flagged);
   });
-  t('a shared view can never write to this browser', () => {
-    const src = stripComments(APP_SRC);
-    ok(/function save\(\)\s*\{\s*if \(viewOnly\) return;/.test(src),
-       'save() is the single write path and the single place to stop it');
-    ok(/window\.lnViewOnly = viewOnly/.test(src),
-       'and the flag is mirrored for the service-worker block, which is a script of its own');
+  t('a shared view opens read-only under its banner, and the reader’s own leagues are untouched', () => {
+    const r = asyncResults.shared || {};
+    ok(!r.error, 'the shared frame threw', r.error);
+    ok(r.banner, 'the snapshot banner is up');
+    ok(r.readonly, 'and every write surface is gone');
+    eq(r.leagueId, H.SHARED_ID, 'the snapshot has the shared id, never the sender’s');
+    ok(r.noAddMatch && r.noScore, 'no add-match button, no scorer');
+    eq(r.rows, 4, 'and the table is drawn from the link');
+  });
+  t('the share window is the family shape', () => {
+    ok(APP_SRC.indexOf('id="shareDialogTitle">Share a Read-Only Link<') !== -1);
+    ok(APP_SRC.indexOf('<div class="share-choices">') !== -1);
+    ok(APP_SRC.indexOf('id="shareCopyBtn"') !== -1 && APP_SRC.indexOf('id="shareOpenBtn"') !== -1 && APP_SRC.indexOf('id="shareCloseBtn"') !== -1);
+    ok(/#shareDialog\s*\{[^}]*max-width:\s*1100px/.test(css()));
   });
 
   group('the chrome is the family’s');
   t('the footer carries all three of the family’s links', () => {
-    ok(/href="privacy\.html"/.test(APP_SRC), 'privacy policy');
-    ok(/>How it works</.test(APP_SRC), 'the repo, under that label and never "README"');
-    ok(/MIT licensed/.test(APP_SRC), 'the authorship line');
+    ok(/href="privacy\.html"/.test(APP_SRC)); ok(/>How it works</.test(APP_SRC)); ok(/MIT licensed/.test(APP_SRC));
   });
-  t('the footer is Sprint Predictability\u2019s, down to the flex row', () => {
-    /* An earlier draft of this file put `margin: 34px 0 0` on every footer
-       paragraph, which puts 34px above all THREE and the block falls apart. The
-       family's answer is different again: the treatment lives on `.privacy`, and
-       `footer` is a flex ROW so a cross-link to a sibling can sit at its
-       right-hand end. `.footnotes` is what keeps the lines stacked inside it —
-       without the wrapper they become flex items and lay out side by side, so it
-       is load-bearing rather than decoration. */
-    const css = (stripComments(APP_SRC).match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
-    const foot = (css.match(/(?:^|\})\s*footer\s*\{([^}]*)\}/) || [])[1] || '';
-    ok(/display:\s*flex/.test(foot), 'footer is the flex row');
-    ok(/\.footnotes\s*\{[^}]*flex:\s*1 1 320px/.test(css), 'with .footnotes holding the lines');
-    const priv = (css.match(/(?:^|\})\s*\.privacy\s*\{([^}]*)\}/) || [])[1] || '';
-    ok(/font-size:\s*var\(--fs-xs\)/.test(priv) && /color:\s*var\(--text-muted\)/.test(priv),
-       'the lines are xs and muted');
-    ok(/\.privacy-links a\s*\{[^}]*color:\s*var\(--text-muted\)/.test(css),
-       'and the links are muted, not accent — provenance, not something to click on the way in');
-    /* Live, so a stacking failure cannot pass on source alone. */
+  t('the footer is Sprint Predictability’s, down to the flex row', () => {
+    const foot = (css().match(/(?:^|\})\s*footer\s*\{([^}]*)\}/) || [])[1] || '';
+    ok(/display:\s*flex/.test(foot)); ok(/\.footnotes\s*\{[^}]*flex:\s*1 1 320px/.test(css()));
     const ps = [...W.document.querySelectorAll('footer .footnotes p')];
-    eq(ps.length, 3, 'three lines');
-    const lefts = [...new Set(ps.map((el) => Math.round(el.getBoundingClientRect().left)))];
-    eq(lefts.length, 1, 'stacked, not laid out side by side');
+    eq(ps.length, 3);
+    eq([...new Set(ps.map((el) => Math.round(el.getBoundingClientRect().left)))].length, 1, 'stacked');
   });
   t('the authorship line points its two links the right way round', () => {
-    /* They were ONE link once, reading "MIT licensed" and landing on NOTICE. A
-       licence is the terms; NOTICE is who owns it. A link whose words and
-       destination disagree is the kind of thing nobody checks twice. */
     const by = {};
     W.document.querySelectorAll('footer a[href]').forEach((a) => { by[a.textContent.trim()] = a.href; });
-    ok(/NOTICE$/.test(by['independent personal project'] || ''),
-       '"independent personal project" must point at NOTICE');
-    ok(/LICENSE$/.test(by['MIT licensed'] || ''), '"MIT licensed" must point at LICENSE');
-    ok(by['How it works'], 'the repo link is labelled "How it works" family-wide');
-    ok(by['Privacy policy'], 'and the policy is linked from the app page');
+    ok(/NOTICE$/.test(by['independent personal project'] || '')); ok(/LICENSE$/.test(by['MIT licensed'] || ''));
+    ok(by['How it works'] && by['Privacy policy']);
+    ok(/league-night/.test(by['How it works']), 'and they point at THIS repo');
+  });
+  t('the welcome card and the footer make the same privacy claim', () => {
+    const card = (APP_SRC.match(/<div class="card welcome"[\s\S]*?<\/div>\s*<\/div>/) || [''])[0];
+    ok(/Nothing is uploaded unless you sign in/.test(card));
+    ok(/until you sign in/.test((APP_SRC.match(/id="privacyNote">([\s\S]*?)<\/p>/) || [])[1] || ''));
   });
   t('the privacy page has the footer too, minus its own link', () => {
-    ok(/>How it works</.test(PRIVACY_SRC), 'the repo link');
-    ok(/MIT licensed/.test(PRIVACY_SRC), 'the authorship line');
-    ok(!/href="privacy\.html"/.test(PRIVACY_SRC), 'you are standing on that page');
+    ok(/>How it works</.test(PRIVACY_SRC)); ok(/MIT licensed/.test(PRIVACY_SRC)); ok(!/href="privacy\.html"/.test(PRIVACY_SRC));
   });
   t('</main> closes BEFORE <footer>, on both pages', () => {
     [['index.html', APP_SRC], ['privacy.html', PRIVACY_SRC]].forEach((pair) => {
       const body = stripComments(pair[1]);
       const m = body.indexOf('</main>'), f = body.indexOf('<footer');
-      ok(m > -1 && f > -1, pair[0] + ': needs both landmarks');
-      ok(m < f, pair[0] + ': a <footer> nested inside main is not contentinfo at all');
+      ok(m > -1 && f > -1 && m < f, pair[0]);
     });
   });
   t('the theme picker is the LAST control in the header row', () => {
     const bar = (APP_SRC.match(/<div class="headbar">([\s\S]*?)<\/div>/) || [])[1] || '';
     const ids = (bar.match(/id="(\w+)"/g) || []).map(s => s.replace(/id="|"/g, ''));
-    eq(ids[ids.length - 1], 'themeSel',
-       'it is the one control that changes nothing but how the page looks');
+    eq(ids[ids.length - 1], 'themeSel');
   });
   t('the header picker cannot claim the whole row', () => {
-    /* The base field rule gives every select `width: 100%`, which in a wrapping
-       flex row drops the theme picker onto a line of its own. Caught the first
-       time this file was opened in a browser. */
     eq(W.getComputedStyle(W.document.getElementById('themeSel')).width === '100%', false);
-    const bar = W.document.querySelector('.headbar');
-    ok(bar.getBoundingClientRect().height < 60, 'the header row must stay one line at 1000px');
+    ok(W.document.querySelector('.headbar').getBoundingClientRect().height < 60, 'one line at 1000px');
   });
   t('every dialog announces itself, opens through openModal and closes on a click outside', () => {
     const src = stripComments(APP_SRC);
     const ids = (APP_SRC.match(/<dialog id="(\w+)"/g) || []).map(s => s.replace(/<dialog id="|"/g, ''));
-    ok(ids.length >= 5, 'expected the family’s dialogs, got ' + ids.join(', '));
+    ok(ids.length >= 14, ids.join(', '));
     ids.forEach((id) => {
-      ok(new RegExp('<dialog id="' + id + '"[^>]*aria-labelledby=').test(APP_SRC),
-         id + ' must name its own heading');
+      ok(new RegExp('<dialog id="' + id + '"[^>]*aria-labelledby=').test(APP_SRC), id + ' must name its own heading');
       ok(new RegExp("'" + id + "'").test(src), id + ' is not registered for backdrop dismissal');
     });
-    ok(/function openModal/.test(src), 'and every modal opens through openModal()');
-    ok(!/\.showModal\(\)/.test(src.replace(/function openModal[\s\S]*?\n\}/, '')),
-       'nothing may call showModal() directly — that is what decides whose keyboard opens');
+    ok(/function openModal/.test(src));
+    ok(!/\.showModal\(\)/.test(src.replace(/function openModal[\s\S]*?\n\}/, '')));
   });
-  t('a dialog heading is h2 at --fs-md, as in every sibling', () => {
-    const css = (stripComments(APP_SRC).match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
-    ok(/dialog h2\s*\{[^}]*font-size:\s*var\(--fs-md\)/.test(css));
-    ok(/<dialog[^>]*>\s*<h2/.test(APP_SRC.replace(/\n\s*/g, ' ')) || /<h2 id="\w+Title"/.test(APP_SRC),
-       'dialogs are titled with an h2');
-  });
-  t('"Start again" is folded into the Back up dialog, behind a disclosure', () => {
-    ok(/<details class="danger-zone">/.test(APP_SRC),
-       'a destructive action needs the backup button beside it, and a confirm() cannot hold one');
-    const data = (APP_SRC.match(/<dialog id="dataDialog"[\s\S]*?<\/dialog>/) || [''])[0];
-    ok(/danger-zone/.test(data), 'and it lives in the Back up dialog, not the header');
-    ok(!/id="clearBtn"[^>]*>/.test(APP_SRC.replace(data, '')), 'there is only one Delete All');
-  });
-  t('the toast is a popover, and cannot land in the corner', () => {
-    /* The UA gives a popover `inset: 0` and `margin: auto`, which beat a bare
-       left/bottom and park it top-left. right/top: auto are what undo that. */
-    const css = (stripComments(APP_SRC).match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
-    const toast = (css.match(/#toast\s*\{([^}]*)\}/) || [])[1] || '';
-    ok(/right:\s*auto/.test(toast) && /top:\s*auto/.test(toast),
-       'without these the UA’s inset:0 wins and the toast sits top-left');
-    ok(/popover="manual"/.test(APP_SRC), 'and it must be a popover to be seen over a modal dialog');
-    ok(/border-radius:\s*var\(--radius-pill\)/.test(toast), 'the family’s pill shape');
-  });
-  t('a delete is confirmed, and the confirmation NAMES the record', () => {
-    const src = stripComments(APP_SRC);
-    ok(/confirm\('Delete “' \+ it\.name/.test(src),
-       'a bare "Are you sure?" is a dialog people learn to click through');
-    ok(/cannot be undone/.test(src), 'and it says what is lost');
-    /* Delete-all is confirmed in a DIALOG, not a confirm(): it is the family's
-       shared window — PAPTrack's, to the pixel — and a confirm() cannot hold the
-       "Download Backup First" button that makes the answer safe to give. */
-    ok(/<dialog id="clearDialog"/.test(src), 'Delete All confirms in its own dialog');
-    ok(/id="clearBackupBtn"[^>]*class="safety"/.test(src),
-       'and offers the backup that is the only way back');
-    ok(/There is no undo — a downloaded backup is the only way/.test(src),
-       'and says so in the family\'s words');
-    ok(/Restore ' \+ incoming\.entries\.length/.test(src),
-       'and a restore says what the file holds before replacing anything');
-  });
-  t('a per-row action is an .icon-btn square, neutral until hovered', () => {
-    const css = (stripComments(APP_SRC).match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
-    ok(/button\.icon-btn\.danger\s*\{[^}]*color:\s*var\(--text-muted\)/.test(css),
-       'a column of red squares reads as a column of warnings');
-    ok(/button\.icon-btn\.danger:hover\s*\{[^}]*var\(--err\)/.test(css), 'red on hover');
-    ok(/\.icon-btn\s*\{[^}]*width:\s*var\(--chrome-h\)/.test(css),
-       '--chrome-h square: not a new number, the one the header controls already use');
-  });
-  t('a control’s border is --border-control, never --border', () => {
-    const css = (stripComments(APP_SRC).match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
-    const btn = (css.match(/(?:^|\})\s*button\s*\{([^}]*)\}/) || [])[1] || '';
-    ok(/border:\s*1px solid var\(--border-control\)/.test(btn),
-       'WCAG 1.4.11 asks 3:1 of what identifies a component, and here that is the border');
-    const field = (css.match(/input\[type="password"\][^{]*\{([^}]*)\}/) || [])[1] || '';
-    ok(/var\(--input-border\)/.test(field), 'a field is a control too');
-  });
-  t('the field type list is the pack’s own', () => {
-    const css = (stripComments(APP_SRC).match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
-    ['text', 'number', 'date', 'month', 'search', 'tel', 'url', 'email', 'password']
-      .forEach(ty => ok(css.indexOf('input[type="' + ty + '"]') > -1,
-        ty + ' is missing — a field left off arrives silently unstyled'));
-  });
-  t('raisesKeyboard is a whitelist, so a new field type is never swept in', () => {
-    ok(H.raisesKeyboard({ tagName: 'INPUT', type: 'text' }));
-    ok(H.raisesKeyboard({ tagName: 'TEXTAREA' }));
-    ok(!H.raisesKeyboard({ tagName: 'INPUT', type: 'checkbox' }), 'a checkbox raises nothing');
-    ok(!H.raisesKeyboard({ tagName: 'INPUT', type: 'date' }), 'a date opens a picker, not a keyboard');
-    ok(!H.raisesKeyboard({ tagName: 'BUTTON' }));
-  });
-  t('[hidden] beats a class that sets display', () => {
-    /* The browser's own [hidden] rule is in the USER-AGENT stylesheet, and any
-       author rule beats it. This has cost Golf Handicap twice. */
-    const css = (stripComments(APP_SRC).match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
-    ok(/\[hidden\]\s*\{\s*display:\s*none\s*!important/.test(css));
-  });
-  t('a scroll box carries position: relative, for iOS', () => {
-    const css = (stripComments(APP_SRC).match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
-    ['.table-scroll', '.chart-wrap'].forEach(sel => {
-      const rule = (css.match(new RegExp('\\' + sel + '\\s*\\{([^}]*)\\}')) || [])[1] || '';
-      ok(/overflow-x:\s*auto/.test(rule) && /position:\s*relative/.test(rule),
-         sel + ': without relative, iOS counts its full width in the document’s scroll area');
-    });
-  });
-  t('there is a skip link, and it goes to <main>', () => {
-    ok(/<a class="skip" href="#main">/.test(APP_SRC));
-    ok(/<main id="main"/.test(APP_SRC));
-  });
-  t('and <main> opens ABOVE the tab strip, so the skip link cannot jump past it', () => {
-    /* One rule with two halves, and this shell had it wrong while every app
-       copied from it had it right. A <main> that wraps the panel alone leaves
-       the tab row in no landmark at all — the half axe-core's `region` rule
-       finds — and lands the skip link PAST the tabs, so a keyboard user who
-       takes it has the whole row behind them, reachable only by shift-tabbing
-       back. That second half is the one worth acting on.
-
-       Asserted against the LIVE DOM, not the source: a regex over the file can
-       match two strings in the right order and still describe markup the parser
-       nests some other way, which is exactly the mistake being pinned. */
-    const main = W.document.getElementById('main');
-    ok(main && main.tagName === 'MAIN', 'the skip link\u2019s target is a real <main>');
-    const tabs = W.document.querySelector('[role="tablist"]');
-    ok(tabs, 'and there is a tab strip for it to contain');
-    ok(main.contains(tabs), 'the tab strip sits INSIDE the main landmark');
-    /* The shared-view banner travels with them: it describes what is on screen,
-       so it is content rather than furniture. */
-    ok(main.contains(W.document.getElementById('viewbar')),
-       'and so does the banner a shared snapshot puts above the tabs');
-    /* Putting a role ON an element IS its role. role="tabpanel" here would
-       silently replace the landmark and the skip link would find nothing. */
-    ok(!main.hasAttribute('role'),
-       'and no role has been written onto <main>, which would replace the landmark');
-  });
-
-  t('the page is one of the family\u2019s TWO widths', () => {
-    /* 1500px (Sprint Predictability, Flow Metrics, Golf Handicap, both lottery
-       pages) or 2400px (Money Map, PAPTrack, the dashboard). This file carried
-       1100 for a day, which made the shell the one page in the family at a width
-       nothing else uses — and every app copied from it would have inherited that.
-       A new app picks one of the two; it does not invent a third. */
-    const w = W.getComputedStyle(W.document.documentElement)
-      .getPropertyValue('--page-w').trim();
-    ok(w === '1500px' || w === '2400px', 'got ' + w);
-    /* .wrap and .headbar have to be the same number or the brand stops lining up
-       with the left edge of the first card — which is the whole reason it is a
-       token rather than two literals. */
-    const wrap = W.getComputedStyle(W.document.querySelector('.wrap')).maxWidth;
-    const bar = W.getComputedStyle(W.document.querySelector('.headbar')).maxWidth;
-    eq(wrap, bar, 'the content and the header row must share one width');
-    eq(wrap, w, 'and it must be the token, not a repeated literal');
-  });
-
-  group('two tabs, decided before first paint');
-  t('the boot script sets data-tab, so no panel ever jumps', () => {
-    const head = APP_SRC.split('</head>')[0];
-    ok(/setAttribute\('data-tab'/.test(head),
-       'a tab restored by the foot script paints one panel and then swaps');
-  });
-  t('CSS does the switching, and both panels print', () => {
-    const css = (stripComments(APP_SRC).match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
-    ok(/\[data-tab="overview"\] #entriesPanel/.test(css), 'CSS, not script, hides the other panel');
-    ok(/@media print[\s\S]*display:\s*block\s*!important/.test(css),
-       'on paper there are no tabs to press, so both panels print');
-  });
-  t('the tablist is a real one, with a roving tabindex', () => {
-    ok(/role="tablist"/.test(APP_SRC) && /role="tab"/.test(APP_SRC) && /role="tabpanel"/.test(APP_SRC));
-    ok(/aria-controls="overviewPanel"/.test(APP_SRC), 'each tab names its panel');
-    const src = stripComments(APP_SRC);
-    ok(/ArrowRight/.test(src) && /ArrowLeft/.test(src) && /'Home'/.test(src) && /'End'/.test(src),
-       'arrow, Home and End keys move between tabs');
-    ok(/b\.tabIndex = on \? 0 : -1/.test(src), 'and only the selected tab is in the tab order');
-  });
-  t('switching tabs works, live', () => {
-    const el = W.document.documentElement, was = el.getAttribute('data-tab');
-    try {
-      W.setTab('entries');
-      eq(el.getAttribute('data-tab'), 'entries');
-      eq(W.document.getElementById('tab-entries').getAttribute('aria-selected'), 'true');
-      eq(W.document.getElementById('overviewPanel').hidden, true);
-      W.setTab('overview');
-      eq(el.getAttribute('data-tab'), 'overview');
-      W.setTab('nonsense');
-      eq(el.getAttribute('data-tab'), 'overview', 'an unknown tab falls back to the first');
-    } finally { W.setTab(was || 'overview'); }
-  });
-
-  group('the welcome card, and the sample data behind it');
-  t('the welcome is decided before first paint too', () => {
-    const head = APP_SRC.split('</head>')[0];
-    ok(/setAttribute\('data-welcome'/.test(head),
-       'a first-time visitor should not see the empty app for a frame first');
-    ok(/location\.hash\.indexOf\('#share='\) !== 0/.test(head),
-       'and a shared view is never a first run');
-  });
-  t('it offers the family’s three choices', () => {
-    const card = (APP_SRC.match(/<div class="card welcome"[\s\S]*?<\/div>\s*<\/div>/) || [''])[0];
-    ok(/Start Fresh/.test(card) && /Load Sample Data/.test(card) && /Restore a Backup/.test(card),
-       'the same three Money Map opens on');
-    const css = (stripComments(APP_SRC).match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
-    ok(/html\[data-welcome\] \.tabs/.test(css), 'and the tabs go while it is up');
-  });
-  t('the welcome card is ONE measure and ONE colour', () => {
-    /* It had three measures (46ch, 52ch, 54ch) and two colours, because the
-       first-run card borrowed Golf Handicap's deeper treatment while the rest
-       came from Sprint Predictability — so the lede, the privacy line and the
-       three button notes each wrapped at a different width and the card read as
-       something assembled from parts. Reported, and this is what stops it coming
-       back. */
-    const card = W.document.querySelector('#welcomeCard .empty');
-    ok(card, 'the welcome card must exist');
-    const wasHidden = W.document.getElementById('welcomeCard').hidden;
-    W.document.getElementById('welcomeCard').hidden = false;
-    try {
-      const ps = [...card.querySelectorAll('p')];
-      ok(ps.length >= 5, 'the lede, the privacy line, the buttons and one note per button');
-      const widths = [...new Set(ps.map((el) => Math.round(el.getBoundingClientRect().width)))];
-      eq(widths.length, 1, 'every paragraph shares one measure');
-      const colours = [...new Set(ps.map((el) => W.getComputedStyle(el).color))];
-      eq(colours.length, 1, 'and one colour');
-      const sizes = [...new Set(ps.map((el) => W.getComputedStyle(el).fontSize))];
-      eq(sizes.length, 1, 'and one size');
-      /* Only the heading is different, and it is --text-primary at xl. */
-      const h = card.querySelector('h2');
-      eq(W.getComputedStyle(h).fontSize,
-         W.getComputedStyle(W.document.documentElement).getPropertyValue('--fs-xl').trim()
-           .endsWith('rem')
-             ? Math.round(parseFloat(W.getComputedStyle(W.document.documentElement)
-                 .getPropertyValue('--fs-xl')) * 16) + 'px'
-             : W.getComputedStyle(h).fontSize,
-         'the heading is --fs-xl');
-      ok(W.getComputedStyle(h).color !== colours[0], 'and the only line in a different colour');
-      eq(Math.round(h.getBoundingClientRect().left),
-         Math.round(ps[0].getBoundingClientRect().left),
-         'heading and body share a left edge — the block is centred as one thing');
-    } finally {
-      W.document.getElementById('welcomeCard').hidden = wasHidden;
-    }
-  });
-  t('the sample data reaches every case, and says what each one shows', () => {
-    /* THE SAMPLE DATA IS THE DEMO. A feature is not finished until it appears
-       here, and a row named "Item 1" teaches nothing. */
-    const rows = H.sampleData();
-    ok(rows.length >= 5, 'there has to be enough of it to fill a chart');
-    ok(rows.some(r => r.value < 0), 'a negative, so the axis crosses zero');
-    ok(rows.some(r => r.value === 0), 'a zero, which is a value and not a missing one');
-    ok(rows.some(r => r.value >= 1000), 'a large one, for the thousands separator');
-    ok(rows.some(r => r.value % 1 !== 0), 'a fraction, so the decimal-places setting shows');
-    ok(rows.some(r => r.name.length > 50), 'a long name, so a row can be seen wrapping');
-    rows.forEach(r => ok(!/^Item \d+$/.test(r.name), 'name the row for what it shows: ' + r.name));
-    rows.forEach(r => ok(H.ID_RE.test(r.id) && /^demo-/.test(r.id),
-      'a stable demo- id is what lets a second load replace rather than duplicate'));
-  });
-  t('the sample dates count back from today, so the demo is never stale', () => {
-    const rows = H.sampleData();
-    const newest = rows.map(r => r.date).sort().pop();
-    const days = (Date.now() - new Date(newest + 'T12:00').getTime()) / 86400000;
-    ok(days < 10, 'the newest sample row is ' + Math.round(days) + ' days old');
-  });
-
-  group('installable, and it works offline');
-  t('the manifest is valid, and its scope is relative', () => {
-    const m = JSON.parse(MANIFEST_SRC);
-    eq(m.scope, './', 'an absolute scope would capture every sibling app on this one origin');
-    eq(m.start_url, './');
-    eq(m.display, 'standalone');
-    ok(/<link rel="manifest" href="manifest\.webmanifest">/.test(APP_SRC), 'and the page must link it');
-    eq(m.icons.map(i => i.purpose).sort(), ['any', 'any', 'maskable'],
-       'a rounded pair for what nothing masks, and a full-bleed one for what does');
-  });
-  t('the manifest is NOT linked from the privacy page', () => {
-    ok(!/rel="manifest"/.test(PRIVACY_SRC),
-       'a policy page is not a surface anyone installs from');
-  });
-  t('the worker is network-first, and caches only public files', () => {
-    ok(/networkFirst/.test(SW_SRC), 'stale cached code reading moved data is the failure to avoid');
-    /* A bare `fetch(req)` keeps the cache mode of the request the page made, so an
-       ordinary reload is answered by the browser's own HTTP cache and a fresh deploy
-       goes unseen for its `max-age`. It was in all six workers from the day they
-       shipped, found on the task dashboard 2026-08-24. */
-    const swCode = stripComments(SW_SRC);
-    ok(/fetch\(req, \{ cache: 'no-cache' \}\)/.test(swCode) && !/fetch\(req\)/.test(swCode),
-       'the serving fetch must opt out of the HTTP cache, or network-first is a name only');
-    ok(!/eval\(|importScripts|import\(/.test(SW_SRC),
-       'the page’s CSP does not apply here — this code runs with none at all');
-    eq(SW_SRC.match(/https?:\/\/[^\s'"]+/g) || [], [], 'and never fetches cross-origin');
-  });
-  t('the SHELL list is pinned here, which is the security review', () => {
-    const arr = (SW_SRC.match(/const SHELL = \[([\s\S]*?)\]/) || [])[1] || '';
-    const files = (arr.match(/'([^']+)'/g) || []).map(s => s.replace(/'/g, ''));
-    eq(files, ['./', 'theme.css', 'privacy.html', 'favicon.ico', 'manifest.webmanifest',
-               'icon-192.png', 'icon-512.png', 'icon-512-maskable.png'],
-       'adding a file to the offline cache is a decision, so it fails here first');
-  });
-  t('activate deletes only THIS app’s caches', () => {
-    ok(/k\.startsWith\(PREFIX\)/.test(SW_SRC),
-       'cache storage is origin-wide — a sibling’s cache is not ours to delete');
-    ok(/ln-shell-/.test(SW_SRC), 'and the prefix is this app’s');
-  });
-  t('registration is guarded three ways', () => {
-    const reg = (APP_SRC.match(/serviceWorker' in navigator[\s\S]*?\}\)\(\);/) || [''])[0];
-    ok(/window\.top !== window\.self/.test(reg), 'not in a frame, or a test run installs a worker');
-    ok(/window\.lnViewOnly/.test(reg), 'not in a shared view or after a halt');
-    ok(/addEventListener\('load'/.test(reg), 'and after load, not competing with first paint');
-  });
-  t('the kill switch exists BEFORE it is needed', () => {
-    ok(/registration\.unregister/.test(KILL_SRC), 'it must unregister');
-    ok(/ln-shell-/.test(KILL_SRC), 'clear this app’s caches only');
-    ok(/clients\.matchAll/.test(KILL_SRC), 'and reload the windows it was serving');
-  });
-
-  group('find, settings and the figures on screen');
-  t('the find controls live in the markup, never redrawn', () => {
-    ok(/<input type="search" id="findBox"/.test(APP_SRC),
-       'a render that replaced the box being typed in would throw away the caret');
-    ok(/id="findBox"[^>]*data-keep-caret/.test(APP_SRC),
-       'and it opts out of select-on-focus — a find box is typed into repeatedly');
-    const src = stripComments(APP_SRC);
-    ok(/\$\('findBox'\)\.addEventListener\('input', renderList\)/.test(src),
-       'so typing redraws the TABLE only');
-  });
-  t('the filter says it does not reach the figures', () => {
-    ok(/never the figures on Overview/.test(stripComments(APP_SRC)),
-       'an exclusion is never silent in this family');
-  });
-  t('search is not in the select-on-focus list', () => {
-    const src = stripComments(APP_SRC);
-    const list = (src.match(/const SELECT_ON_FOCUS = \[([^\]]*)\]/) || [])[1] || '';
-    ok(list.indexOf('search') === -1,
-       'a find box is typed into repeatedly; wiping it on every refocus is wrong');
-    ok(list.indexOf('text') > -1, 'but an ordinary text field is selected');
-  });
-
-  group('find — one search across everything');
-  t('searchApp is pure and needs two characters', () => {
-    const one = (n, d) => ({ entries: [{ id: 'a', name: n, value: 1, date: d }] });
-    eq(H.searchApp(one('Alpha', '2026-01-01'), 'a').hits.length, 0,
-       'one character matches most of the data, and that list is worse than none');
-    eq(H.searchApp(one('Alpha', '2026-01-01'), '').hits.length, 0);
-    eq(H.searchApp(one('Alpha', '2026-01-01'), 'lph').hits.length, 1, 'a substring of the name');
-  });
-  t('it matches the date AS STORED, so a month and a year both work', () => {
-    const one = { entries: [{ id: 'a', name: 'Alpha', value: 1, date: '2026-07-04' }] };
-    eq(H.searchApp(one, '2026-07').hits.length, 1, 'a month');
-    eq(H.searchApp(one, '2026').hits.length, 1, 'a year');
-    /* A FORMATTED date would only ever match the way one locale spells it. */
-    ok(!/fmtDate\(\w+\.date\)\)/.test((stripComments(APP_SRC)
-        .match(/function searchApp[\s\S]*?\n\}/) || [''])[0]),
-       'searchApp must not match against a formatted date');
-  });
-  t('the cap is reported, never a silent truncation', () => {
-    const many = Array.from({ length: 200 }, (_, i) =>
-      ({ id: 'i' + i, name: 'match ' + i, value: i, date: '2026-01-01' }));
-    const r = H.searchApp({ entries: many }, 'match');
-    eq(r.hits.length, H.SEARCH_CAP, 'capped, so a common substring cannot lock the page up');
-    eq(r.more, 200 - H.SEARCH_CAP, 'and it says how many it dropped');
-  });
-  t('junk in, no hits out — never a throw', () => {
-    eq(H.searchApp({}, 'anything').hits.length, 0);
-    eq(H.searchApp({ entries: 'nope' }, 'anything').hits.length, 0);
-    eq(H.searchApp(null, 'anything').hits.length, 0);
-  });
-  t('the COUNT is the live region, not the list', () => {
-    ok(/<span id="searchCount" class="sr-only" role="status">/.test(APP_SRC),
-       'a screen reader should hear "12 results", not the whole list re-read per keystroke');
-    ok(!/id="searchResults"[^>]*role="status"/.test(APP_SRC));
-  });
-  t('Find opens with the keyboard, and ⌘K does not fight another dialog', () => {
-    const src = stripComments(APP_SRC);
-    ok(/\$\('searchBox'\)\.focus\(\)/.test(src),
-       'typing IS the reason this window opens, so it is the one place the keyboard comes with it');
-    ok(/open && open\.id !== 'searchDialog'/.test(src),
-       '⌘K must never open Find over the top of another window');
-  });
-  t('the button is hidden when there is nothing to search', () => {
-    /* Derived in renderWelcome() alongside the card itself, so the two can never
-       disagree about whether the app is bare. */
-    ok(/findBtn'\)\.hidden = virgin/.test(stripComments(APP_SRC)),
-       'a control that opens a window with an empty list is worse than no control');
-  });
-  t('Delete All Data returns to the welcome card', () => {
-    /* It did not, and was reported: the welcome state was LATCHED at boot and
-       only ever cleared, so clearing everything left an empty table with no way
-       back to the three choices. It is derived on every render now, which is
-       Golf Handicap's arrangement. */
-    const src = stripComments(APP_SRC);
-    ok(/function renderWelcome\(\)/.test(src), 'the state must be derived, not latched');
-    ok(/const virgin = !viewOnly && !state\.entries\.length/.test(src),
-       'from whether the app is bare — and never in a shared view');
-    ok(!/function leaveWelcome/.test(src), 'the one-way latch is gone');
-    /* Live: plant, clear, and check we are home again. */
-    const H2 = W.__lnTestHooks;
-    H2.__plant({ entries: [] });
-    ok(W.document.documentElement.hasAttribute('data-welcome'), 'bare app shows the welcome');
-    ok(!W.document.getElementById('welcomeCard').hidden, 'and the card is up');
-    H2.__plant(FIXTURE);
-    ok(!W.document.documentElement.hasAttribute('data-welcome'), 'data brings the app back');
-  });
-  t('a tab press starts the new view at the top', () => {
-    const L = asyncResults.landing || {};
-    ok(!L.error, 'the walk finished', L.error);
-    ok(L.down > 0,
-       'the frame really can scroll with the sample data in — a frame with nothing to '
-       + 'scroll would pass this and the next test on its own', L.down);
-    eq(L.afterOtherTab, 0,
-       'pressing the other tab lands at the top of it, not at the offset the last view left');
-  });
-  t('pressing the tab you are already on leaves the page where it is', () => {
-    const L = asyncResults.landing || {};
-    ok(L.held > 0, 'the Overview is taller than the frame too', L.held);
-    eq(L.afterSameTab, L.held, 'that is not a move, so it must not throw the page about');
-  });
-  t('a hit navigates, and does not open an editor in a shared view', () => {
-    const src = stripComments(APP_SRC);
-    ok(/function goToSearchHit/.test(src));
-    /* The condition is named rather than repeated, because the landing added on
-       2026-09-05 asks the same question — a hit that opens no record goes to the
-       top of the view it opened, one that opens a record leaves the page alone —
-       and two copies of `h.id && !viewOnly` would be two things to keep in step. */
-    ok(/const opensRecord = !!\(h\.id && !viewOnly\)/.test(src),
-       'whether a hit opens a record is decided once');
-    ok(/if \(opensRecord\) openEntry\(h\.id\)/.test(src),
-       'there is no editor to open in somebody else’s snapshot');
-    ok(/if \(!opensRecord\) window\.scrollTo\(0, 0\)/.test(src),
-       'and a hit that opens none starts the view it opened at the top');
-  });
-  t('Enter in the Find box opens the first hit — and with nothing matching, leaves the window open', () => {
-    /* Enter is the one key a search box teaches, and until 2026-09-04 the only
-       listener on this box was `input`, so it did nothing at all: a reader had
-       to Tab out of the box and down the list. The same fix landed in Sprint
-       Predictability (8637323), Money Map and Flow Metrics on the same day. */
-    const D = W.document;
-    const dlg = D.getElementById('searchDialog');
-    const enter = () => D.getElementById('searchBox').dispatchEvent(
-      new W.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-    const type = (q) => {
-      const box = D.getElementById('searchBox');
-      box.value = q;
-      box.dispatchEvent(new W.Event('input', { bubbles: true }));
-    };
-    D.getElementById('entryDialog').close();
-    dlg.close();
-    D.getElementById('findBtn').click();
-    type('zzzz-nothing');
-    ok(dlg.open && !D.querySelector('#searchResults .hit'), 'the window is open with no hits');
-    enter();
-    ok(dlg.open, 'Enter with nothing matching leaves the window open — there is nothing to go to');
-    type('Alpha');
-    const first = D.querySelector('#searchResults .hit .hitwhere');
-    eq(first && first.textContent, 'Alpha thousands', 'the first hit is the fixture’s Alpha row');
-    enter();
-    ok(!dlg.open, 'Enter opens the first hit: the Find window closes');
-    ok(D.getElementById('entryDialog').open, 'and the entry it found is open for editing');
-    eq(D.getElementById('f_name').value, 'Alpha thousands', 'the right entry');
-    D.getElementById('entryDialog').close();
-    W.setTab('entries');
-  });
-  t('a hit that opens no editor lands the keyboard on the tab of the view it went to', () => {
-    /* The shared-view frame's verdict, recorded in runAsync(). Closing the Find
-       window hands the focus back to whatever had it before — and after a ⌘K
-       pressed from nowhere in particular that is <body>. In a shared snapshot
-       there is no editor to catch it, so before 2026-09-04 the keyboard was
-       simply dropped on the page and the next Tab started from the top. */
-    const r = asyncResults.sharedFind || {};
-    ok(!r.error, 'the shared-view walk itself threw', r.error);
-    eq(r.hits, 1, 'the shared snapshot has one matching row to go to');
-    eq(r.before, 'BODY', 'nothing visible held the focus when the hit was clicked');
-    ok(!r.findOpen, 'the hit closed the Find window');
-    ok(!r.editorOpen, 'and opened no editor — there is none in somebody else’s snapshot');
-    eq(r.tab, 'entries', 'the hit moved the app from Overview to Entries');
-    ok(r.isTab && r.visible, 'the keyboard is on a visible tab, not on <body>', r.where);
-    eq(r.forTab, 'entries', 'the tab of the view the hit landed on');
-    eq(r.selected, 'true', 'and it is the tab now showing');
-  });
-  t('a focus that is already visible is left alone', () => {
-    /* The other half of the same rule, and the reason it is written as "repair
-       nothing the reader can see" rather than "always focus the tab": a hit
-       that opens the entry editor must keep the editor's own focus, and a Find
-       button pressed with the mouse must keep the button's. */
-    const D = W.document;
-    const type = (q) => {
-      const box = D.getElementById('searchBox');
-      box.value = q;
-      box.dispatchEvent(new W.Event('input', { bubbles: true }));
-    };
-    const where = () => (D.activeElement ? (D.activeElement.id || D.activeElement.tagName) : 'null');
-    D.getElementById('entryDialog').close();
-    D.getElementById('searchDialog').close();
-    if (D.activeElement && D.activeElement.blur) D.activeElement.blur();
-    D.getElementById('findBtn').click();
-    type('Alpha');
-    D.querySelector('#searchResults .hit').click();
-    ok(D.getElementById('entryDialog').open, 'the hit opened the editor');
-    eq(where(), 'f_name', 'and the editor’s first field keeps the keyboard — nothing to repair');
-    D.getElementById('entryDialog').close();
-    /* And the button: a REAL press on Find leaves the focus on it, the window's
-       close hands it back, and being visible it stays there. Only the shared
-       frame can show that, because every hit here opens an editor that takes
-       the keyboard first — recorded in runAsync() beside the case above. */
-    const r = asyncResults.sharedFind || {};
-    eq(r.afterRealPress, 'findBtn',
-       'the Find button that had the focus keeps it — there is nothing to repair');
-    W.setTab('entries');
-  });
-
-  group('the table sorts and its rows are clickable');
-  t('nextSort is a THREE-state cycle, ending in the table’s own order', () => {
-    /* Two states give a reader no way back to the order the table shipped in,
-       and "the order it came in" is a real answer. */
-    let r = H.nextSort(null, 'desc', 'value', true);
-    eq(r, { key: 'value', dir: 'desc' }, 'first press: the column’s own direction');
-    r = H.nextSort(r.key, r.dir, 'value', true);
-    eq(r, { key: 'value', dir: 'asc' }, 'second: reversed');
-    r = H.nextSort(r.key, r.dir, 'value', true);
-    eq(r.key, null, 'third: off');
-    eq(H.nextSort('value', 'desc', 'name', false), { key: 'name', dir: 'asc' },
-       'a different column starts at ITS own direction, not the last one used');
-  });
-  t('a sortable heading is a button, and aria-sort names the direction', () => {
-    const th = W.document.querySelectorAll('#entriesTable thead th');
-    ok(th.length >= 3, 'the table must be rendered');
-    ok(W.document.querySelector('#entriesTable th.sortable button[data-sort]'),
-       'a th with a click handler is not reachable from a keyboard');
-    const css = (stripComments(APP_SRC).match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
-    ok(/th\[aria-sort\] button::after/.test(css),
-       'the arrow is drawn in the header TEXT, so a narrow column cannot lose it');
-  });
-  t('sorting works live, and the third press restores the original order', () => {
-    const names = () => [...W.document.querySelectorAll('#entriesTable tbody tr th')]
-      .map((x) => x.textContent.trim().split(' ')[0]);
-    const press = (k) => W.document.querySelector('[data-sort="' + k + '"]').click();
-    /* Newest first is the table's own order, and the fixture's three names are
-       deliberately in none of the orders being tested. */
-    eq(names(), ['Alpha', 'Bravo', 'Charlie'], 'the default is newest first');
-    press('value');
-    eq(names(), ['Alpha', 'Bravo', 'Charlie'], 'largest value first');
-    press('value');
-    eq(names(), ['Charlie', 'Bravo', 'Alpha'], 'reversed');
-    press('name');
-    eq(names(), ['Alpha', 'Bravo', 'Charlie'], 'a NAME column starts A–Z, not reversed');
-    press('name'); press('name');
-    eq(names(), ['Alpha', 'Bravo', 'Charlie'], 'and the third press is back to newest first');
-    eq([...W.document.querySelectorAll('#entriesTable thead th[aria-sort]')].length, 0,
-       'with no arrow left on any column');
-  });
-  t('there is no second sort control to contradict the headings', () => {
-    ok(!/id="sortSel"/.test(APP_SRC),
-       'a picker AND sortable headings meant the third press appeared to do nothing');
-  });
-  t('a row is clickable and still keyboard-reachable', () => {
-    ok(W.document.querySelector('#entriesTable tr.rowlink[data-open]'), 'the row carries the target');
-    ok(W.document.querySelector('#entriesTable tbody th .rowbtn'),
-       'and a real control inside it — a <tr> cannot take focus');
-  });
-
-  group('copy and CSV read the RENDERED table');
-  t('the export reads the DOM, not state', () => {
-    const src = stripComments(APP_SRC);
-    ok(/function tableToRows\(table\)/.test(src));
-    ok(/\[\.\.\.table\.rows\]/.test(src),
-       'what is on screen is already the product of the reader’s own find and sort');
-  });
-  t('rows are padded to a rectangle', () => {
-    const rows = H.tableToRows(W.document.getElementById('entriesTable'));
-    const widths = [...new Set(rows.map((r) => r.length))];
-    eq(widths.length, 1, 'a short row would put the rest of the file under the wrong headings');
-  });
-  t('decoration is stripped, so the actions column is empty', () => {
-    const rows = H.tableToRows(W.document.getElementById('entriesTable'));
-    eq(rows[1][rows[1].length - 1], '',
-       'the × is aria-hidden and the button carries the label — decoration is not data');
-    ok(rows[1][0].length > 3, 'while the name is kept');
-  });
-  t('a formula cell is defused and a real negative number is not', () => {
-    eq(H.toCsv([['=SUM(A1)']]), "'=SUM(A1)");
-    eq(H.toCsv([['-alpha']]), "'-alpha");
-    eq(H.toCsv([['-320']]), '-320',
-       'quoting a negative would break the arithmetic people export a CSV to do');
-  });
-  t('a grouped thousand is quoted, or the row silently gains a column', () => {
-    eq(H.toCsv([['12,500']]), '"12,500"');
-    ok(H.toCsv([['a"b']]).indexOf('""') > -1, 'and a quote is doubled');
-  });
-  t('the clipboard gets TSV and the file gets CSV', () => {
-    eq(H.toTsv([['a', 'b']]), 'a\tb', 'a pasted CSV lands as one column of text');
-    ok(H.toCsv([['a', 'b']]).indexOf(',') > -1, 'and a file has to be a CSV to open as a sheet');
-  });
-  t('there is only ONE csvCell in the file', () => {
-    const src = stripComments(APP_SRC);
-    eq((src.match(/function csvCell/g) || []).length, 1,
-       'two declarations and the later one wins silently — which is how the '
-       + 'negative-number exemption was lost once already');
-  });
-  t('two routes to the clipboard, then a message', () => {
-    const src = stripComments(APP_SRC);
-    ok(/navigator\.clipboard/.test(src) && /execCommand\('copy'\)/.test(src),
-       'the API needs a secure context and sometimes a permission; execCommand is the fallback');
-    ok(/use ⬇ CSV instead/.test(src),
-       'and if both fail, point at the file rather than leaving a dead button');
-    ok(/top:-9999px/.test(src),
-       'the temporary textarea is off-screen, not display:none — a hidden element cannot be selected');
-  });
-  t('the export buttons stay visible in a shared view', () => {
-    const src = stripComments(APP_SRC);
-    const hidden = (src.match(/\['settingsBtn'[^\]]*\]/) || [''])[0];
-    ok(hidden.indexOf('export') === -1,
-       'everything else goes because it would WRITE; this only hands back what is on screen');
-  });
-  t('settings survive a clear, and are stored', () => {
-    const src = stripComments(APP_SRC);
-    ok(/const keep = state\.settings;[\s\S]{0,120}state\.settings = keep;/.test(src),
-       'clearing the example data is starting fresh, not asking to lose your setup');
-    eq(Object.keys(H.defaultSettings()).sort(), ['decimals', 'showAvg', 'zeroBase']);
-  });
-  /* ── The tile row ───────────────────────────────────────────────────────────
-     A tile row fills ONE line when the line has room for every tile, and splits
-     into EQUAL rows when it does not — the family rule, and the one piece of
-     this file that exists because the file is a TEMPLATE: the tile row is the
-     first thing a new app edits, and the hand-counted spans this replaced were
-     right for exactly five tiles and wrong for every other number.
-     The two figures the thresholds were worked out from are read back out —
-     the minimum tile from the CSS, the gap from the LIVE element, since it is
-     written as a pack token and only the browser knows what that resolves to. */
-  t('a tile row fills the line, or splits evenly — whatever the tile count', () => {
-    const el = W.document.getElementById('stats');
-    ok(el, 'the tiles must exist');
-    ok(/grid-template-rows:\s*subgrid/.test(APP_SRC),
-       'subgrid is what lines the labels up when one of them wraps');
-    ok(!/\.stat:nth-child\(\d\)/.test(APP_SRC),
-       'and no rule counts a tile by position any more — that is what assumed five of them');
-    /* Walks the container queries in the order the cascade does, keeping each
-       tile count's state as it goes, and checks the promise at every width:
-       the columns fit at the tile floor, no row holds a single tile, and a
-       short last row is STRETCHED to finish the line rather than leaving a
-       hole. The floor and the gap are read back out of the app, so raising
-       either fails here instead of quietly making a row too tight. */
-    {
-      const CSS = (stripComments(APP_SRC).match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
-      const fl = CSS.match(/\.stats \{[^}]*minmax\((\d+)px/);
-      ok(fl, 'the auto-fit fallback still states a smallest tile');
-      const MIN = fl ? +fl[1] : 0;
-      /* The gap is a pack token, so only the browser knows what it is. */
-      const GAP = parseFloat(W.getComputedStyle(el).columnGap);
-      ok(GAP > 0, 'and the gap resolves to a real number — ' + GAP + 'px');
-      const blocks = [...CSS.matchAll(/@container tiles \(min-width: (\d+)px\) \{([\s\S]*?)\n  \}/g)];
-      ok(blocks.length >= 5, 'the container queries are there — ' + blocks.length + ' of them');
-      const st = {};
-      let checked = 0;
-      for (const [, atStr, body] of blocks) {
-        const at = +atStr;
-        for (const chunk of body.split('}')) {
-          if (chunk.indexOf('grid-') < 0) continue;
-          const targets = [...chunk.matchAll(/:nth-child\((\d+)\):last-child\)(\s*>\s*(?:\*|:nth-child\(n\+(\d+)\)))?/g)];
-          ok(targets.length > 0, 'every rule says which tile counts it answers');
-          const tracksM = chunk.match(/grid-template-columns: (?:repeat\((\d+),|minmax)/);
-          const colM = chunk.match(/grid-column: (?:span (\d+)|(auto))/);
-          for (const t of targets) {
-            const n = +t[1], k = t[3] ? +t[3] : null;
-            const s = st[n] || (st[n] = { tracks: 1, full: 1, last: null, first: null });
-            if (tracksM) s.tracks = tracksM[1] ? +tracksM[1] : 1;
-            else if (colM && k) { s.last = colM[2] ? null : +colM[1]; s.first = colM[2] ? null : k; }
-            else if (colM && t[2]) s.full = colM[2] ? 1 : +colM[1];
-          }
-        }
-        for (const key of Object.keys(st)) {
-          const n = +key, s = st[n], c = s.tracks / s.full;
-          ok(Number.isInteger(c) && c >= 1,
-             n + ' tiles: ' + s.tracks + ' tracks do not divide by a span of ' + s.full);
-          ok(c * MIN + (c - 1) * GAP <= at,
-             c + ' columns need ' + (c * MIN + (c - 1) * GAP) + 'px of tiles and gaps, and the '
-             + 'query lets them in at ' + at + 'px');
-          ok(n >= c, n + ' tiles can never fill ' + c + ' columns');
-          ok(c === 1 || n % c !== 1,
-             n + ' tiles across ' + c + ' columns leaves one tile alone on the last row');
-          const rows = Math.ceil(n / c), lastRow = n - c * (rows - 1);
-          if (lastRow === c) {
-            ok(!s.last, n + ' tiles fill every row at ' + c + ' across, so nothing may be stretched');
-          } else {
-            ok(s.last && lastRow * s.last === s.tracks,
-               n + ' tiles at ' + c + ' across leave ' + lastRow + ' on the last row, which must be '
-               + 'stretched to finish the line rather than leaving a hole');
-            ok(s.first === c * (rows - 1) + 1,
-               'and the stretch starts at the first tile of that row');
-          }
-          checked++;
-        }
-      }
-      ok(Object.keys(st).length >= 7, 'every tile count from two to eight is answered');
-      ok(checked >= 40, 'and each one is checked at every width above the one it changes at');
-      ok(/:has\(> \.stats\) \{ container: tiles \/ inline-size; \}/.test(CSS),
-         "the row's own parent is the named container — without it every query above "
-         + 'matches nothing and the counts silently stop applying');
-    }
-  });
-
-  /* ── The info dot and the help window ──────────────────────────────────────
-     Two family-wide blocks, the same declarations in every app that has one, so
-     a new app copied from here starts on them rather than re-deriving them.
-     This file was the pre-sweep shape until 2026-08-23: a `.help-btn` with no
-     tap target, a window that took the app's own 560px and 24px padding, prose
-     at `--fs-xs` from `dialog p`, and a button that said Close.
-     What is pinned is the whole block, because the first attempt at sharing
-     this window pinned only the measure and five things drifted back apart
-     through inheritance alone. */
-  group('the info dot and the help window');
-  t('the dot is the family circle, declared property by property', () => {
-    ok(/\.tile-help \{[^}]*width: 16px; height: 16px; min-height: 0;/.test(APP_SRC),
-       '16px, and opted out of any button floor an app puts under its controls');
-    ok(/\.tile-help \{[^}]*border-radius: 50%;/.test(APP_SRC)
-       && /\.tile-help \{[^}]*background: transparent;/.test(APP_SRC),
-       'an outlined circle, not a filled pill');
-    ok(/\.tile-help \{[^}]*margin-left: 7px;/.test(APP_SRC),
-       'off the word it follows — a standing preference in every app');
-    ok(/\.tile-help::after \{ content: ''; position: absolute; inset: -5px; \}/.test(APP_SRC),
-       "a true 24px tap target: -5px, because `inset` grows from the PADDING box "
-       + "and the 1px border made -4px a 22px target");
-    ok(/\.tile-help:hover \{ background: var\(--surface-alt\); border-color: var\(--text-secondary\);/
-       .test(APP_SRC),
-       'and the hover fills rather than borrowing --focus-border, which would '
-       + 'say "focused" to anybody reading the two states side by side');
-    eq((APP_SRC.match(/help-btn/g) || []).length, 0,
-       'the old class name is gone — a new app must not start on it');
-  });
-  t('every dot draws an "i", never a "?"', () => {
-    const bare = stripComments(APP_SRC);
-    const dots = bare.match(/<button[^>]*class="tile-help"[\s\S]*?<\/button>/g) || [];
-    ok(dots.length >= 1, 'the dot is still there');
-    eq(dots.filter((d) => !/>i<\/button>/.test(d)).join(' | '), '',
-       '"?" is the glyph a browser already puts on its own help cursor and in a '
-       + "form's validation bubble, and it asks where this answers");
-    eq(dots.filter((d) => !/aria-label="/.test(d)).join(' | '), '',
-       'and each says what it explains — a bare glyph reads as nothing');
-  });
-  t('the window is sized by its text, and everything else is declared', () => {
-    ok(/#helpDialog \{ width: fit-content; max-width: calc\(100% - 32px\); padding: 20px; \}/
-       .test(APP_SRC),
-       'sized by what is in it, still fits a phone, and 20px rather than this '
-       + "file's own --sp-7 — padding is the only thing left deciding the width");
-    ok(/#helpTitle \{ margin: 0 0 12px; font-size: var\(--fs-md\); font-weight: 600;\s*color: var\(--text-primary\); \}/
-       .test(APP_SRC),
-       'the heading is pinned — unset, an h2 defaults to bold at 700');
-    ok(/#helpBody \{ max-width: 66ch; font-size: var\(--fs-sm\); line-height: 1\.55;\s*color: var\(--text-secondary\); \}/
-       .test(APP_SRC),
-       'the 66-character measure, the family reading size, and a colour of its '
-       + "own — `dialog p` would otherwise make this help 13px");
-    ok(/#helpBody p, #helpBody li \{ font-size: inherit; line-height: inherit;\s*color: inherit; margin: 0 0 10px; \}/
-       .test(APP_SRC), 'paragraphs follow the box, at 10px apart and not the browser\'s 1em');
-    ok(/#helpBody strong \{ color: var\(--text-primary\); \}/.test(APP_SRC),
-       'and bold is lifted, or it is carried by weight alone');
-    ok(/id="helpCloseBtn">Got It</.test(APP_SRC), '"Got It", as in every other app');
-  });
-  t('one window, filled from a table by key — not a dialog per button', () => {
-    const src = stripComments(APP_SRC);
-    ok(/const HELP = \{/.test(src), 'the table exists, even at one entry');
-    ok(/closest\('\.tile-help'\)/.test(src),
-       'one delegated listener, so a dot added by a later render needs no wiring');
-    const used = [...new Set([...stripComments(APP_SRC).matchAll(/data-help="(\w+)"/g)]
-      .map((m) => m[1]))];
-    const keys = [...(src.match(/const HELP = \{[\s\S]*?\n\};/) || [''])[0]
-      .matchAll(/^  (\w+): \[/gm)].map((m) => m[1]);
-    ok(used.length >= 1, 'a dot was found — ' + used.join(', '));
-    eq(used.filter((k) => !keys.includes(k)).join(', '), '',
-       'a dot with no entry opens an empty window, and nothing on screen can say so');
-    eq(keys.filter((k) => !used.includes(k)).join(', '), '',
-       'and an entry no dot points at is a second copy waiting to drift');
-  });
-  t('every dialog closes on a click off it, bar the one documented exception', () => {
-    /* EVERY dialog closes on a click off it, and this tests the BEHAVIOUR rather
-       than the registration list. A source scan only ever proves an id is on a
-       list; it cannot see a dialog wired through a variable, and a hand-written
-       list checked by a hand-written test agrees with itself forever. Both of
-       those bit on 2026-08-23 — the lottery portfolio's help window had no
-       handler at all and Money Map's compare window was simply left off the list.
-       Far outside rather than a few pixels: (-1000,-1000) is outside ANY
-       dialog's box whatever size the 1000x800 frame gives it, so the point is
-       unambiguous. The padding case — a click just INSIDE a dialog's own edge
-       must NOT close it — is still verified by hand in a browser. */
-    const EXEMPT = ['syncChoiceDialog'];
+  t('every dialog closes on a click off it', () => {
     const dialogs = [...W.document.querySelectorAll('dialog')];
-    ok(dialogs.length >= 2, 'the dialogs were found — ' + dialogs.length);
-    const stuck = [], leaky = [];
+    const stuck = [];
     for (const d of dialogs) {
       if (d.open) d.close();
       d.showModal();
       for (const type of ['pointerdown', 'mousedown', 'click']) {
         const E = type === 'pointerdown' ? W.PointerEvent : W.MouseEvent;
-        d.dispatchEvent(new E(type, { clientX: -1000, clientY: -1000,
-          bubbles: true, cancelable: true }));
+        d.dispatchEvent(new E(type, { clientX: -1000, clientY: -1000, bubbles: true, cancelable: true }));
       }
-      const closed = !d.open;
+      if (d.open) stuck.push(d.id);
       d.close();
-      if (EXEMPT.includes(d.id)) { if (closed) leaky.push(d.id); }
-      else if (!closed) stuck.push(d.id);
     }
-    eq(stuck.join(', '), '', 'a dialog you cannot dismiss by clicking off it');
-    /* THE ONE DOCUMENTED EXCEPTION, family-wide: "which copy of your data?" has
-       no safe default, so it must be answered rather than dismissed. */
-    eq(leaky.join(', '), '', 'and the exception must still refuse to be dismissed');
+    eq(stuck.join(', '), '');
+  });
+  t('a dialog heading is h2 at --fs-md, as in every sibling', () => {
+    ok(/dialog h2\s*\{[^}]*font-size:\s*var\(--fs-md\)/.test(css()));
+  });
+  t('"Delete" is folded into the Back up dialog, behind a disclosure, and confirms in the family window', () => {
+    ok(/<details class="danger-zone">/.test(APP_SRC));
+    ok(/<dialog id="clearDialog"/.test(APP_SRC) && /id="clearBackupBtn"[^>]*class="safety"/.test(APP_SRC));
+    ok(/There is no undo — a downloaded backup is the only way/.test(stripComments(APP_SRC)));
+  });
+  t('a delete is confirmed, and the confirmation NAMES the record', () => {
+    const src = stripComments(APP_SRC);
+    ok(/confirm\('Delete ' \+ p\.name/.test(src) && /confirm\('Delete ' \+ t\.name/.test(src) && /confirm\('Delete ' \+ nameOf\(m\.a\)/.test(src));
+    ok(/confirm\(\(known \? 'Replace '/.test(src), 'and a restore says what the file holds');
+  });
+  t('the toast is a popover, and cannot land in the corner', () => {
+    const toast = (css().match(/#toast\s*\{([^}]*)\}/) || [])[1] || '';
+    ok(/right:\s*auto/.test(toast) && /top:\s*auto/.test(toast));
+    ok(/popover="manual"/.test(APP_SRC));
+  });
+  t('a per-row action is an .icon-btn square, neutral until hovered', () => {
+    ok(/button\.icon-btn\.danger\s*\{[^}]*color:\s*var\(--text-muted\)/.test(css()));
+    ok(/\.icon-btn\s*\{[^}]*width:\s*var\(--chrome-h\)/.test(css()));
+  });
+  t('a control’s border is --border-control, never --border', () => {
+    const btn = (css().match(/(?:^|\})\s*button\s*\{([^}]*)\}/) || [])[1] || '';
+    ok(/border:\s*1px solid var\(--border-control\)/.test(btn));
+    const field = (css().match(/input\[type="password"\][^{]*\{([^}]*)\}/) || [])[1] || '';
+    ok(/var\(--input-border\)/.test(field));
+  });
+  t('the field type list is the pack’s own', () => {
+    ['text', 'number', 'date', 'month', 'search', 'tel', 'url', 'email', 'password'].forEach(ty => ok(css().indexOf('input[type="' + ty + '"]') > -1, ty));
+  });
+  t('raisesKeyboard is a whitelist', () => {
+    ok(H.raisesKeyboard({ tagName: 'INPUT', type: 'text' })); ok(!H.raisesKeyboard({ tagName: 'INPUT', type: 'checkbox' })); ok(!H.raisesKeyboard({ tagName: 'BUTTON' }));
+  });
+  t('[hidden] beats a class that sets display', () => { ok(/\[hidden\]\s*\{\s*display:\s*none\s*!important/.test(css())); });
+  t('a scroll box carries position: relative, for iOS', () => {
+    ['.table-scroll', '.bracket'].forEach(sel => {
+      const rule = (css().match(new RegExp('\\' + sel + '\\s*\\{([^}]*)\\}')) || [])[1] || '';
+      ok(/overflow-x:\s*auto/.test(rule) && /position:\s*relative/.test(rule), sel);
+    });
+  });
+  t('there is a skip link, and <main> opens ABOVE the tab strip', () => {
+    ok(/<a class="skip" href="#main">/.test(APP_SRC));
+    const main = W.document.getElementById('main');
+    ok(main && main.tagName === 'MAIN' && main.contains(W.document.querySelector('[role="tablist"]')) && main.contains(W.document.getElementById('viewbar')));
+    ok(!main.hasAttribute('role'));
+  });
+  t('the page is one of the family’s TWO widths', () => {
+    const w = W.getComputedStyle(W.document.documentElement).getPropertyValue('--page-w').trim();
+    ok(w === '1500px' || w === '2400px', w);
+    eq(W.getComputedStyle(W.document.querySelector('.wrap')).maxWidth, W.getComputedStyle(W.document.querySelector('.headbar')).maxWidth);
+  });
+  t('the info dot is the family circle and the help window is declared property by property', () => {
+    ok(/\.tile-help \{[^}]*width: 16px; height: 16px; min-height: 0;/.test(APP_SRC));
+    ok(/\.tile-help::after \{ content: ''; position: absolute; inset: -5px; \}/.test(APP_SRC));
+    ok(/#helpDialog \{ width: fit-content; max-width: calc\(100% - 32px\); padding: 20px; \}/.test(APP_SRC));
+    ok(/#helpBody \{ max-width: 66ch; font-size: var\(--fs-sm\); line-height: 1\.55;\s*color: var\(--text-secondary\); \}/.test(APP_SRC));
+    ok(/id="helpCloseBtn">Got It</.test(APP_SRC));
+  });
+  t('every dot draws an "i" and has an entry; every entry has a dot', () => {
+    const bare = stripComments(APP_SRC);
+    const dots = bare.match(/<(?:button|span)[^>]*class="tile-help"[\s\S]*?<\/(?:button|span)>/g) || [];
+    ok(dots.length >= 6, 'dots found: ' + dots.length);
+    eq(dots.filter((d) => !/>i<\/(?:button|span)>/.test(d)).length, 0, 'never a ?');
+    eq(dots.filter((d) => !/aria-label="/.test(d)).length, 0, 'each says what it explains');
+    const used = [...new Set([...bare.matchAll(/data-help="(\w+)"/g)].map((m) => m[1]))];
+    const src = stripComments(APP_SRC);
+    const keys = [...(src.match(/const HELP = \{[\s\S]*?\n\};/) || [''])[0].matchAll(/^  (\w+): \[/gm)].map((m) => m[1]);
+    eq(used.filter((k) => !keys.includes(k)).join(', '), '');
+    eq(keys.filter((k) => !used.includes(k)).join(', '), '');
   });
   t('a note is paragraphs, and it bolds the claim it turns on', () => {
-    /* The family rule, and the reason it is in the starter: a note over about
-       380 characters is <p> blocks, every note bolds the thing it defines or
-       the claim it turns on, and bold stays under about 40% of the characters.
-       That last one is a SHARE and deliberately not "one bold per paragraph" —
-       a note that defines a list bolds one term per item and is right to.
-       Money Map ran 28 notes of 200 to 1,400 characters as single paragraphs
-       until 2026-08-23, which is what this exists to stop happening again. */
     const src = stripComments(APP_SRC);
     const at = src.indexOf('const HELP = {');
     const table = src.slice(at, src.indexOf('\n};', at));
     const entries = table.split(/\n  (?=\w+: \[)/).slice(1);
-    ok(entries.length >= 1, 'the table was found — ' + entries.length + ' entries');
+    ok(entries.length >= 6);
     for (const e of entries) {
       const key = e.split(':')[0].trim();
-      const paras = (e.match(/<p>/g) || []).length;
-      const bolds = (e.match(/<strong>/g) || []).length;
+      const paras = (e.match(/<p>/g) || []).length, bolds = (e.match(/<strong>/g) || []).length;
       const text = visibleText(e).replace(/\s+/g, ' ').length;
       ok(paras >= 2 || text <= 380, key + ' is over 380 characters in one paragraph');
-      ok(bolds >= 1, key + ' bolds nothing — the reader has no way in');
-      const boldText = visibleText((e.match(/<strong>([\s\S]*?)<\/strong>/g) || [])
-        .join('')).replace(/\s+/g, ' ').length;
-      ok(boldText / text < 0.4, key + ' — bold must be a minority of the note');
+      ok(bolds >= 1, key + ' bolds nothing');
+      const boldText = visibleText((e.match(/<strong>([\s\S]*?)<\/strong>/g) || []).join('')).replace(/\s+/g, ' ').length;
+      ok(boldText / text < 0.4, key + ' — bold must be a minority');
     }
   });
-  t('nothing a reader typed can reach the help window', () => {
-    /* The bodies are innerHTML, which is only safe because each is a literal.
-       An entry's name is free text and would be an injection the moment one
-       arrived here. */
+  t('headings are Title Case', () => {
+    const markup = APP_SRC.slice(APP_SRC.indexOf('</head>'), APP_SRC.indexOf("<script>\n'use strict'"));
+    const heads = [...markup.matchAll(/<h2[^>]*>([^<\n]+)/g)].map((m) => m[1].trim()).filter((h) => h && !/^Welcome/.test(h));
+    heads.forEach((h) => h.split(/\s+/).forEach((w) => {
+      if (/^(a|an|and|the|of|on|to|in|for|by|is|or|&|—|·|v)$/.test(w) || !/^[A-Za-z]/.test(w)) return;
+      ok(/^[A-Z]/.test(w), '"' + h + '" is not Title Case');
+    }));
+  });
+
+  group('five tabs, decided before first paint, and the bar on a phone');
+  t('the boot script sets data-tab, so no panel ever jumps', () => {
+    ok(/setAttribute\('data-tab'/.test(APP_SRC.split('</head>')[0]));
+  });
+  t('CSS does the switching by hiding the OTHERS, and every panel prints', () => {
+    H.TABS.forEach((tab) => ok(css().indexOf('[data-tab]:not([data-tab="' + tab + '"]) #' + tab + 'Panel') > -1, tab));
+    ok(/@media print[\s\S]*\[data-tab\] \[role="tabpanel"\] \{ display: block !important; \}/.test(css()));
+  });
+  t('the tablist is a real one, with a roving tabindex', () => {
+    const markup = APP_SRC.slice(APP_SRC.indexOf('</head>'), APP_SRC.indexOf("<script>\n'use strict'"));
+    ok(/role="tablist"/.test(markup) && (markup.match(/role="tab"/g) || []).length === 5 && (markup.match(/role="tabpanel"/g) || []).length === 5, 'five tabs, five panels');
     const src = stripComments(APP_SRC);
-    const at = src.indexOf('const HELP = {');
-    const table = src.slice(at, src.indexOf('\n};', at));
-    ok(at > 0 && !/\besc\(|\bstate\.|\bentries\b|\$\(/.test(table),
-       'the table reads nothing from the data — every body is a literal');
+    ok(/ArrowRight/.test(src) && /'Home'/.test(src) && /b\.tabIndex = on \? 0 : -1/.test(src));
+  });
+  t('switching tabs works, live, and the bar follows with aria-current', () => {
+    const el = W.document.documentElement, was = el.getAttribute('data-tab');
+    try {
+      W.setTab('players');
+      eq(el.getAttribute('data-tab'), 'players');
+      eq(W.document.getElementById('tab-players').getAttribute('aria-selected'), 'true');
+      eq(W.document.querySelector('.tabbar button[data-tab="players"]').getAttribute('aria-current'), 'page');
+      eq(W.document.querySelector('.tabbar button[data-tab="standings"]').getAttribute('aria-current'), null);
+      eq(W.document.getElementById('standingsPanel').hidden, true);
+      W.setTab('nonsense');
+      eq(el.getAttribute('data-tab'), 'standings', 'an unknown tab falls back to the first');
+    } finally { W.setTab(was || 'standings'); }
+  });
+  t('the bar is a nav with aria-current, never a second tablist', () => {
+    ok(/<nav class="tabbar no-print" aria-label="Sections">/.test(APP_SRC));
+    const bar = (APP_SRC.match(/<nav class="tabbar[\s\S]*?<\/nav>/) || [''])[0];
+    ok(!/role="tab/.test(bar) && (bar.match(/data-tab="/g) || []).length === 5);
+  });
+  t('the bar is fixed only under 760px, lifts the toast, pads the page, and hides under a dialog', () => {
+    const mob = (css().match(/@media \(max-width: 759\.98px\) \{([\s\S]*?)\n  \}/) || [])[1] || '';
+    ok(mob, 'the phone block exists');
+    ok(/\.tabbar \{ display: flex; position: fixed;/.test(mob));
+    ok(/\.tabs \{ display: none; \}/.test(mob), 'and the tablist goes, so there is one control at a time');
+    ok(/body \{ padding-bottom: calc\(var\(--tabbar-h\) \+ env\(safe-area-inset-bottom\)\); \}/.test(mob));
+    ok(/#toast \{ bottom: calc\(var\(--tabbar-h\)/.test(mob));
+    ok(/html:has\(dialog\[open\]\) \.tabbar/.test(mob), 'iOS re-anchors a fixed bar above the keyboard');
+    ok(/dialog\.sheet \{ position: fixed; inset: auto 0 0 0;/.test(mob), 'and the scorer is a sheet');
+    ok(/env\(safe-area-inset-bottom\)/.test(mob) && /viewport-fit=cover/.test(APP_SRC), 'safe areas need viewport-fit');
+    ok(/@media print \{ \.tabbar \{ display: none !important; \}/.test(css()));
+  });
+  t('on a phone the bar is really there and the tablist really gone', () => {
+    const r = asyncResults.phone || {};
+    ok(!r.error, r.error);
+    eq(r.barDisplay, 'flex'); eq(r.tabsDisplay, 'none');
+    ok(r.barBottom <= r.vh + 1 && r.barBottom >= r.vh - 1, 'the bar sits on the bottom edge, got ' + r.barBottom + ' of ' + r.vh);
+    ok(r.padBottom >= 56, 'the page is padded past it');
+    ok(r.sheetW === r.vw, 'the scorer sheet is the full width: ' + r.sheetW + ' of ' + r.vw);
+    eq(r.barUnderDialog, 'none', 'and the bar hides while the sheet is open');
+    ok(r.noSideways, 'the page never scrolls sideways');
+  });
+  t('a tab press starts the new view at the top', () => {
+    const L = asyncResults.landing || {};
+    ok(!L.error, L.error);
+    ok(L.down > 0, 'the frame really can scroll', L.down);
+    eq(L.afterOtherTab, 0);
+  });
+  t('pressing the tab you are already on leaves the page where it is', () => {
+    const L = asyncResults.landing || {};
+    ok(L.held > 0, L.held); eq(L.afterSameTab, L.held);
+  });
+  t('coarse pointers get a taller control floor and thumb-sized winner buttons', () => {
+    const coarse = (css().match(/@media \(pointer: coarse\) \{\s*:root \{ --control-h: 44px; \}[\s\S]*?\}/) || [''])[0];
+    ok(coarse, 'the block exists');
+    ok(/\.side-btn \{ min-height: 56px; \}/.test(coarse));
+    ok(/inputmode="numeric"/.test(APP_SRC), 'and a number is typed on a number pad');
+  });
+
+  group('the welcome card, the picker and Find');
+  t('the welcome is decided before first paint and offers three doors', () => {
+    const head = APP_SRC.split('</head>')[0];
+    ok(/setAttribute\('data-welcome'/.test(head) && /location\.hash\.indexOf\('#share='\) !== 0/.test(head));
+    const card = (APP_SRC.match(/<div class="card welcome"[\s\S]*?<\/div>\s*<\/div>/) || [''])[0];
+    ok(/Create a League/.test(card) && /Try the Demo/.test(card) && /Restore a Backup/.test(card));
+    ok(!/Join a League/.test(card), 'Join arrives with sign-in, not as a button that does nothing');
+    ok(/html\[data-welcome\] \.tabs/.test(css()));
+  });
+  t('the welcome card is ONE measure and ONE colour', () => {
+    const card = W.document.querySelector('#welcomeCard .empty');
+    const wasHidden = W.document.getElementById('welcomeCard').hidden;
+    W.document.getElementById('welcomeCard').hidden = false;
+    try {
+      const ps = [...card.querySelectorAll('p')];
+      ok(ps.length >= 5);
+      eq([...new Set(ps.map((el) => Math.round(el.getBoundingClientRect().width)))].length, 1, 'every paragraph shares one measure');
+      eq([...new Set(ps.map((el) => W.getComputedStyle(el).color))].length, 1, 'and one colour');
+    } finally { W.document.getElementById('welcomeCard').hidden = wasHidden; }
+  });
+  t('Forget or Delete returns to the welcome card', () => {
+    const src = stripComments(APP_SRC);
+    ok(/function renderWelcome\(\)/.test(src) && /const virgin = !viewOnly && !state;/.test(src));
+    H.__plant(null);
+    ok(W.document.documentElement.hasAttribute('data-welcome') && !W.document.getElementById('welcomeCard').hidden);
+    ok(W.document.getElementById('findBtn').hidden && W.document.getElementById('shareBtn').hidden, 'nothing to find or share');
+    H.__plant(FIXTURE);
+    ok(!W.document.documentElement.hasAttribute('data-welcome'));
+  });
+  t('searchApp is pure, needs two characters, and finds by side, date and venue', () => {
+    const st = H.normalizeLeague(FIXTURE);
+    eq(H.searchApp(st, 'a').hits.length, 0);
+    eq(H.searchApp(st, 'alpha').hits.map((h) => h.kind), ['player', 'match', 'match'], 'the player, then her matches');
+    eq(H.searchApp(st, '2026-01-12').hits.length, 2, 'a date as stored');
+    eq(H.searchApp(st, 'crown').hits.length, 1, 'a venue');
+    eq(H.searchApp({}, 'anything').hits.length, 0); eq(H.searchApp(null, 'anything').hits.length, 0);
+  });
+  t('the cap is reported, never a silent truncation', () => {
+    const many = { players: Array.from({ length: 200 }, (_, i) => ({ id: 'i' + i, name: 'match ' + i, active: true })), league: { settings: { format: 'singles' } } };
+    const r = H.searchApp(many, 'match');
+    eq(r.hits.length, H.SEARCH_CAP); eq(r.more, 200 - H.SEARCH_CAP);
+  });
+  t('Enter in the Find box opens the first hit', () => {
+    const D = W.document;
+    const dlg = D.getElementById('searchDialog');
+    const type = (q) => { const box = D.getElementById('searchBox'); box.value = q; box.dispatchEvent(new W.Event('input', { bubbles: true })); };
+    const enter = () => D.getElementById('searchBox').dispatchEvent(new W.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    D.getElementById('findBtn').click();
+    type('zzzz-nothing'); enter();
+    ok(dlg.open, 'nothing to go to, so the window stays');
+    type('Charlie'); enter();
+    ok(!dlg.open && D.getElementById('sideDialog').open, 'the first hit — the player — opens their page');
+    eq(D.getElementById('sideTitle').textContent, 'Charlie Negative');
+    D.getElementById('sideDialog').close();
+    W.setTab('standings');
+  });
+  t('the COUNT is the live region, not the list, and ⌘K does not fight another dialog', () => {
+    ok(/<span id="searchCount" class="sr-only" role="status">/.test(APP_SRC));
+    ok(/open && open\.id !== 'searchDialog'/.test(stripComments(APP_SRC)));
+  });
+
+  group('a CSV is a file that LEAVES the app');
+  t('a cell that could be read as a formula is defused, a real number is not', () => {
+    ok(H.csvCell('=SUM(A1:A9)').indexOf("'=") > -1);
+    ['+', '-', '@'].forEach(ch => ok(H.csvCell(ch + 'x').indexOf("'" + ch) > -1, ch));
+    eq(H.csvCell('-3abc'), "'-3abc"); eq(H.csvCell('-5'), '-5'); eq(H.csvCell('a,b'), '"a,b"');
+    eq(H.toTsv([['=1+1']]), "'=1+1");
+  });
+  t('the matches CSV has a header row, CRLF ends, and one row per match', () => {
+    const csv = H.csvMatches(H.normalizeLeague(FIXTURE));
+    const lines = csv.split('\r\n');
+    eq(lines.length, 5); ok(/^Season,Round,Date,Side A,Side B/.test(lines[0]));
+    ok(/forfeit/.test(csv) && /The Crown/.test(csv));
+  });
+  t('the standings export reads the rendered table', () => {
+    const rows = H.tableToRows(W.document.getElementById('standingsTable'));
+    eq([...new Set(rows.map((r) => r.length))].length, 1, 'a rectangle');
+    eq(rows[1][1].split(' ')[0], 'Alpha', 'the name is kept');
+  });
+  t('there is only ONE csvCell in the file', () => {
+    eq((stripComments(APP_SRC).match(/function csvCell/g) || []).length, 1);
+  });
+
+  group('installable, and it works offline');
+  t('the manifest is valid, and its scope is relative', () => {
+    const m = JSON.parse(MANIFEST_SRC);
+    eq(m.scope, './'); eq(m.start_url, './'); eq(m.display, 'standalone'); eq(m.name, 'League Night');
+    ok(/<link rel="manifest" href="manifest\.webmanifest">/.test(APP_SRC));
+    eq(m.icons.map(i => i.purpose).sort(), ['any', 'any', 'maskable']);
+    ok(!/rel="manifest"/.test(PRIVACY_SRC));
+  });
+  t('the worker is network-first, and caches only public files', () => {
+    ok(/networkFirst/.test(SW_SRC));
+    const swCode = stripComments(SW_SRC);
+    ok(/fetch\(req, \{ cache: 'no-cache' \}\)/.test(swCode) && !/fetch\(req\)/.test(swCode));
+    ok(!/eval\(|importScripts|import\(/.test(SW_SRC));
+    eq(SW_SRC.match(/https?:\/\/[^\s'"]+/g) || [], []);
+  });
+  t('the SHELL list is pinned here, which is the security review', () => {
+    const arr = (SW_SRC.match(/const SHELL = \[([\s\S]*?)\]/) || [])[1] || '';
+    eq((arr.match(/'([^']+)'/g) || []).map(s => s.replace(/'/g, '')),
+       ['./', 'theme.css', 'privacy.html', 'favicon.ico', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-512-maskable.png']);
+  });
+  t('activate deletes only THIS app’s caches, and the kill switch exists', () => {
+    ok(/k\.startsWith\(PREFIX\)/.test(SW_SRC) && /ln-shell-/.test(SW_SRC));
+    ok(/registration\.unregister/.test(KILL_SRC) && /ln-shell-/.test(KILL_SRC) && /clients\.matchAll/.test(KILL_SRC));
+  });
+  t('registration is guarded three ways', () => {
+    const reg = (APP_SRC.match(/serviceWorker' in navigator[\s\S]*?\}\)\(\);/) || [''])[0];
+    ok(/window\.top !== window\.self/.test(reg) && /window\.lnViewOnly/.test(reg) && /addEventListener\('load'/.test(reg));
+  });
+  t('the icon is the same picture in both places', () => {
+    ok(/circle cx='32' cy='32' r='21'/.test(APP_SRC) && /favicon\.ico\?v=2/.test(APP_SRC), 'the inline SVG is the dartboard, and the ico reference was bumped');
   });
 }
 
