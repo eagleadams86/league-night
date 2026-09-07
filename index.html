@@ -6194,8 +6194,12 @@ async function init() {
     clearSyncError();
     stopListening();
     updateUI();
-    const waiters = signInWaiters; signInWaiters = [];
-    waiters.forEach((w) => w(u));
+    /* A sign-in someone is WAITING for is answered only by a user. The
+       first report after Google's code loads is "nobody yet", and it can land
+       after the popup has been asked for — on Charles's second account it
+       resolved the join with "sign in first" while the popup was still open.
+       Giving up is the popup's own error_callback, not this report. */
+    if (u) { const waiters = signInWaiters; signInWaiters = []; waiters.forEach((w) => w(u)); }
     if (u) onSignedIn().catch(setSyncError);
     else { window.lnCloudUser(null); }
   });

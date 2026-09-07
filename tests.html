@@ -1259,6 +1259,8 @@ function define() {
        'Share is idempotent: a second press repairs a league that stopped halfway rather than failing on rev 0');
     ok(/const FIREBASE_CONFIG = null;/.test(m) || /projectId:/.test(m), 'a config or an explicit null');
     ok(/addEventListener\('online'/.test(m) && /visibilitychange/.test(m), 'a held push is retried when the network or the reader comes back');
+    ok(/if \(u\) \{ const waiters = signInWaiters; signInWaiters = \[\]; waiters\.forEach\(\(w\) => w\(u\)\); \}/.test(m),
+       'a sign-in being waited for is answered only by a user — the first "nobody yet" report must not resolve it');
   });
   t('the keys are carried by the password manager, never by state', () => {
     const src = stripComments(APP_SRC);
