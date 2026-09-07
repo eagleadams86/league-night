@@ -1,0 +1,10 @@
+{
+  "name": "league-night",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Not a package and not a build step — this file exists so Dependabot has a manifest to read. Its entries are dependencies this app loads at RUNTIME but never installs: the Firebase SDK the page loads from www.gstatic.com. Nothing is ever installed from it (CI passes --omit=dev). See README.md.",
+  "license": "MIT",
+  "devDependencies": {
+    "firebase": "12.18.0"
+  }
+}

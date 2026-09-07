@@ -51,7 +51,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 164;
+const EXPECTED = 171;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -122,7 +122,7 @@ function stripComments(src) {
 }
 
 let W = null, H = null;
-let APP_SRC = '', PRIVACY_SRC = '', THEME_SRC = '', SW_SRC = '', KILL_SRC = '', MANIFEST_SRC = '';
+let APP_SRC = '', PRIVACY_SRC = '', THEME_SRC = '', SW_SRC = '', KILL_SRC = '', MANIFEST_SRC = '', RULES_SRC = '';
 
 async function main() {
   if (LOCAL_HOSTS.indexOf(location.hostname) === -1) {
@@ -140,6 +140,7 @@ async function main() {
   SW_SRC       = await (await bustFetch('sw.js')).text();
   KILL_SRC     = await (await bustFetch('sw-kill.js')).text();
   MANIFEST_SRC = await (await bustFetch('manifest.webmanifest')).text();
+  RULES_SRC    = await (await bustFetch('firestore.rules')).text();
 
   /* ── Guard the source actually loaded, BEFORE any negative assertion ───────
      An all-NOT test over a fetched file proves nothing when the fetch failed:
@@ -151,6 +152,7 @@ async function main() {
   ok(SW_SRC.length > 500, 'sw.js did not load');
   ok(KILL_SRC.length > 100, 'sw-kill.js did not load — the escape hatch has to exist BEFORE it is needed');
   ok(MANIFEST_SRC.length > 100, 'manifest.webmanifest did not load');
+  ok(RULES_SRC.length > 500, 'firestore.rules did not load');
 
   W = await bootApp();
   H = W.__lnTestHooks;
@@ -399,6 +401,16 @@ function define() {
   W.setTab('standings');
 
   group('the suite plants its own data');
+  t('the app booted without throwing — before the suite planted anything', () => {
+    /* boot() is async: a throw inside it is a rejected promise the page
+       survives with nothing drawn, and every test below runs AFTER the
+       declarations it tripped on exist. Found 2026-09-07: a `let` the first
+       render read was declared after boot(), the live page failed its first
+       paint, and 170 tests stayed green. */
+    ok(!W.__lnBootError, 'boot threw', W.__lnBootError);
+    const src = stripComments(APP_SRC);
+    ok(src.indexOf('let membersFor') < src.indexOf('\nboot()'), 'the cloud-side lets are declared before boot() runs');
+  });
   t('the app is rendered from a FIXTURE, not from this browser’s saved copy', () => {
     ok(booted, 'the app booted into one of its two real states');
     eq(H.__state().players.length, 4, 'and the suite then planted its own four players');
@@ -501,13 +513,16 @@ function define() {
   });
 
   group('the page is on the shared origin, and behaves like it');
-  t('the CSP names no external host', () => {
-    /* Until sync lands. When Firebase arrives, this test changes to pin the
-       exact five Google origins Golf Handicap allows and nothing else. */
+  t('the CSP names exactly Google’s origins for sign-in and the shared league, and nothing else', () => {
     const csp = (APP_SRC.match(/Content-Security-Policy" content="([^"]*)"/) || [])[1] || '';
     ok(csp, 'there must be a CSP meta tag');
     ok(/default-src 'none'/.test(csp), 'it starts at none');
-    eq(csp.match(/https?:\/\/[^\s;']+/g) || [], []);
+    const hosts = [...new Set(csp.match(/https?:\/\/[^\s;']+/g) || [])].sort();
+    eq(hosts, ['https://accounts.google.com', 'https://firestore.googleapis.com', 'https://identitytoolkit.googleapis.com',
+               'https://securetoken.googleapis.com', 'https://www.googleapis.com', 'https://www.gstatic.com'],
+       'Golf Handicap’s list; a new endpoint is a decision');
+    ok(!/firebaseapp\.com|apis\.google\.com/.test(csp), 'the hosted popup and the gapi iframe are deliberately absent');
+    ok(/frame-src https:\/\/accounts\.google\.com/.test(csp), 'the sign-in popup needs frame-src');
   });
   t('manifest-src and worker-src are spelled out, not left to fall back', () => {
     const csp = (APP_SRC.match(/Content-Security-Policy" content="([^"]*)"/) || [])[1] || '';
@@ -1185,6 +1200,85 @@ function define() {
     ok(/#shareDialog\s*\{[^}]*max-width:\s*1100px/.test(css()));
   });
 
+  group('sharing a league: the rules, the module and the keys');
+  t('the rules file is checked in, and says what the plan says', () => {
+    ok(RULES_SRC.length > 2000, 'firestore.rules loaded');
+    const r = stripComments(RULES_SRC.replace(/\/\/[^\n]*/g, ''));
+    ok(/allow list:\s*if false;/.test(r), 'leagues are never enumerable — the ID is a capability only while nobody can list them');
+    ok(/allow get:\s*if signedIn\(\);/.test(r), 'any signed-in account may fetch a league by id');
+    ok(/request\.resource\.data\.rev == resource\.data\.rev \+ 1/.test(r), 'every update raises rev by exactly one');
+    ok(/exists\(memberPath\(request\.resource\.data\.owner\)\)/.test(r), 'ownership passes only to a member');
+    ok(/match \/private\/admin[\s\S]*allow read:\s*if isOwner\(\);/.test(r), 'only the owner reads the key');
+    ok(/match \/claims\/\{uid\}[\s\S]*allow read:\s*if false;/.test(r), 'a claim is never readable');
+    ok(/request\.resource\.data\.role == 'admin' && keyMatches\(\)/.test(r), 'admin is claimed by matching the key');
+    /* Every get() is guarded by an exists() on the same path. */
+    /* A balanced-paren scan: get(memberPath(me())).data nests two deep. */
+    const gets = [];
+    for (let at = r.indexOf('get('); at !== -1; at = r.indexOf('get(', at + 4)) {
+      if (/[\w.]/.test(r[at - 1] || '')) continue;
+      let depth = 0, i = at + 3;
+      for (; i < r.length; i++) { if (r[i] === '(') depth++; else if (r[i] === ')' && --depth === 0) break; }
+      if (r.slice(i + 1, i + 6) === '.data') gets.push(r.slice(at + 4, i));
+    }
+    ok(gets.length >= 4, 'gets found: ' + gets.length);
+    gets.forEach((p) => ok(r.indexOf('exists(' + p + ')') !== -1, 'unguarded get on ' + p));
+    ok(!/match \/\{document=\*\*\}/.test(r), 'no catch-all');
+  });
+  t('the sync module is Golf Handicap’s doorway, and never a blind write', () => {
+    /* The LAST module tag: a comment in the classic script names the tag in
+       prose, and a match from there would read the wrong block. */
+    const at = APP_SRC.lastIndexOf('<script type="module">');
+    const mod = at === -1 ? '' : APP_SRC.slice(at, APP_SRC.indexOf('</scr' + 'ipt>', at))   /* two halves: whole, it would end THIS script */;
+    ok(mod.length > 5000, 'the module exists');
+    const m = stripComments(mod);
+    ok(/A\.initializeAuth\(app/.test(m) && !/A\.getAuth\(/.test(m), 'initializeAuth, never getAuth');
+    ok(!/signInWithPopup|signInWithRedirect/.test(m), 'no hosted popup');
+    ok(/initTokenClient/.test(m) && /signInWithCredential/.test(m), 'Google Identity Services, then the credential exchange');
+    ok(/runTransaction\(db/.test(m) && /window\.lnMerge\(mine, cloud\.state\)/.test(m), 'a push is a transaction that merges');
+    ok(/rev: cloud\.rev \+ 1/.test(m), 'and raises rev by one');
+    ok(!/setDoc\(leagueRef\(id\), \{ state: forCloud\(window\.lnGet\(\)\)/.test(m.replace(/rev: 0, owner: user\.uid/, '')), 'no blind setDoc of the league after creation');
+    ok(/forCloud = \(s\) => JSON\.parse\(JSON\.stringify\(s\)\)/.test(m), 'the cloud copy goes through JSON — Firestore refuses undefined');
+    ok(/writeBatch\(db\)/.test(m) && /batch\.delete\(leagueRef\(id\)\)/.test(m), 'deleting a league is one batch');
+    ok(/F\.deleteDoc\(claimRef\(id\)\)/.test(m), 'the claim is emptied after use');
+    ok(/const FIREBASE_CONFIG = null;/.test(m) || /projectId:/.test(m), 'a config or an explicit null');
+    ok(/addEventListener\('online'/.test(m) && /visibilitychange/.test(m), 'a held push is retried when the network or the reader comes back');
+  });
+  t('the keys are carried by the password manager, never by state', () => {
+    const src = stripComments(APP_SRC);
+    ok(/const KEY_KEY = \(id\) => 'ln-key-' \+ id;/.test(src), 'the key has its own localStorage key');
+    const st = H.normalizeLeague(FIXTURE);
+    ok(!JSON.stringify(st).includes('adminKey') && !JSON.stringify(H.buildSharePayload(st, {})).includes('adminKey'), 'nothing in a league or a link is called adminKey');
+    const form = (APP_SRC.match(/<form id="keyForm"[\s\S]*?<\/form>/) || [''])[0];
+    ok(/autocomplete="username"[^>]*readonly[^>]*tabindex="-1"[^>]*aria-hidden="true"/.test(form), 'the League ID is the username the manager files the key under');
+    ok(/type="password" id="ln_adminKey"[^>]*autocomplete="current-password"/.test(form), 'current-password, never new-password');
+    ok(/autocapitalize="off"[^>]*autocorrect="off"/.test(form), 'iOS would capitalise the first letter of a key');
+    const join = (APP_SRC.match(/<form id="joinForm"[\s\S]*?<\/form>/) || [''])[0];
+    ok(/id="jn_id"[^>]*autocomplete="username"/.test(join) && /id="jn_key"[^>]*autocomplete="current-password"/.test(join), 'and the join window is the same pairing');
+    ok(/localStorage\.removeItem\('ln-key-' \+ id\)/.test(src), 'forgetting a league forgets its key');
+  });
+  t('the device record carries the cloud revision and the dirty flag, and an edit sets it', () => {
+    const d = H.normalizeDevice({ leagues: [{ id: 'LN-A', name: 'a', cloud: true, rev: '7', dirty: true }, { id: 'LN-B', name: 'b', rev: -3, dirty: 'yes' }] });
+    eq([d.leagues[0].rev, d.leagues[0].dirty, d.leagues[1].rev, d.leagues[1].dirty], [7, true, 0, false]);
+    const src = stripComments(APP_SRC);
+    ok(/function save\(\) \{\s*if \(viewOnly\) return;\s*editSeq \+= 1;/.test(src), 'save() counts the edit');
+    ok(/if \(entry && entry\.cloud\) entry\.dirty = true;/.test(src), 'and marks a shared league dirty');
+    ok(/function saveLocal\(\)/.test(src), 'while the cloud’s own writes come in through saveLocal()');
+  });
+  t('without a config nothing cloud-only is on screen, and the sync button is hidden', () => {
+    const D = W.document;
+    ok(!D.documentElement.hasAttribute('data-cloud'));
+    ok(D.getElementById('syncBtn').hidden, 'the button hides');
+    ok(/html:not\(\[data-cloud\]\) \.cloud-only \{ display: none !important; \}/.test(css()));
+    W.setTab('league');
+    ok(W.getComputedStyle(D.getElementById('membersCard')).display === 'none' && D.getElementById('keyForm').hidden && D.getElementById('shareLeagueBtn').hidden);
+    W.setTab('standings');
+  });
+  t('a viewer’s save never pushes, and the demo can never be shared', () => {
+    const src = stripComments(APP_SRC);
+    ok(/if \(!user \|\| !entry \|\| !entry\.cloud \|\| entry\.role === 'viewer'\) return;/.test(src), 'pushNow refuses for a viewer');
+    ok(/!window\.lnIsLeagueId\(entry\.id\)\) return;/.test(src), 'cloudPush refuses an id that is not a League ID — the demo');
+  });
+
   group('the chrome is the family’s');
   t('the footer carries all three of the family’s links', () => {
     ok(/href="privacy\.html"/.test(APP_SRC)); ok(/>How it works</.test(APP_SRC)); ok(/MIT licensed/.test(APP_SRC));
@@ -1426,7 +1520,9 @@ function define() {
     ok(/setAttribute\('data-welcome'/.test(head) && /location\.hash\.indexOf\('#share='\) !== 0/.test(head));
     const card = (APP_SRC.match(/<div class="card welcome"[\s\S]*?<\/div>\s*<\/div>/) || [''])[0];
     ok(/Create a League/.test(card) && /Try the Demo/.test(card) && /Restore a Backup/.test(card));
-    ok(!/Join a League/.test(card), 'Join arrives with sign-in, not as a button that does nothing');
+    ok(/id="firstJoin" class="cloud-only"/.test(card), 'Join is offered only once the cloud exists — never a button that does nothing');
+    ok(!W.document.documentElement.hasAttribute('data-cloud') && W.getComputedStyle(W.document.getElementById('firstJoin')).display === 'none',
+       'and with no Firebase config it is not on screen');
     ok(/html\[data-welcome\] \.tabs/.test(css()));
   });
   t('the welcome card is ONE measure and ONE colour', () => {
@@ -1434,7 +1530,7 @@ function define() {
     const wasHidden = W.document.getElementById('welcomeCard').hidden;
     W.document.getElementById('welcomeCard').hidden = false;
     try {
-      const ps = [...card.querySelectorAll('p')];
+      const ps = [...card.querySelectorAll('p')].filter((el) => el.getClientRects().length);
       ok(ps.length >= 5);
       eq([...new Set(ps.map((el) => Math.round(el.getBoundingClientRect().width)))].length, 1, 'every paragraph shares one measure');
       eq([...new Set(ps.map((el) => W.getComputedStyle(el).color))].length, 1, 'and one colour');
