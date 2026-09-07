@@ -51,8 +51,17 @@ tournaments, and the whole sharing model — the sync module, `firestore.rules`,
 Members cards, the join window and the password-manager key forms. **Sharing is dark until
 Charles creates the Firebase project and pastes `FIREBASE_CONFIG` and `GOOGLE_CLIENT_ID`** (the
 README's "Setting up the cloud"); it cannot be verified end to end from here, only from two real
-Google accounts. Still to come: 4 the live x01 sheet, 6 invites + QR, 7 polish (the axe pass,
-print CSS, `compactSeason`). The README tracks what is live.
+Google accounts. Phases 4 (the live x01 sheet, `openLive`/`liveCommit` over the pure fold) and
+6 (invites: `joinLink`, Web Share, mailto/sms, the in-app QR encoder capped at version 6, and
+`#join=` arrival that strips the fragment at once) landed the same day. Still to come: 7 polish
+(the axe pass, print CSS, `compactSeason`). The README tracks what is live.
+
+**The QR encoder** matches the Python `qrcode` library module for module on four fixtures
+(forced masks). A second library, segno, inserts a whole zero byte after the terminator before
+the pad codewords — a quirk, not the standard's worked examples — so it agrees only on the
+exact-fit case. The top-left format copy runs bit 14 at (8,0) along the row and UP column 8 to
+bit 0 at (0,8); the first draft had the column half upside down and only an exact-fit fixture
+showed it.
 
 ## The sharing model, in the code
 

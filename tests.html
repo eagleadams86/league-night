@@ -51,7 +51,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 171;
+const EXPECTED = 180;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -211,7 +211,7 @@ function bootFrame(hash, width, height) {
       let win = null, ready = false;
       try {
         win = frame.contentWindow;
-        if (hash) { const bar = win.document.getElementById('viewbar'); ready = !!(win.lnViewOnly && bar && !bar.hidden); }
+        if (hash && hash.indexOf('#share=') === 0) { const bar = win.document.getElementById('viewbar'); ready = !!(win.lnViewOnly && bar && !bar.hidden); }
         else ready = !!win.__lnTestHooks;
       } catch (e) { /* not readable yet */ }
       if (ready) { resolve(win); return; }
@@ -329,6 +329,13 @@ async function runAsync() {
     asyncResults.phone = r;
   } catch (e) { asyncResults.phone = { error: e.message }; }
 
+  /* ── Arriving by a join link, with no cloud ─────────────────────────────── */
+  try {
+    const J = await bootFrame('#join=LN-ABCDEFGH&admin=ABCDEFGHJKLMNPQR');
+    await new Promise((r) => setTimeout(r, 300));
+    asyncResults.joinArrival = { hash: J.location.hash, toast: J.document.getElementById('toast').textContent };
+  } catch (e) { asyncResults.joinArrival = { error: e.message }; }
+
   /* ── Where a press leaves the page ─────────────────────────────────────── */
   try {
     const D = W.document;
@@ -393,6 +400,12 @@ const RULES = { points: { win: 2, draw: 1, loss: 0 }, tiebreak: ['pts', 'legDiff
 const bm = (slot, a, b, w, bracketId) => ({ id: 'bm-' + slot, bracketId: bracketId || 'b', slot: slot, a: a, b: b, status: 'played',
   score: { a: w === 'a' ? 2 : 0, b: w === 'b' ? 2 : 0 }, legs: [], u: 1, seasonId: null, round: 0, venue: '', date: null });
 const css = () => (stripComments(APP_SRC).match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
+/* Four QR symbols from an INDEPENDENT encoder (Python `qrcode`, byte mode, level M,
+   mask forced), generated once and pasted. A second library, segno, agrees on the
+   exact-fit case and differs on the others by inserting a whole zero byte after the
+   terminator, which the standard's worked examples do not do; `qrcode` follows them. */
+const QR_FIXTURES = {"v1": {"text": "LN-7KQ4M2XR", "version": 1, "mask": 3, "rows": ["111111101001001111111", "100000101000101000001", "101110100110101011101", "101110101111101011101", "101110100001001011101", "100000100101101000001", "111111101010101111111", "000000001101100000000", "101101110101101001011", "110111001001111101000", "111000101011011101111", "000100010001010010010", "101000100110111000011", "000000001111001110101", "111111101001111011000", "100000101010010000111", "101110100010111000100", "101110101100011111010", "101110101010100001000", "100000100001111110001", "111111101110000000000"]}, "v4": {"text": "https://eagleadams86.github.io/league-night/#join=LN-7KQ4M2XR", "version": 4, "mask": 5, "rows": ["111111100111011000100110001111111", "100000101011010010000100001000001", "101110101010100100011110001011101", "101110101101101101111100101011101", "101110100100010110010101101011101", "100000100111011001000000001000001", "111111101010101010101010101111111", "000000001101001000011011000000000", "100000101100110001010011111001110", "001011001010011100111111000011100", "110010110001011101000000111010110", "101001001000110110011000001111110", "011101111000010001011000101100001", "111101011101010011101001101100111", "110110101001100100100110111001110", "000010010101100110000010010101101", "101010101111100101011010110110001", "110010001000011101010101001001101", "101001100101001110111001010101101", "100010010110000100000011010011100", "011111110110110110010010010111011", "100010011001010110000011000011100", "101110111111101110001100110001010", "101011000101011010101010110101110", "110000100000101010000000111110000", "000000001100100110110100100010101", "111111100110111110101101101010110", "100000100101101000011001100011110", "101110100010001101101010111111011", "101110100111000011010101110111111", "101110100101101111111101110110111", "100000100100111010111010010111100", "111111101000110111011011111100010"]}, "v5": {"text": "https://eagleadams86.github.io/league-night/#join=LN-7KQ4M2XR&admin=ABCDEFGHJKLMNPQR", "version": 5, "mask": 4, "rows": ["1111111011101010101101111101001111111", "1000001000101100001110001110101000001", "1011101000011100011001101011001011101", "1011101010101100001100000110101011101", "1011101010100100011001110111101011101", "1000001010111001111100101010001000001", "1111111010101010101010101010101111111", "0000000011001101110011011001000000000", "1000101111100001000110101100011111001", "0101000100110100001100010000101010010", "0111011000100001101011011011100000000", "0010100000000100111111010011000110110", "1100101100101000010111110000011100111", "0101010011100101110000010001100011000", "0110001001110001000001111001001111110", "1010000011001010011011010001111110101", "0011111110100010100010111100101111110", "1001100100010110101100010101000010110", "1001111000101111011000111101010101000", "1110100101111001111111111011100110110", "1000011001010100010111011010011100100", "0011000101110001111000010101100110000", "1111001011110011011010111101001111110", "0000000111010101110111101001000110110", "0101101101101001100010101010101001111", "1011100110111010101101010010110111100", "0010111100101111111010010001000010000", "0001110001110001111011111000101110110", "1100101010100000011111101011111110111", "0000000010000011111010010100100010010", "1111111010011011111010110110101010000", "1000001001111000011111001000100011110", "1011101011011111100010111000111111100", "1011101000001000111101010110011100111", "1011101000100001111001111110011000100", "1000001000111000011011010001100010110", "1111111010011111010111101011010100111"]}, "v6": {"text": "https://eagleadams86.github.io/league-night/#join=LN-7KQ4M2XR&admin=ABCDEFGHJKLMNPQR&x=0123456789", "version": 6, "mask": 2, "rows": ["11111110001110000110110000100011101111111", "10000010011111001100010011110010001000001", "10111010110100001111011000001001101011101", "10111010110100101001010011000110101011101", "10111010100001100010101100101001101011101", "10000010100111101000110000011000101000001", "11111110101010101010101010101010101111111", "00000000101101011010110110110001100000000", "10111110011001101101100001100100001111100", "00010001110011100111101110001011101010100", "00111010101011110000100001111000100110000", "01100101001000011010010110111001111101011", "01011110010010101001101011111101100001101", "01000100100010100110010001000011001111110", "11001110101100111110111110111010010100100", "11010000010101010000011100111000001101001", "10100010100010011000011110110100010100100", "01100000100011101010100000001011001110111", "11001111100001101010001001111110001011110", "11001100111101100000000110110011010011011", "10010010010101100011111011000110000001010", "01000100100000001101010110101001111010011", "00000110101010101010001000110010110000000", "01010000011111101011110100001000011011000", "10010011100100010101000101100100000011010", "01101001101010000101100101001011000111010", "00101010100011010100101000010000111010000", "11001000011011011011111000011001110111000", "00100111011101010110001111101111110001101", "11010101010111010110110010100011001010101", "10001111100001001001001000010000111101010", "10101101100111010011110010111010111101000", "10101010001100101001011110110101111110101", "00000000101111100110110001001011100010011", "11111110010101010100110010011110101011000", "10000010111100001111111110011001100010000", "10111010100110110000010011000110111111100", "10111010100111011011101110101000010100011", "10111010100001100000101010011100111111000", "10000010001100111000010000111000100011010", "11111110111000010111001011100101000111000"]}};
+
 
 function define() {
   const booted = W.document.documentElement.hasAttribute('data-welcome')
@@ -578,7 +591,7 @@ function define() {
     eq(Object.keys(out.teams[0]).sort(), ['id', 'name', 'u']);
     eq(Object.keys(out.seasons[0]).sort(), ['id', 'name', 'startsOn', 'status', 'u']);
     eq(Object.keys(out.matches[0]).sort(), ['a', 'b', 'bracketId', 'date', 'id', 'legs', 'round', 'score', 'seasonId', 'slot', 'status', 'u', 'venue']);
-    eq(Object.keys(out.matches[0].legs[0]).sort(), ['by', 'start', 'w']);
+    eq(Object.keys(out.matches[0].legs[0]).sort(), ['by', 'dOut', 'first', 'start', 'w']);
     eq(Object.keys(out.brackets[0]).sort(), ['bestOf', 'createdAt', 'entrants', 'id', 'name', 'reset', 'seasonId', 'seeded', 'type', 'u']);
   });
   t('names are capped in code at NAME_MAX, not only by maxlength', () => {
@@ -1277,6 +1290,125 @@ function define() {
     const src = stripComments(APP_SRC);
     ok(/if \(!user \|\| !entry \|\| !entry\.cloud \|\| entry\.role === 'viewer'\) return;/.test(src), 'pushNow refuses for a viewer');
     ok(/!window\.lnIsLeagueId\(entry\.id\)\) return;/.test(src), 'cloudPush refuses an id that is not a League ID — the demo');
+  });
+
+
+  group('the QR code and the join link');
+  t('the encoder reproduces an independent encoder’s symbols exactly', () => {
+    Object.keys(QR_FIXTURES).forEach((name) => {
+      const f = QR_FIXTURES[name];
+      const M = H.qrMatrix(f.text, f.mask);
+      eq(M.version, f.version, name + ' version');
+      const rows = M.map((r) => r.map((x) => x ? '1' : '0').join(''));
+      let diff = 0;
+      rows.forEach((r, i) => { for (let j = 0; j < r.length; j++) if (r[j] !== f.rows[i][j]) diff++; });
+      eq(diff, 0, name + ': modules differing from the fixture');
+    });
+  });
+  t('the Reed–Solomon codewords have zero syndromes', () => {
+    const data = H.qrCodewords(Array.from(new TextEncoder().encode('LN-7KQ4M2XR')), 1);
+    const ec = H.rsEncode(data, 10);
+    const poly = data.concat(ec);
+    const evalAt = (p, x) => p.reduce((acc, c) => H.gfMul(acc, x) ^ c, 0);
+    for (let i = 0; i < 10; i++) eq(evalAt(poly, H.GF_EXP[i]), 0, 'syndrome ' + i);
+  });
+  t('the symbol has the structure every reader relies on', () => {
+    const M = H.qrMatrix('https://eagleadams86.github.io/league-night/#join=LN-7KQ4M2XR');
+    const n = M.length;
+    eq(n, 17 + 4 * M.version, 'size is 17 + 4v');
+    ok(M.mask >= 0 && M.mask <= 7, 'a mask was chosen: ' + M.mask);
+    const finder = (r0, c0) => { for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) {
+      const want = r === 0 || r === 6 || c === 0 || c === 6 || (r >= 2 && r <= 4 && c >= 2 && c <= 4);
+      if (M[r0 + r][c0 + c] !== want) return false; } return true; };
+    ok(finder(0, 0) && finder(0, n - 7) && finder(n - 7, 0), 'three finders');
+    for (let i = 8; i < n - 8; i++) { eq(M[6][i], i % 2 === 0, 'timing row'); eq(M[i][6], i % 2 === 0, 'timing column'); }
+    ok(M[n - 8][8] === true, 'the dark module');
+    /* Both format copies decode to level M and the chosen mask. */
+    const read = (cells) => cells.reduce((v, [r, c]) => (v << 1) | (M[r][c] ? 1 : 0), 0);
+    const tl = read([[8, 0], [8, 1], [8, 2], [8, 3], [8, 4], [8, 5], [8, 7], [8, 8], [7, 8], [5, 8], [4, 8], [3, 8], [2, 8], [1, 8], [0, 8]]);
+    const other = read([[n - 1, 8], [n - 2, 8], [n - 3, 8], [n - 4, 8], [n - 5, 8], [n - 6, 8], [n - 7, 8], [8, n - 8], [8, n - 7], [8, n - 6], [8, n - 5], [8, n - 4], [8, n - 3], [8, n - 2], [8, n - 1]]);
+    eq(tl, other, 'the two copies agree');
+    const unmasked = tl ^ 0x5412;
+    eq(unmasked >> 10, (0 << 3) | M.mask, 'and say level M and the mask');
+  });
+  t('the cap is version 6, and it is enforced', () => {
+    eq(H.QR_BLOCKS[6], [172, 16, 4], 'the block table ends at 6');
+    eq(H.qrMatrix('x'.repeat(106)).version, 6, '106 bytes fit');
+    let threw = false;
+    try { H.qrMatrix('x'.repeat(107)); } catch (e) { threw = true; }
+    ok(threw, '107 bytes are refused — the Invite card always has Copy');
+    ok(/role="img"/.test(H.qrSvg('LN-7KQ4M2XR', 100)) && /var\(--text-primary\)/.test(H.qrSvg('LN-7KQ4M2XR', 100)), 'drawn as SVG in the page’s own ink');
+  });
+  t('a join link is the app’s own address with the ID in the fragment, and the key only when asked', () => {
+    const fx = JSON.parse(JSON.stringify(FIXTURE)); fx.league.id = 'LN-ABCDEFGH';
+    H.__plant(fx);
+    const link = H.joinLink('LN-ABCDEFGH', '');
+    ok(/#join=LN-ABCDEFGH$/.test(link) && link.indexOf('?') === -1, 'fragment, never a query string: ' + link);
+    ok(/&admin=ABCDEFGHJKLMNPQR$/.test(H.joinLink('LN-ABCDEFGH', 'ABCDEFGHJKLMNPQR')));
+    ok(H.JOIN_RE.test('#join=LN-ABCDEFGH') && H.JOIN_RE.test('#join=LN-ABCDEFGH&admin=ABCDEFGHJKLMNPQR') && !H.JOIN_RE.test('#join=LN-ABC'));
+    H.__plant(FIXTURE);
+  });
+  t('arriving by a join link takes the link off the address at once', () => {
+    const r = asyncResults.joinArrival || {};
+    ok(!r.error, r.error);
+    eq(r.hash, '', 'the fragment — and the key in it — is gone from the address bar');
+    ok(/cannot join leagues yet/.test(r.toast) && /LN-ABCDEFGH/.test(r.toast), 'and with no cloud the reader is told the ID');
+  });
+
+  group('the live scorer');
+  t('a new leg remembers who throws first and the double-out rule, and SCHEMA is 2', () => {
+    eq(H.SCHEMA, 2);
+    const out = H.normalizeLeague({ league: { id: 'L' }, matches: [{ id: 'm', a: 'x', b: 'y', legs: [{ first: 'b', dOut: false }, {}] }] });
+    eq(out.matches[0].legs.map((l) => [l.first, l.dOut]), [['b', false], ['a', true]]);
+  });
+  t('the sheet scores a leg visit by visit, asks how many darts the finish took, and ends the leg', () => {
+    const D = W.document;
+    D.getElementById('tab-matches').click();
+    D.querySelector('.mrow[data-match="fx-m4"]').click();
+    D.getElementById('addLegBtn').click();
+    const live = D.querySelector('#legsWrap [data-live]');
+    ok(live, 'an open leg offers Score live');
+    live.click();
+    ok(D.getElementById('liveDialog').open, 'the sheet opens');
+    const key = (k) => D.querySelector('#lvPad [data-key="' + k + '"]').click();
+    const m = () => H.__state().matches.find((x) => x.id === 'fx-m4');
+    const leg = () => m().legs[0];
+    eq(leg().start, { a: 481, b: 501 }, 'Bravo starts on 481 with his 20 off');
+    key('q180');
+    eq(leg().visits.a, [{ t: 180, d: 3 }], 'a quick key is a visit, saved');
+    key('1'); key('4'); key('0'); key('enter');
+    eq(leg().visits.b, [{ t: 140, d: 3 }], 'typed digits and enter are a visit');
+    key('q180'); key('q180');
+    eq(H.x01State(leg()).rem, { a: 121, b: 181 }, '481-180-180 = 121; 501-140-180 = 181');
+    key('1');
+    key('2'); key('2'); key('enter');
+    ok(H.x01State(leg()).busts.a === 1 && H.x01State(leg()).rem.a === 121, '122 on 121 is a bust');
+    key('q100');
+    key('1'); key('2'); key('1'); key('enter');
+    ok(!D.getElementById('lvFinishRow').hidden, '121 on 121 asks how many darts');
+    ok(D.getElementById('lvIn1').disabled && D.getElementById('lvIn2').disabled && !D.getElementById('lvIn3').disabled, 'and only three darts can do it');
+    D.getElementById('lvIn3').click();
+    eq([leg().w, m().status], ['a', 'scheduled'], 'Bravo takes the leg; one of three is not the match');
+    const s = H.x01LegStats(leg(), 'a');
+    eq([s.darts, s.t180, s.checkout], [12, 2, 121], '180, 180, a bust and the finish: four visits of three darts');
+    D.getElementById('lvUndo').click();
+    eq(leg().w, null, 'undo reopens the leg');
+    D.getElementById('liveDialog').close();
+    D.getElementById('matchDialog').close();
+    H.__plant(FIXTURE); W.setTab('standings');
+  });
+  t('the sheet is read-only for a viewer', () => {
+    const D = W.document;
+    try {
+      const fx = JSON.parse(JSON.stringify(FIXTURE));
+      fx.matches[3].legs = [{ w: null, by: { a: ['fx-bravo'], b: ['fx-delta'] }, start: { a: 481, b: 501 }, first: 'a', dOut: true, visits: { a: [{ t: 60, d: 3 }], b: [] } }];
+      H.__plant(fx);
+      H.__setRole('viewer');
+      D.getElementById('tab-matches').click();
+      D.querySelector('.mrow[data-match="fx-m4"]').click();
+      ok(!D.querySelector('#legsWrap [data-live]'), 'no live button for a viewer');
+      D.getElementById('matchDialog').close();
+    } finally { H.__setRole('owner'); H.__plant(FIXTURE); W.setTab('standings'); }
   });
 
   group('the chrome is the family’s');
