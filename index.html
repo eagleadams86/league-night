@@ -1402,7 +1402,9 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
           <select id="lr_format"><option value="singles">Singles</option><option value="teams">Teams</option></select></div>
         <div class="field" id="lr_teamSizeWrap"><label for="lr_teamSize">Players per team</label>
           <input type="number" id="lr_teamSize" inputmode="numeric" min="2" max="8"></div>
-        <div class="field"><label for="lr_legFormat">Leg</label><select id="lr_legFormat"></select></div>
+        <div class="field"><label for="lr_legFormat">Leg</label>
+          <span class="row" style="flex-wrap:nowrap"><select id="lr_legFormat"></select>
+            <button class="tile-help" type="button" data-help="leg" aria-label="What a leg is, and what 501 and 301 mean">i</button></span></div>
         <div class="field"><label for="lr_mode">Match</label>
           <select id="lr_mode"><option value="bestOf">Best of…</option><option value="fixed">A fixed number of legs</option></select></div>
         <div class="field"><label for="lr_n">…how many legs</label><input type="number" id="lr_n" inputmode="numeric" min="1" max="21"></div>
@@ -1638,7 +1640,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
   <div class="grid2">
     <div class="field"><label for="sc_season">Season</label><select id="sc_season"></select></div>
     <div class="field"><label for="sc_start">First round on</label><input type="date" id="sc_start"></div>
-    <div class="field"><label for="sc_every">Days between rounds</label><input type="number" id="sc_every" inputmode="numeric" min="1" max="60" value="7"></div>
+    <div class="field"><label for="sc_every">Days between rounds — 0 puts every round on the first night</label><input type="number" id="sc_every" inputmode="numeric" min="0" max="60" value="7"></div>
   </div>
   <label class="checkline"><input type="checkbox" id="sc_double"><span>Double round — everyone plays everyone twice</span></label>
   <p class="hint" id="scheduleNote" role="status"></p>
@@ -2417,7 +2419,9 @@ function roundRobin(sideIds, opts) {
    clock change never moves a Tuesday. */
 function dateRounds(rounds, startISO, everyDays) {
   const p = String(startISO).split('-').map(Number);
-  const step = Number(everyDays) > 0 ? Number(everyDays) : 7;
+  /* Nought is a real answer — every round on the first night, a league that
+     meets once and plays the lot — and the first draft read it as unset. */
+  const step = Number.isFinite(Number(everyDays)) && Number(everyDays) >= 0 ? Math.round(Number(everyDays)) : 7;
   const pad = (n) => String(n).padStart(2, '0');
   return rounds.map((pairs, i) => {
     const d = new Date(p[0], p[1] - 1, p[2] + i * step, 12);
@@ -3726,7 +3730,10 @@ function renderMatches() {
   const wrap = $('matchesWrap');
   const matches = (state.seasons.length && !season) ? [] : leagueMatches(seasonId);
   const sides = sidesOf(state);
-  $('scheduleBtn').hidden = !canEdit() || !season || matches.length > 0 || sides.length < 2;
+  /* Offered until something has been PLAYED: an unplayed set can be drawn
+     again with different dates or a double round, and the window says so. */
+  const anyPlayed = matches.some((m) => m.status !== 'scheduled' || m.legs.length);
+  $('scheduleBtn').hidden = !canEdit() || !season || anyPlayed || sides.length < 2;
   $('addMatchBtn').hidden = !canEdit() || sides.length < 2 || (state.seasons.length > 0 && !season);
   if (!matches.length) {
     wrap.innerHTML = '<p class="empty">' + (sides.length < 2
@@ -4167,12 +4174,16 @@ function scheduleNote() {
   const rounds = roundRobin(sides, { doubleRound: $('sc_double').checked });
   const n = rounds.reduce((a, r) => a + r.length, 0);
   const seasonId = $('sc_season').value;
-  const already = state.matches.filter((m) => m.seasonId === seasonId && !m.bracketId).length;
-  $('scheduleNote').textContent = already
-    ? 'That season already has ' + plural(already, 'fixture') + '. Pick another, or delete them first.'
-    : plural(sides.length, isTeams() ? 'team' : 'player') + ' → ' + plural(rounds.length, 'round') + ', ' + plural(n, 'match', 'matches')
-      + (sides.length % 2 ? ' — an odd number, so one side sits out each round.' : '.');
-  $('scheduleSave').disabled = !!already || sides.length < 2;
+  const existing = state.matches.filter((m) => m.seasonId === seasonId && !m.bracketId);
+  const played = existing.some((m) => m.status !== 'scheduled' || m.legs.length);
+  const plan = plural(sides.length, isTeams() ? 'team' : 'player') + ' → ' + plural(rounds.length, 'round') + ', ' + plural(n, 'match', 'matches')
+    + (sides.length % 2 ? ' — an odd number, so one side sits out each round.' : '.');
+  $('scheduleNote').textContent = played
+    ? 'That season has results in it already. Pick another season, or add matches one at a time.'
+    : existing.length ? 'That season’s ' + plural(existing.length, 'fixture') + ' are still unplayed; generating REPLACES them. ' + plan
+    : plan;
+  $('scheduleSave').textContent = existing.length && !played ? 'Replace and Generate' : 'Generate';
+  $('scheduleSave').disabled = played || sides.length < 2;
 }
 ['sc_season', 'sc_double'].forEach((id) => $(id).addEventListener('change', scheduleNote));
 $('scheduleSave').addEventListener('click', () => {
@@ -4181,8 +4192,15 @@ $('scheduleSave').addEventListener('click', () => {
   const start = $('sc_start').value;
   if (!season) return;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(start)) { $('scheduleNote').textContent = 'Pick the date of the first round.'; $('sc_start').focus(); return; }
-  if (state.matches.some((m) => m.seasonId === seasonId && !m.bracketId)) { scheduleNote(); return; }
-  const rounds = dateRounds(roundRobin(sidesOf(state), { doubleRound: $('sc_double').checked }), start, Number($('sc_every').value) || 7);
+  const existing = state.matches.filter((m) => m.seasonId === seasonId && !m.bracketId);
+  if (existing.some((m) => m.status !== 'scheduled' || m.legs.length)) { scheduleNote(); return; }
+  /* An unplayed set goes, tombstoned so no other device brings it back. */
+  const at = nextU();
+  existing.forEach((m) => state.tombstones.push({ id: m.id, kind: 'match', at: at }));
+  state.matches = state.matches.filter((m) => !(m.seasonId === seasonId && !m.bracketId));
+  const everyRaw = Number($('sc_every').value);
+  const every = Number.isFinite(everyRaw) && everyRaw >= 0 ? Math.round(everyRaw) : 7;
+  const rounds = dateRounds(roundRobin(sidesOf(state), { doubleRound: $('sc_double').checked }), start, every);
   rounds.forEach((rd) => rd.pairs.forEach((pr) => state.matches.push(touch({
     id: uid(), seasonId: seasonId, bracketId: null, slot: null, round: rd.round, date: rd.date, venue: '',
     a: pr.a, b: pr.b, status: 'scheduled', score: { a: 0, b: 0 }, legs: [],
@@ -4677,6 +4695,9 @@ $('firstRestore').addEventListener('click', () => $('importFile').click());
 
 /* ── The info dots ────────────────────────────────────────────────────── */
 const HELP = {
+  leg: ['What a Leg Is', `<p>A <strong>leg</strong> is one game of darts. Both players start on the same number and take it in turns to throw three darts, taking what they score off their total. The first to reach <strong>exactly zero</strong> wins the leg.</p>
+    <p><strong>501</strong> is the number nearly every league starts from; <strong>301</strong> is the shorter game, for quick nights or beginners. With <strong>double-out</strong> on, the dart that takes you to zero must land in a double (the thin outer ring) or the bull — going below zero, or leaving exactly 1, is a bust and the turn scores nothing.</p>
+    <p>A <strong>match</strong> is a set of legs: best of five means the first to win three.</p>`],
   rules: ['How the Rules Apply', `<p><strong>Played as</strong> is fixed once a match exists: a singles league's matches are between players, a team league's between teams, and the two cannot be told apart afterwards. Everything else can change at any time.</p>
     <p><strong>Leg and match rules apply to matches scored from now on</strong> — a leg already thrown remembers the start and the double-out rule it was played under. <strong>Points and the tiebreak order re-rank the table at once</strong>, for every season, because they are how results are read rather than what was played.</p>
     <p>A <strong>best of</strong> match ends when one side has more than half the legs; a <strong>fixed number</strong> plays them all and can be drawn.</p>`],

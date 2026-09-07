@@ -51,7 +51,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 185;
+const EXPECTED = 186;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -789,6 +789,9 @@ function define() {
     const d = H.dateRounds(H.roundRobin(['a', 'b', 'c', 'd']), '2026-10-27', 7);
     eq(d.map((x) => x.date), ['2026-10-27', '2026-11-03', '2026-11-10']);
     eq(d.map((x) => new W.Date(x.date + 'T12:00').getDay()), [2, 2, 2]);
+    eq(H.dateRounds(H.roundRobin(['a', 'b', 'c', 'd']), '2026-10-27', 0).map((x) => x.date), ['2026-10-27', '2026-10-27', '2026-10-27'],
+       'nought puts every round on the first night — it was read as unset (Charles, 2026-09-07)');
+    eq(H.dateRounds(H.roundRobin(['a', 'b', 'c', 'd']), '2026-10-27', 'nonsense').map((x) => x.date)[1], '2026-11-03', 'junk falls back to a week');
   });
 
   group('standings and the order of the table');
@@ -1393,6 +1396,26 @@ function define() {
     ok(/P played, W won/.test(D.getElementById('standingsNote').textContent), 'a title on a heading never shows on a phone');
     ok(!D.querySelector('button .tile-help'), 'nested interactive controls');
     ok(D.getElementById('individualHelp').hidden, 'the individual-table dot hides in a singles league');
+  });
+  t('an unplayed set of fixtures can be generated again; a played one cannot', () => {
+    const D = W.document;
+    D.getElementById('tab-matches').click();
+    ok(D.getElementById('scheduleBtn').hidden, 'the fixture has results, so no Generate');
+    const fx = JSON.parse(JSON.stringify(FIXTURE));
+    fx.matches = fx.matches.map((m) => Object.assign(m, { status: 'scheduled', legs: [], score: { a: 0, b: 0 } }));
+    H.__plant(fx);
+    ok(!D.getElementById('scheduleBtn').hidden, 'nothing played, so Generate is offered');
+    D.getElementById('scheduleBtn').click();
+    ok(/4 fixtures are still unplayed; generating REPLACES them/.test(D.getElementById('scheduleNote').textContent), D.getElementById('scheduleNote').textContent);
+    eq(D.getElementById('scheduleSave').textContent, 'Replace and Generate');
+    D.getElementById('sc_every').value = '0';
+    D.getElementById('scheduleSave').click();
+    const st = H.__state();
+    const ms = st.matches.filter((m) => m.seasonId === 'fx-season');
+    eq(ms.length, 3, 'three active players: three matches, the old four gone');
+    eq([...new Set(ms.map((m) => m.date))], ['2026-01-05'], 'all on the first night');
+    eq(st.tombstones.filter((t) => t.kind === 'match').length, 4, 'and the old four are tombstoned so no device brings them back');
+    H.__plant(FIXTURE); W.setTab('standings');
   });
   t('every round prints open, and the bracket is not clipped on paper', () => {
     const src = stripComments(APP_SRC);
