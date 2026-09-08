@@ -7943,11 +7943,27 @@ async function deleteLeague(id) {
    made on another device. Clear it, or it squats a name nobody can take. */
 async function reapMyRoster(id, list) {
   if (!user) return;
-  const mine = (list || []).filter((r) => r.uid === user.uid);
+  const rows = list || [];
   const keep = meDocLocal && meDocLocal.playerId;
-  for (const r of mine) {
+  for (const r of rows.filter((x) => x.uid === user.uid)) {
     if (r.playerId === keep) continue;
     try { await F.deleteDoc(rosterRef(id, r.playerId)); } catch (e) { /* somebody else got there */ }
+  }
+  /* And the other way: my member document names a player a row says belongs
+     to SOMEBODY ELSE. Let go of it — an unbacked link is a claim on nothing,
+     and leaving it makes every one of my requests read as not-theirs with no
+     explanation.
+
+     Driven by what the roster SHOWS and never by a permission-denied, which
+     is what an earlier draft used. The two are indistinguishable from the
+     client, and one of them is "the rules have not been published yet" — on
+     which that draft would have quietly un-linked every account in the
+     league on the first load of a build that shipped ahead of its rules. */
+  if (!keep) return;
+  const holder = rows.find((r) => r.playerId === keep);
+  if (holder && holder.uid !== user.uid) {
+    try { await F.updateDoc(memberRef(id, user.uid), { playerId: F.deleteField() }); } catch (e) { return; }
+    window.toast('Somebody else is already down as that player — ask an admin');
   }
 }
 
@@ -7971,12 +7987,14 @@ async function adoptClaim(id, list) {
   if (!held || rosterOf !== id) return;            /* wait for the roster to arrive */
   if (held.some((r) => r.playerId === meDocLocal.playerId)) return;
   claimAdopted.add(id);
+  /* A refusal here is left alone on purpose. It means either somebody beat us
+     to the row — in which case their row arrives on the next snapshot and
+     reapMyRoster lets go of the link, saying so — or the rules for this
+     collection are not published yet, in which case NOTHING should be given
+     up. The client cannot tell those apart from the error, and only one of
+     them is a reason to un-link an account. */
   try { await F.setDoc(rosterRef(id, meDocLocal.playerId), { uid: user.uid, at: Date.now() }); }
-  catch (e) {
-    if (String((e && e.code) || '').indexOf('permission-denied') === -1) return;
-    try { await F.updateDoc(memberRef(id, user.uid), { playerId: F.deleteField() }); } catch (e2) { /* best effort */ }
-    window.toast('Somebody else is already down as that player — ask an admin');
-  }
+  catch (e) { claimAdopted.delete(id); }
 }
 
 /* ── Listening to the league on screen ─────────────────────────────────────── */

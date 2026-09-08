@@ -65,6 +65,13 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
   "not claimed" rather than as two people. The agreement is required of everyone, including an
   admin assigning somebody else, which makes the write ORDER load-bearing: the member document
   first, then the row.
+- **An account lets go of a claim on what the roster SHOWS, never on a refusal.** A
+  `permission-denied` on the roster create means EITHER somebody beat us to it OR the rules
+  for that collection are not published yet, and the client cannot tell those apart. Only one
+  of them is a reason to un-link an account, so neither does: `reapMyRoster` clears the link
+  when a row it can see names somebody else. The first draft cleared on the error code, which
+  would have quietly un-linked every account in the league the first time a build shipped
+  ahead of its rules.
 - **A member who is not an admin ASKS; an admin's tap is the only bridge into the league**
   (2026-09-08). `state` is one opaque map to the rules — they can say "may write all of it" or
   "none of it" and nothing between — so a member writes what they want into

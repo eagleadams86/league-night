@@ -2710,13 +2710,28 @@ function define() {
     ok(!/function linkPlayer/.test(src), 'linkPlayer is gone — nothing about this is a single field any more');
   });
 
-  t('a losing claim is a race and never raises the banner', () => {
+  t('a losing claim lets go on what the roster SHOWS, never on a refusal', () => {
     const src = stripComments(APP_SRC);
-    const fn = src.slice(src.indexOf('async function adoptClaim'), src.indexOf('async function adoptClaim') + 900);
-    ok(fn.length > 200, 'adoptClaim was found');
-    ok(/permission-denied/.test(fn), 'it recognises the refusal');
-    ok(!/setSyncError/.test(fn), 'and does NOT call setSyncError — every account would see Not syncing on the same afternoon');
-    ok(/playerId: F\.deleteField\(\)/.test(fn), 'the loser lets go of its own link, keeping its role, name, availability and any request');
+    /* To the function's OWN closing brace. A fixed slice ran past the end of
+       this one and into a neighbour that does call setSyncError, so the
+       negative below was about the wrong code. */
+    const body = (name) => {
+      const at = src.indexOf(name);
+      if (at === -1) return '';
+      const end = src.indexOf('\n}', at);
+      return end === -1 ? '' : src.slice(at, end);
+    };
+    const adopt = body('async function adoptClaim');
+    ok(adopt.length > 200, 'adoptClaim was found');
+    ok(!/setSyncError/.test(adopt), 'a refusal is not a fault — every account would see Not syncing on the same afternoon');
+    /* A permission-denied means EITHER somebody beat us to the row OR the
+       rules are not published yet, and the client cannot tell those apart.
+       Only one is a reason to un-link an account, so neither does. */
+    ok(!/deleteField/.test(adopt), 'and it must NOT drop the link on a refusal it cannot read');
+    const reap = body('async function reapMyRoster');
+    ok(reap.length > 200, 'reapMyRoster was found');
+    ok(/holder && holder\.uid !== user\.uid/.test(reap), 'letting go is driven by a row that names somebody else');
+    ok(/playerId: F\.deleteField\(\)/.test(reap), 'and only then');
   });
 
   t('a league that goes takes its roster with it, and so does a member who leaves', () => {
