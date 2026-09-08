@@ -1188,6 +1188,14 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
     dialog.sheet { position: fixed; inset: auto 0 0 0; margin: 0; width: 100%; max-width: none;
                    max-height: calc(100dvh - 24px); border-radius: var(--radius) var(--radius) 0 0;
                    border-bottom: 0; padding-bottom: calc(var(--sp-7) + env(safe-area-inset-bottom)); }
+    /* Who scored the frame: a label, two names side by side, and Nobody across
+       the foot. As a flex row it wrapped at 375px and left Nobody alone on a
+       half-empty line, which is the family's no-dead-space rule — and these are
+       the buttons a scorer presses most, so they get the width. IN THIS BLOCK
+       and not a third media query: there are exactly two at 759.98px, this app
+       has one definition of a phone, and the suite says so. */
+    .lvscored { display: grid; grid-template-columns: 1fr 1fr; align-items: stretch; }
+    .lvscored > .hint, .lvscored > #lvScoredNone { grid-column: 1 / -1; }
   }
   /* The header's own share of the safe area, for a phone with a notch in
      standalone mode — PAPTrack's line. */
@@ -1356,6 +1364,15 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
              margin: var(--sp-4) 0; background: var(--surface); min-height: var(--control-h); }
   .lvpad .quick, .lvpad .keys { display: grid; gap: var(--sp-3); margin-top: var(--sp-3); }
   .lvpad .quick { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  /* Shuffleboard's quick row is the four frame scores, so it fills the line at
+     four columns rather than leaving two empty cells at the end of a six. */
+  .lvpad .quick.q4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  /* A frame is at most 16, so the shuffleboard keypad needs no third key on its
+     last row — the 0 fills the line rather than leaving a cell of dead space. */
+  .lvpad .keys .wide2 { grid-column: span 2; }
+  .lvhang { display: flex; align-items: center; gap: var(--sp-3); }
+  .lvhang .n { font-variant-numeric: tabular-nums; font-weight: var(--fw-semibold);
+               min-width: 2ch; text-align: center; }
   .lvpad .keys { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .lvpad .keys button { min-height: 56px; font-size: var(--fs-lg); }
   .lvpad .quick button { min-height: var(--control-h); }
@@ -1496,9 +1513,10 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
       <p class="cloud-only"><strong>Join a League</strong> asks for the League ID someone sent you — and the
         Admin Key, if they want you running it — and signs you in to Google, because a shared league
         is tied to real accounts.</p>
-      <p><strong>Try the Demo</strong> loads two invented leagues — a singles league with a
-        season under way, handicaps, a finished knockout and a double-elimination cup in
-        progress, and a doubles league with team matches — so every tab has something on it.</p>
+      <p><strong>Try the Demo</strong> loads three invented leagues — a singles darts league
+        with a season under way, handicaps, a finished knockout and a double-elimination cup in
+        progress; a doubles darts league with team matches; and a shuffleboard league scored
+        frame by frame — so every tab, and both games, have something on them.</p>
       <p><strong>Restore a Backup</strong> reads a League Night export — the JSON file the Back
         Up window writes.</p>
     </div>
@@ -1595,18 +1613,23 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
           <select id="lr_format"><option value="singles">Singles</option><option value="teams">Teams</option></select></div>
         <div class="field" id="lr_teamSizeWrap"><label for="lr_teamSize">Players per team</label>
           <input type="number" id="lr_teamSize" inputmode="numeric" min="2" max="8"></div>
-        <div class="field"><label for="lr_legFormat">Leg</label>
+        <!-- The three labels here, the Match count below and the double-out
+             line at the foot are the only wording on this card that is the
+             GAME's rather than the league's; renderLeagueTab writes them from
+             GAMES[game].unit, and the double-out line is on the card at all
+             only for a game that has one. -->
+        <div class="field"><label for="lr_legFormat" id="lr_legFormatLabel">Leg</label>
           <span class="row" style="flex-wrap:nowrap"><select id="lr_legFormat"></select>
-            <button class="tile-help" type="button" data-help="leg" aria-label="What a leg is, and what 501 and 301 mean">i</button></span></div>
+            <button class="tile-help" type="button" data-help="leg" id="lr_legHelp" aria-label="What a leg is, and what 501 and 301 mean">i</button></span></div>
         <div class="field"><label for="lr_mode">Match</label>
           <select id="lr_mode"><option value="bestOf">Best of…</option><option value="fixed">A fixed number of legs</option></select></div>
-        <div class="field"><label for="lr_n">…how many legs</label><input type="number" id="lr_n" inputmode="numeric" min="1" max="21"></div>
+        <div class="field"><label for="lr_n" id="lr_nLabel">…how many legs</label><input type="number" id="lr_n" inputmode="numeric" min="1" max="21"></div>
         <div class="field"><label for="lr_win">Points for a win</label><input type="number" id="lr_win" inputmode="numeric" min="-10" max="10"></div>
         <div class="field"><label for="lr_draw">…a draw</label><input type="number" id="lr_draw" inputmode="numeric" min="-10" max="10"></div>
         <div class="field"><label for="lr_loss">…a loss</label><input type="number" id="lr_loss" inputmode="numeric" min="-10" max="10"></div>
         <div class="field wide"><label for="lr_tiebreak">Order the table by</label><select id="lr_tiebreak"></select></div>
       </div>
-      <label class="checkline"><input type="checkbox" id="lr_dOut"><span>Double-out — a leg must finish on a double or the bull</span></label>
+      <label class="checkline" id="lr_dOutRow"><input type="checkbox" id="lr_dOut"><span>Double-out — a leg must finish on a double or the bull</span></label>
     </div>
 
     <div class="card">
@@ -1968,6 +1991,27 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
     <button type="button" id="lvIn2">2 darts</button>
     <button type="button" id="lvIn3">3 darts</button>
   </div>
+  <!-- ── Shuffleboard's two rows ────────────────────────────────────────────
+       A frame is typed as a number and then given to a SIDE, because the
+       number alone says nothing: the same 4 is a good frame for whoever owns
+       the far end of the board. Hangers are counted with it rather than typed
+       afterwards — a hanger is four of those points, and the pair has to
+       agree or the Hangers column and the score tell different stories. -->
+  <div class="row lvhang" id="lvHangRow" hidden role="group" aria-labelledby="lvHangLabel">
+    <span class="hint" id="lvHangLabel">Hangers in this frame</span>
+    <button type="button" class="btn-small" id="lvHangDown" aria-label="One fewer hanger"><span aria-hidden="true">−</span></button>
+    <span class="n" id="lvHangN" aria-live="polite">0</span>
+    <button type="button" class="btn-small" id="lvHangUp" aria-label="One more hanger"><span aria-hidden="true">＋</span></button>
+  </div>
+  <div class="row lvscored" id="lvScoredRow" hidden>
+    <span class="hint">Scored by</span>
+    <button type="button" class="primary" id="lvScoredA">A</button>
+    <button type="button" class="primary" id="lvScoredB">B</button>
+    <!-- The third answer to the same question, and it is a WORD. It began as a
+         ⊘ on the keypad, where nothing said what it meant: a glyph whose only
+         explanation is an aria-label is unexplained to everyone who can see. -->
+    <button type="button" id="lvScoredNone">Nobody</button>
+  </div>
   <div class="lvpad" id="lvPad">
     <div class="quick">
       <button type="button" data-key="q26">26</button><button type="button" data-key="q41">41</button>
@@ -1980,6 +2024,18 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
       <button type="button" data-key="1">1</button><button type="button" data-key="2">2</button><button type="button" data-key="3">3</button>
       <button type="button" data-key="back" aria-label="Delete last digit">⌫</button><button type="button" data-key="0">0</button>
       <button type="button" class="primary" data-key="enter" aria-label="Enter this visit">✓</button>
+    </div>
+  </div>
+  <div class="lvpad" id="lvSbPad" hidden>
+    <div class="quick q4">
+      <button type="button" data-key="q1">1</button><button type="button" data-key="q2">2</button>
+      <button type="button" data-key="q3">3</button><button type="button" data-key="q4">4</button>
+    </div>
+    <div class="keys">
+      <button type="button" data-key="7">7</button><button type="button" data-key="8">8</button><button type="button" data-key="9">9</button>
+      <button type="button" data-key="4">4</button><button type="button" data-key="5">5</button><button type="button" data-key="6">6</button>
+      <button type="button" data-key="1">1</button><button type="button" data-key="2">2</button><button type="button" data-key="3">3</button>
+      <button type="button" data-key="back" aria-label="Delete last digit">⌫</button><button type="button" class="wide2" data-key="0">0</button>
     </div>
   </div>
   <div class="row-actions">
@@ -2006,7 +2062,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
     <div class="field"><label for="br_type">Format</label>
       <select id="br_type"><option value="single">Single elimination — lose once and you are out</option><option value="double">Double elimination — a second chance through the losers’ bracket</option></select></div>
     <div class="field"><label for="br_bestOf">Each match is best of</label>
-      <select id="br_bestOf"><option value="1">1 leg</option><option value="3">3 legs</option><option value="5">5 legs</option><option value="7">7 legs</option></select></div>
+      <select id="br_bestOf"></select></div>
     <div class="field"><label for="br_seeded">Seeded by</label>
       <select id="br_seeded"><option value="standings">The standings</option><option value="random">A random draw</option><option value="manual">Roster order</option></select></div>
     <div class="field" id="br_seasonWrap"><label for="br_season">Season</label><select id="br_season"></select></div>
@@ -2078,7 +2134,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
   <fieldset class="formpanel">
     <legend>What to Include</legend>
     <label class="checkline"><input type="checkbox" id="shareDetails" checked>
-      <span>Leg detail — darts thrown, checkouts, 180s and live-scored visits</span></label>
+      <span id="shareDetailsLabel">Leg detail — darts thrown, checkouts, 180s and live-scored visits</span></label>
     <p class="hint" style="margin:var(--sp-5) 0 0">Results, scores and the table ride either way; the detail is what makes a link long.</p>
   </fieldset>
   </div>
@@ -2215,12 +2271,15 @@ function fmtShort(iso) {
    particular state, and it is what lets the sync module run mergeLeague()
    inside a Firestore transaction that may be retried.
 
-   NOTHING HERE KNOWS IT IS SCORING DARTS. The league engines (round robin,
-   standings, brackets) see only "sides" — a player id in a singles league, a
-   team id in a team league — and read what a leg holds through the GAMES
-   registry. Cornhole, shuffleboard, bowling and golf each become one entry in
-   GAMES and nothing else changes. Keep it that way: a darts word in roundRobin
-   or standings is a bug even when it works.
+   NOTHING HERE KNOWS WHICH GAME IT IS SCORING. The league engines (round
+   robin, standings, brackets) see only "sides" — a player id in a singles
+   league, a team id in a team league — and read what a leg holds through the
+   GAMES registry. Table shuffleboard was added on 2026-09-08 and not one line
+   below this comment changed; cornhole, bowling and golf are one entry each.
+   Keep it that way: a darts word in roundRobin or standings is a bug even when
+   it works. What DID have to change was every place the app said "leg" or
+   "darts" out loud, and each of those is a key on the game now — see the
+   contract below and the list in CLAUDE.md.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── Ids and codes ─────────────────────────────────────────────────────────
@@ -2276,6 +2335,15 @@ function maxU(st) {
   return m;
 }
 
+/* The most one frame of shuffleboard can be worth: four weights, and the best
+   any one of them can be is a hanger at 4. Declared ABOVE the registry, not
+   beside the frame scorer far below it, because the registry's own literal
+   reads it — a `const` is in its temporal dead zone until the line that
+   declares it RUNS, and the first draft of this threw on page load with 257
+   green tests behind it, exactly as the boot-time TDZ did in September. Every
+   value a top-level literal reads is declared before that literal. */
+const FRAME_MAX = 16;
+
 /* ── The game registry ─────────────────────────────────────────────────────
    One entry per game. The engine reads ONLY the keys named in GAME_CONTRACT
    (tests pin that every game supplies all of them); everything a leg holds
@@ -2285,9 +2353,20 @@ function maxU(st) {
    leg when it was not scored live; `playerStats` folds a player's legs into
    the figures the Players view and the individual leaderboard show;
    `leaderboardColumns` says which of those the standings table carries;
-   `handicap` turns a player's number into the start the game gives them. */
-const GAME_CONTRACT = ['name', 'unit', 'legFormats', 'legFields', 'playerStats',
-                       'leaderboardColumns', 'handicap', 'liveScorer'];
+   `handicap` turns a player's number into the start the game gives them.
+
+   `handicap.pill` and `handicap.note` exist because the standings table used
+   to work out how to draw a handicap by reading the FIRST WORD of its label:
+   'Start deduction' began with 'start', so it drew '−60'. A second game whose
+   label happens not to would have been drawn wrong with nothing to see. A
+   game says how its own figure reads; nothing sniffs a label.
+
+   `doubleOut` says whether the League Rules card offers the double-out line at
+   all — the one rule on that card that is a darts rule rather than a league
+   one. `liveScorer` names the sheet the scorer's ▸ button opens, or is null
+   for a game that has none. */
+const GAME_CONTRACT = ['name', 'unit', 'legFormats', 'legFields', 'formatLabel', 'playerStats',
+                       'leaderboardColumns', 'handicap', 'liveScorer', 'doubleOut', 'detail'];
 const GAMES = {
   darts: {
     name: 'Darts',
@@ -2296,6 +2375,10 @@ const GAMES = {
       { id: '501', label: '501', start: 501 },
       { id: '301', label: '301', start: 301 },
     ],
+    /* The League Rules card's own label for the format box. NOT capUnit(unit.one):
+       at shuffleboard that reads "Game", and the box beside it saying which game
+       this league plays is already labelled Game. A game names its own field. */
+    formatLabel: 'Leg',
     legFields: [
       { key: 'darts',    label: 'Darts thrown', min: 9, max: 300 },
       { key: 'checkout', label: 'Checkout',     min: 2, max: 170 },
@@ -2310,8 +2393,57 @@ const GAMES = {
       { key: 'highOut', label: 'High out',   fmt: (v) => v == null ? '—' : String(v) },
     ],
     handicap: { label: 'Start deduction', min: 0, max: 200,
-                apply: (start, hcp) => start - (Number(hcp) || 0) },
+                apply: (start, hcp) => start - (Number(hcp) || 0),
+                pill: (hcp) => '\u2212' + hcp,
+                note: 'taken off the start of every leg they throw' },
     liveScorer: 'x01',
+    doubleOut: true,
+    detail: 'darts thrown, checkouts, 180s and live-scored visits',
+  },
+  /* ── Table shuffleboard ──────────────────────────────────────────────────
+     The pub table, not the deck court: a 22-foot waxed board, eight steel
+     weights, four each. A FRAME is all eight thrown; only the side with the
+     weight furthest down the board scores, and it scores what all of its
+     weights past the leading opponent's are worth (1, 2, 3, or 4 for a
+     HANGER — one that overhangs the far edge). A game is a race to 15 or 21.
+
+     So a `leg` here is one GAME, and the same `start` key darts counts DOWN
+     from is the target this game counts UP to. That is the whole reason the
+     engine needed nothing: `start` was never "starting score", it was always
+     "the number this side's leg is measured against", and a handicap is still
+     one subtraction — a head start of 4 in a game to 15 is a target of 11. */
+  shuffleboard: {
+    name: 'Shuffleboard',
+    unit: { one: 'game', many: 'games' },
+    legFormats: [
+      { id: '15', label: 'First to 15', start: 15 },
+      { id: '21', label: 'First to 21', start: 21 },
+    ],
+    /* What a scorer types for a game nobody scored frame by frame. `points`
+       is the side's score at the end, so it is capped well above either
+       target: a game is won by REACHING the target, and the winning frame can
+       carry a side past it. */
+    formatLabel: 'Each game',
+    legFields: [
+      { key: 'points', label: 'Points scored', min: 0, max: 99 },
+      { key: 'hang',   label: 'Hangers',       min: 0, max: 40 },
+      { key: 'high',   label: 'Best frame',    min: 0, max: FRAME_MAX },
+    ],
+    playerStats: shuffleboardPlayerStats,
+    leaderboardColumns: [
+      { key: 'ppg',  label: 'Points/game', fmt: (v) => v == null ? '\u2014' : v.toFixed(1) },
+      { key: 'hang', label: 'Hangers',     fmt: (v) => v == null ? '\u2014' : String(v) },
+      { key: 'high', label: 'Best frame',  fmt: (v) => v == null ? '\u2014' : String(v) },
+    ],
+    /* Capped at 10 so the shorter game cannot be handicapped below a target of
+       5 — a number a single good frame reaches, which is not a game. */
+    handicap: { label: 'Head start', min: 0, max: 10,
+                apply: (target, hcp) => target - (Number(hcp) || 0),
+                pill: (hcp) => '+' + hcp,
+                note: 'taken off the target of every game they play' },
+    liveScorer: 'frames',
+    doubleOut: false,
+    detail: 'points, hangers, best frames and the frame-by-frame record',
   },
 };
 
@@ -2320,11 +2452,13 @@ const GAMES = {
    `schema`, and every boundary refuses a copy carrying a higher one — see the
    halt below. BUMP IT AND normalizeLeague TOGETHER when a stored field is
    added. */
-const SCHEMA = 4;   /* 2: a leg carries `first` and `dOut` for the live scorer (2026-09-07)
+const SCHEMA = 5;   /* 2: a leg carries `first` and `dOut` for the live scorer (2026-09-07)
                        3: a trimmed leg carries `scored` per side, so Trim Closed
                           Seasons keeps its promise that no figure moves (2026-09-07)
                        4: a match carries `lineup` and a player carries `avail`, so a
-                          sub can be put on the card and a night can be missed (2026-09-08) */
+                          sub can be put on the card and a night can be missed (2026-09-08)
+                       5: a leg carries `frames`, the shuffleboard scorer's record, and
+                          GAMES has a second entry (2026-09-08) */
 const TIEBREAK_KEYS = ['pts', 'legDiff', 'legsFor', 'wins', 'h2h', 'name'];
 const NAME_MAX = 40;
 /* The most names a lineup may hold. A CONSTANT, deliberately, and not
@@ -2497,7 +2631,8 @@ function normalizeLeague(raw) {
        writes it when it takes a live leg's visits away, because an average is
        darts AND points and the points would otherwise go with the visits. It
        is on the allowlist rather than in legFields for exactly that reason —
-       legFields is what the Details boxes offer. */
+       legFields is what the Details boxes offer. Shuffleboard needs no twin of
+       it: every figure a trimmed game keeps IS one of its legFields. */
     if (v.scored != null && v.scored !== '') {
       const n = int(v.scored, 0, 9999, null);
       if (n != null) o.scored = n;
@@ -2511,6 +2646,22 @@ function normalizeLeague(raw) {
       if (x.bust === true) o.bust = true;
       return o;
     });
+  };
+  /* The shuffleboard record. A frame is one side and what they scored, or
+     nobody and nothing — anything that is not 'a' or 'b' IS nobody, and a
+     frame nobody scored is forced to zero rather than trusted to be. `h` is
+     written only when there are hangers AND they fit inside the total, so a
+     restored file cannot make the Hangers column disagree with the points. */
+  const frames = (v) => {
+    if (!Array.isArray(v)) return null;
+    const out = v.filter((x) => x && typeof x === 'object').map((x) => {
+      const side = (x.s === 'a' || x.s === 'b') ? x.s : null;
+      const o = { s: side, t: side ? int(x.t, 0, FRAME_MAX, 0) : 0 };
+      const h = side ? int(x.h, 0, 4, 0) : 0;
+      if (h && h * 4 <= o.t) o.h = h;
+      return o;
+    });
+    return out.length ? out : null;
   };
   /* Player ids in a fixed order, deduped, blanks dropped. Shared by a leg's
      `by` and a match's `lineup` — they are the same list of the same people. */
@@ -2550,6 +2701,8 @@ function normalizeLeague(raw) {
           const va = visits(lg.visits.a), vb = visits(lg.visits.b);
           if (va || vb) leg.visits = { a: va || [], b: vb || [] };
         }
+        const fr = frames(lg.frames);
+        if (fr) leg.frames = fr;
         const sa = sideStats(lg.a), sb = sideStats(lg.b);
         if (sa) leg.a = sa;
         if (sb) leg.b = sb;
@@ -2668,17 +2821,40 @@ function setupState(mine, theirs) {
 }
 /* ── Trimming a closed season ──────────────────────────────────────────────
    A league is one cloud document with a 1 MiB cap, and a season scored live
-   carries every visit of every leg. Once a season is closed the visits have
-   done their work: each leg's figures are written onto the leg as the typed
-   kind (darts, checkout, 180s, 140+, 100+) and the visits go. Pure; the
-   figures a leg shows are the same before and after, because legSideStats()
-   reads whichever kind is there. Who threw stays. */
+   carries every visit of every leg, or every frame of every game. Once a
+   season is closed that record has done its work: each leg's figures are
+   written onto the leg as the typed kind — darts, checkout, 180s, 140+, 100+
+   for darts; points, hangers and the best frame for shuffleboard — and the
+   record goes. Pure; the figures a leg shows are the same before and after,
+   because legSideStats() and sbSideStats() read whichever kind is there. Who
+   played stays. */
+function legIsLive(leg) {
+  return !!((leg.visits && (leg.visits.a.length || leg.visits.b.length))
+            || (leg.frames && leg.frames.length));
+}
 function compactSeason(st, seasonId) {
   const out = Object.assign({}, st);
   let trimmed = 0;
   out.matches = (st.matches || []).map((m) => {
-    if (m.seasonId !== seasonId || !m.legs.some((l) => l.visits)) return m;
+    if (m.seasonId !== seasonId || !m.legs.some(legIsLive)) return m;
     const legs = m.legs.map((leg) => {
+      if (leg.frames && leg.frames.length) {
+        const next = Object.assign({}, leg);
+        delete next.frames;
+        ['a', 'b'].forEach((side) => {
+          const s = frameLegStats(leg, side);
+          /* Zeros are written, not left out, for the same reason as the darts
+             leg below: a game scored frame by frame KNOWS a side had no
+             hangers, where a typed game with the box empty does not. `high` is
+             the one that may be genuinely absent — a side that won no frame
+             has no best frame — and an absent key is how that is said. */
+          const o = { points: s.points, hang: s.hang };
+          if (s.high != null) o.high = s.high;
+          next[side] = o;
+        });
+        trimmed++;
+        return next;
+      }
       if (!leg.visits) return leg;
       const next = Object.assign({}, leg);
       delete next.visits;
@@ -3328,6 +3504,99 @@ function dartValue(token) {
   return (s <= 20 || s === 25) ? { s: s, m: 1 } : null;
 }
 
+/* ── The shuffleboard scorer ──────────────────────────────────────
+   THE STATE IS THE LIST OF FRAMES and everything else is a fold over it — the
+   same shape as the x01 scorer above, and undo is `pop()` here too.
+
+   A frame is all eight weights, four each. Exactly ONE side scores it: whoever
+   owns the weight furthest down the board takes everything of theirs past the
+   best of the other side's. `{ s, t }` is that side and that total, with `h`
+   the number of HANGERS among them (weights overhanging the far edge, worth 4)
+   — written only when there was one, because a key with no value is a key
+   Firestore will refuse a whole document over.
+
+   `{ s: null, t: 0 }` is a frame NOBODY scored. That happens — every weight
+   ends up off the board or in the foul line — and it has to be recordable, or
+   the frame count and the hammer both drift from what was actually played.
+
+   A leg here is one GAME: { start: {a, b}, first, frames: [] }, where `start`
+   is the TARGET each side is playing to and `first` is who holds the hammer in
+   frame one. The hammer alternates every frame after that. First side to reach
+   or pass its target wins, and a frame recorded after that is not counted —
+   frameScore() will not add one, and a leg that arrives carrying one (from an
+   older build, or a hand-edited backup) is read the same way by everyone. */
+function frameState(leg) {
+  const fr = (leg && leg.frames) || [];
+  const tgt = { a: leg.start.a, b: leg.start.b };
+  const pts = { a: 0, b: 0 }, fw = { a: 0, b: 0 }, high = { a: 0, b: 0 }, hang = { a: 0, b: 0 };
+  let winner = null, n = 0;
+  fr.forEach((f) => {
+    if (winner) return;
+    n++;
+    if (f.s === 'a' || f.s === 'b') {
+      pts[f.s] += f.t; fw[f.s]++; hang[f.s] += f.h || 0;
+      if (f.t > high[f.s]) high[f.s] = f.t;
+    }
+    /* A target of null is a game with no target — nothing can be reached, so
+       nothing is won, and the sheet refuses to open on it. */
+    if (tgt.a != null && pts.a >= tgt.a) winner = 'a';
+    else if (tgt.b != null && pts.b >= tgt.b) winner = 'b';
+  });
+  const first = leg.first === 'b' ? 'b' : 'a';
+  const hammer = winner ? null : ((n % 2 === 0) ? first : (first === 'a' ? 'b' : 'a'));
+  return { pts: pts, fw: fw, high: high, hang: hang, target: tgt,
+           winner: winner, frames: n, hammer: hammer };
+}
+/* Records one frame. Returns a NEW leg, or { error } with something a scorer
+   at the board can read. `side` null is the frame nobody scored. */
+function frameScore(leg, side, points, hangers) {
+  const st = frameState(leg);
+  if (st.winner) return { error: 'The game is over.' };
+  const s = (side === 'a' || side === 'b') ? side : null;
+  if (!s) return Object.assign({}, leg, { frames: (leg.frames || []).concat([{ s: null, t: 0 }]) });
+  const t = Math.round(Number(points));
+  if (!Number.isInteger(t) || t < 1 || t > FRAME_MAX) {
+    return { error: 'A frame scores between 1 and ' + FRAME_MAX + ' points — four weights, and the best of them a hanger.' };
+  }
+  const h = Math.round(Number(hangers) || 0);
+  if (!Number.isInteger(h) || h < 0 || h > 4) return { error: 'A frame holds at most four hangers.' };
+  /* A hanger is four points on its own, so h hangers cannot fit inside a
+     smaller total. Caught here rather than left to look like a scoring style,
+     because the pair is what the points and the Hangers column both read.
+     Written out rather than through plural(), which is a rendering helper
+     declared a thousand lines below this pure engine — a `const` in its
+     temporal dead zone is exactly what took the page down an hour ago. */
+  if (h * 4 > t) return { error: 'A hanger is 4 points, so ' + h + ' of them cannot fit in a frame of ' + t + '.' };
+  const f = { s: s, t: t };
+  if (h) f.h = h;
+  return Object.assign({}, leg, { frames: (leg.frames || []).concat([f]) });
+}
+/* Takes the last frame back, whoever scored it. */
+function frameUndo(leg) {
+  const fr = ((leg && leg.frames) || []).slice();
+  if (!fr.length) return leg;
+  fr.pop();
+  return Object.assign({}, leg, { frames: fr });
+}
+/* One side's figures for a game scored frame by frame. `high` is null and
+   never 0 for a side that won no frame: 0 is a best frame of nothing, which
+   is a different claim from having no best frame. */
+function frameLegStats(leg, side) {
+  const st = frameState(leg);
+  return { points: st.pts[side], fw: st.fw[side], hang: st.hang[side],
+           high: st.high[side] || null, won: st.winner === side };
+}
+/* One side's figures for a game however it was recorded: from the frames when
+   it was scored live, else from what the scorer typed. The shuffleboard twin
+   of legSideStats(). */
+function sbSideStats(leg, side) {
+  if (leg.frames && leg.frames.length) return frameLegStats(leg, side);
+  const v = leg[side] || {};
+  const num = (x) => x == null ? null : x;
+  return { points: num(v.points), fw: null, hang: num(v.hang), high: num(v.high),
+           won: leg.w === side };
+}
+
 /* ── Player figures, the darts way ─────────────────────────────────────────
    Folds every leg a player threw in. A leg counts as played and won for
    everyone on the side; the DART figures (average, 180s, checkouts) are
@@ -3358,6 +3627,31 @@ function dartsPlayerStats(legs, playerId) {
   });
   return { legs: played, won: won, darts: darts, avg3: darts ? scored / darts * 3 : null,
            t180: t180, t140: t140, t100: t100, highOut: highOut, bestLeg: bestLeg, counted: counted };
+}
+/* ── Player figures, the shuffleboard way ────────────────────────────
+   The same shape and the same rule as the darts fold above: a game counts as
+   played and won for everyone on the side, and the PLAYING figures — points,
+   hangers, best frame — are credited only from a game one person played
+   alone. A doubles game cannot say whose hanger it was.
+
+   `counted` is games with a points figure, and `ppg` divides by that rather
+   than by games played: a game somebody typed a result into without typing a
+   score would otherwise drag an average down towards zero. */
+function shuffleboardPlayerStats(legs, playerId) {
+  let played = 0, won = 0, points = 0, hang = 0, counted = 0, high = null;
+  (legs || []).forEach((leg) => {
+    const side = (leg.by.a.indexOf(playerId) !== -1) ? 'a' : (leg.by.b.indexOf(playerId) !== -1) ? 'b' : null;
+    if (!side) return;
+    played++;
+    if (leg.w === side) won++;
+    if (leg.by[side].length !== 1) return;
+    const s = sbSideStats(leg, side);
+    if (s.points != null) { points += s.points; counted++; }
+    if (s.hang != null) hang += s.hang;
+    if (s.high != null && (high == null || s.high > high)) high = s.high;
+  });
+  return { legs: played, won: won, points: points, ppg: counted ? points / counted : null,
+           hang: hang, high: high, bestLeg: null, counted: counted };
 }
 /* Every leg in a league (or a season), each carrying its match, so a player's
    figures are one pass. */
@@ -3983,6 +4277,10 @@ let seasonPick = null;          /* season id chosen in a picker, or null for "th
 let standingsMode = 'sides';    /* 'sides' or 'players' — the individual table in a team league */
 
 function G() { return GAMES[state.league.game]; }
+/* The game's own word at the start of a sentence or a label. `unit` is stored
+   lower case because that is how it reads mid-sentence, which is nearly
+   everywhere it is used. */
+function capUnit(w) { return w.charAt(0).toUpperCase() + w.slice(1); }
 function S() { return state.league.settings; }
 function isTeams() { return !!state && S().format === 'teams'; }
 function nameOf(id) { return state ? sideName(state, id) : '—'; }
@@ -4301,7 +4599,7 @@ function renderStandings() {
         + '<td class="num">' + r.rank + '</td>'
         + '<th scope="row"><button type="button" class="rowbtn" data-side-open="' + esc(r.sideId) + '">' + esc(nameOf(r.sideId)) + '</button>'
         + (p && !p.active ? ' <span class="pill">retired</span>' : '')
-        + (p && p.hcp != null ? ' <span class="pill" title="' + esc(G().handicap.label) + '">' + esc(G().handicap.label.split(' ')[0].toLowerCase() === 'start' ? '−' + p.hcp : p.hcp) + '</span>' : '')
+        + (p && p.hcp != null ? ' <span class="pill" title="' + esc(G().handicap.label) + '">' + esc(G().handicap.pill(p.hcp)) + '</span>' : '')
         + '</th>'
         + '<td class="num">' + r.p + '</td><td class="num">' + r.w + '</td>'
         + (anyDraw ? '<td class="num">' + r.d + '</td>' : '')
@@ -4317,13 +4615,16 @@ function renderStandings() {
     + '</tbody></table>';
   /* Said out loud here, because a `title` on a heading never shows on a phone
      and P, W, D, L and ± are only obvious once you know. The same goes for the
-     one PILL that is a bare figure: a handicap reads as "−60" in this table
-     (it is written out in full on the Players tab, where there is room). Only
-     mentioned when a side on the table carries one. */
+     one PILL that is a bare figure: a handicap reads as "−60" at darts and
+     "+4" at shuffleboard (it is written out in full on the Players tab, where
+     there is room). Only mentioned when a side on the table carries one, and
+     the GAME says both how the figure is drawn and what it means — this line
+     used to work the first out by reading the first word of the label, which
+     would have drawn a second game's handicap wrong with nothing to see. */
   const anyHcp = t.rows.some((r) => { const p = playerById(r.sideId); return p && p.hcp != null; });
   const key = 'P played, W won' + (anyDraw ? ', D drawn' : '') + ', L lost, ' + unit.many + ' for and against, ± ' + unit.one + ' difference.'
-    + (anyHcp ? ' A minus figure beside a name is that player’s ' + G().handicap.label.toLowerCase()
-       + ', taken off the start of every ' + unit.one + ' they throw.' : '');
+    + (anyHcp ? ' The figure beside a name is that player’s ' + G().handicap.label.toLowerCase()
+       + ', ' + G().handicap.note + '.' : '');
   $('standingsNote').textContent = (played
     ? plural(played, 'match', 'matches') + ' counted' + (season ? ' in ' + season.name : '')
       + '. Order: ' + tiebreakWords(S().tiebreak) + '.'
@@ -4333,9 +4634,13 @@ function renderStandings() {
 function renderIndividual(seasonId, wrap) {
   const legs = legsIn(state, seasonId);
   const cols = G().leaderboardColumns;
+  /* Sorted on the game's OWN first column after wins — the 3-dart average at
+     darts, points per game at shuffleboard — rather than on `avg3`, which a
+     second game does not have and which read as 0 for everybody. */
+  const lead = cols.length ? cols[0].key : null;
   const rows = state.players.map((p) => Object.assign({ player: p }, G().playerStats(legs, p.id)))
     .filter((r) => r.legs > 0 || r.player.active)
-    .sort((a, b) => b.won - a.won || (b.avg3 || 0) - (a.avg3 || 0) || a.player.name.localeCompare(b.player.name));
+    .sort((a, b) => b.won - a.won || (lead ? (b[lead] || 0) - (a[lead] || 0) : 0) || a.player.name.localeCompare(b.player.name));
   if (!rows.length) { wrap.innerHTML = '<p class="empty">No players yet.</p>'; $('standingsNote').textContent = ''; return; }
   const unit = G().unit;
   wrap.innerHTML = '<table id="individualTable"><thead><tr><th scope="col">Player</th><th scope="col">Team</th>'
@@ -4526,10 +4831,20 @@ function renderLeagueTab() {
   $('lr_format').disabled = locked || !canEdit();
   $('lr_teamSizeWrap').hidden = s.format !== 'teams';
   $('lr_teamSize').value = String(s.teamSize);
+  const unit = G().unit;
   const lf = $('lr_legFormat');
   lf.innerHTML = G().legFormats.map((f) => '<option value="' + esc(f.id) + '">' + esc(f.label) + '</option>').join('');
   lf.value = s.legFormat;
+  $('lr_legFormatLabel').textContent = G().formatLabel;
+  $('lr_legHelp').setAttribute('aria-label', 'What a ' + unit.one + ' is, and what the formats mean');
+  $('lr_nLabel').textContent = '…how many ' + unit.many;
   $('lr_dOut').checked = s.dOut;
+  /* Double-out is a DARTS rule, not a league one. A game that has no such
+     thing does not show the line greyed — it does not show it at all, because
+     a control that can never apply is one more thing to read past. */
+  $('lr_dOutRow').hidden = !G().doubleOut;
+  $('lr_mode').innerHTML = '<option value="bestOf">Best of…</option>'
+    + '<option value="fixed">A fixed number of ' + esc(unit.many) + '</option>';
   $('lr_mode').value = s.matchFormat.mode;
   $('lr_n').value = String(s.matchFormat.n);
   $('lr_win').value = String(s.points.win);
@@ -4541,7 +4856,7 @@ function renderLeagueTab() {
   tb.innerHTML = presets.map((p) => '<option value="' + esc(p[0]) + '">' + esc(p[1]) + '</option>').join('');
   tb.value = key;
   $('rulesNote').textContent = locked
-    ? 'The format is fixed once a match exists. Leg and match rules apply to matches scored from now on; the points and the order re-rank the table at once.'
+    ? 'The format is fixed once a match exists. ' + capUnit(unit.one) + ' and match rules apply to matches scored from now on; the points and the order re-rank the table at once.'
     : 'These can all change until the first match is recorded.';
   document.querySelectorAll('#rulesCard input, #rulesCard select').forEach((el) => {
     if (el.id !== 'lr_format' && el.id !== 'lr_game') el.disabled = !canEdit();
@@ -4575,7 +4890,7 @@ function renderLeagueTab() {
   $('sizeMeter').textContent = 'League data: ' + (bytes < 10000 ? (bytes / 1024).toFixed(1) : Math.round(bytes / 1024)) + ' KB of the 1,000 KB a league may hold.';
   $('sizeMeter').className = 'hint' + (bytes > 600000 ? ' warn-text' : '');
   const closed = state.seasons.filter((s) => s.status === 'done').map((s) => s.id);
-  const trimmable = closed.length && state.matches.some((m) => closed.indexOf(m.seasonId) !== -1 && m.legs.some((l) => l.visits));
+  const trimmable = closed.length && state.matches.some((m) => closed.indexOf(m.seasonId) !== -1 && m.legs.some(legIsLive));
   $('trimBtn').hidden = !canEdit() || !trimmable || bytes < TRIM_AT;
   $('deleteLeagueBtn').hidden = !isOwner();
   $('forgetBtn').hidden = viewOnly;
@@ -4690,6 +5005,8 @@ function statsHtml(st) {
     [unit.many[0].toUpperCase() + unit.many.slice(1), String(st.legs)],
     ['Won', st.legs ? st.won + ' (' + Math.round(st.won / st.legs * 100) + '%)' : '—'],
   ].concat(G().leaderboardColumns.map((c) => [c.label, c.fmt(st[c.key])]));
+  /* A darts-only tile, and it says so by being null for every other game:
+     "best leg" is a count of DARTS, which is not a figure another game has. */
   if (st.bestLeg != null) tiles.push(['Best ' + unit.one, st.bestLeg + ' darts']);
   return tiles.map((t) => '<div class="stat"><div class="label">' + esc(t[0]) + '</div><div class="v">' + esc(t[1]) + '</div></div>').join('');
 }
@@ -5030,11 +5347,11 @@ function renderMatchDialog() {
       + fields.map((f) => '<label><span>' + esc(f.label) + '</span><input type="number" inputmode="numeric" min="' + f.min + '" max="' + f.max
         + '" data-leg="' + i + '" data-stat="' + side + '" data-key="' + esc(f.key) + '" value="' + (leg[side] && leg[side][f.key] != null ? leg[side][f.key] : '') + '"'
         + (edit ? '' : ' disabled') + '></label>').join('') + '</div>';
-    const live = leg.visits && (leg.visits.a.length || leg.visits.b.length);
-    const canLive = edit && G().liveScorer === 'x01' && leg.start.a && leg.start.b && (open || live);
+    const live = legIsLive(leg);
+    const canLive = edit && !!G().liveScorer && leg.start.a && leg.start.b && (open || live);
     return '<div class="legrow' + (open ? ' open' : '') + '"><div class="leghead"><span class="label">' + esc(G().unit.one) + ' ' + (i + 1)
       + (live ? ' · scored live' : '') + '</span><span class="row" style="gap:6px">'
-      + (canLive ? '<button type="button" class="btn-small primary" data-live="' + i + '">' + (live ? 'Continue live' : '🎯 Score live') + '</button>' : '')
+      + (canLive ? '<button type="button" class="btn-small primary" data-live="' + i + '">' + (live ? 'Continue live' : '▸ Score live') + '</button>' : '')
       + (edit ? '<button type="button" class="icon-btn danger" data-leg-del="' + i + '" aria-label="Remove ' + esc(G().unit.one) + ' ' + (i + 1) + '"><span aria-hidden="true">×</span></button>' : '') + '</span></div>'
       + '<div class="legwin">' + sideBtn('a') + '<span class="hint">won by</span>' + sideBtn('b') + '</div>'
       + who('a') + who('b')
@@ -5227,9 +5544,15 @@ $('mtAvail').addEventListener('click', (e) => {
   if (my && window.lnCloud) window.lnCloud.setAvail(m.date, my.dataset.answer);
 });
 function liveSummary(leg) {
+  const m = curMatch();
+  if (G().liveScorer === 'frames') {
+    const st = frameState(leg);
+    const one = (k) => esc(nameOf(m[k])) + ': ' + st.pts[k] + ' from ' + plural(st.fw[k], 'frame')
+      + (st.hang[k] ? ', ' + plural(st.hang[k], 'hanger') : '');
+    return one('a') + ' · ' + one('b');
+  }
   const a = x01LegStats(leg, 'a'), b = x01LegStats(leg, 'b');
   const one = (n, s) => esc(n) + ': ' + s.darts + ' darts' + (s.avg3 != null ? ', avg ' + s.avg3.toFixed(1) : '') + (s.checkout ? ', out ' + s.checkout : '');
-  const m = curMatch();
   return one(nameOf(m.a), a) + ' · ' + one(nameOf(m.b), b);
 }
 $('addLegBtn').addEventListener('click', () => {
@@ -5424,6 +5747,8 @@ function openBracketDialog() {
   const season = currentSeason();
   $('br_name').value = '';
   $('br_type').value = 'single';
+  $('br_bestOf').innerHTML = [1, 3, 5, 7].map((k) => '<option value="' + k + '">' + k + ' '
+    + esc(k === 1 ? G().unit.one : G().unit.many) + '</option>').join('');
   $('br_bestOf').value = '3';
   $('br_reset').checked = true;
   $('br_seeded').value = season && tableFor(season.id).matches.some(countsForStandings) ? 'standings' : 'random';
@@ -5640,23 +5965,55 @@ $('firstDemo').addEventListener('click', loadDemo);
 $('firstRestore').addEventListener('click', () => $('importFile').click());
 
 /* ── The info dots ────────────────────────────────────────────────────── */
+/* An entry is either [title, html] or a FUNCTION returning one, for the topics
+   whose answer is the game's rather than the app's. A function is read when
+   the dot is pressed, so it can ask G() — and falls back to darts, because a
+   dot could in principle be reached with no league open and an explanation
+   about nothing is worse than an explanation about the commoner game.
+
+   EVERY BODY IS STILL A LITERAL. A function CHOOSES between two written-out
+   texts; it never builds one. helpBody takes innerHTML, so the moment a body
+   is assembled from anything the app did not write, the window is a place a
+   name typed by another member could reach — and no test can tell "the unit
+   word from the registry" from "whatever arrived over Firestore". Two games
+   are two paragraphs, written twice, and that is the cheaper half. */
+function helpGame() { return state ? G() : GAMES.darts; }
 const HELP = {
-  leg: ['What a Leg Is', `<p>A <strong>leg</strong> is one game of darts. Both players start on the same number and take it in turns to throw three darts, taking what they score off their total. The first to reach <strong>exactly zero</strong> wins the leg.</p>
+  leg: () => (helpGame().liveScorer === 'frames'
+    ? ['What a Game Is', `<p>A <strong>game</strong> is a race to a target. The board is played in <strong>frames</strong> — all eight weights, four each — and only one side scores a frame: whoever owns the weight furthest down the board takes everything of theirs that sits past the best of the other side's. A weight overhanging the far edge is a <strong>hanger</strong>, and is worth 4.</p>
+    <p><strong>First to 15</strong> is the usual league game; <strong>first to 21</strong> is the longer one. The target is reached or passed — the frame that takes a side there can carry them past it, and the score stands as it fell.</p>
+    <p>The <strong>hammer</strong> is the last weight of the frame. Whoever the scorer starts it with has it in frame one, and it alternates every frame after that.</p>
+    <p>A <strong>match</strong> is a set of games: best of five means the first to win three.</p>`]
+    : ['What a Leg Is', `<p>A <strong>leg</strong> is one game of darts. Both players start on the same number and take it in turns to throw three darts, taking what they score off their total. The first to reach <strong>exactly zero</strong> wins the leg.</p>
     <p><strong>501</strong> is the number nearly every league starts from; <strong>301</strong> is the shorter game, for quick nights or beginners. With <strong>double-out</strong> on, the dart that takes you to zero must land in a double (the thin outer ring) or the bull — going below zero, or leaving exactly 1, is a bust and the turn scores nothing.</p>
-    <p>A <strong>match</strong> is a set of legs: best of five means the first to win three.</p>`],
-  rules: ['How the Rules Apply', `<p><strong>Played as</strong> is fixed once a match exists: a singles league's matches are between players, a team league's between teams, and the two cannot be told apart afterwards. Everything else can change at any time.</p>
+    <p>A <strong>match</strong> is a set of legs: best of five means the first to win three.</p>`]),
+  rules: () => (helpGame().liveScorer === 'frames'
+    ? ['How the Rules Apply', `<p><strong>Played as</strong> is fixed once a match exists: a singles league's matches are between players, a team league's between teams, and the two cannot be told apart afterwards. Everything else can change at any time.</p>
+    <p><strong>Game and match rules apply to matches scored from now on</strong> — a game already played remembers the target it was played to. <strong>Points and the tiebreak order re-rank the table at once</strong>, for every season, because they are how results are read rather than what was played.</p>
+    <p>A <strong>best of</strong> match ends when one side has more than half the games; a <strong>fixed number</strong> plays them all and can be drawn.</p>`]
+    : ['How the Rules Apply', `<p><strong>Played as</strong> is fixed once a match exists: a singles league's matches are between players, a team league's between teams, and the two cannot be told apart afterwards. Everything else can change at any time.</p>
     <p><strong>Leg and match rules apply to matches scored from now on</strong> — a leg already thrown remembers the start and the double-out rule it was played under. <strong>Points and the tiebreak order re-rank the table at once</strong>, for every season, because they are how results are read rather than what was played.</p>
-    <p>A <strong>best of</strong> match ends when one side has more than half the legs; a <strong>fixed number</strong> plays them all and can be drawn.</p>`],
+    <p>A <strong>best of</strong> match ends when one side has more than half the legs; a <strong>fixed number</strong> plays them all and can be drawn.</p>`]),
   standings: ['How the Table Is Ordered', `<p>Every side earns the league's points for a <strong>win, a draw or a loss</strong>, set on the League tab. Sides level on points are separated by the <strong>tiebreak order</strong> chosen there — by default leg difference, then legs for, then head-to-head.</p>
     <p><strong>Head-to-head is worked out among the sides still tied</strong>, as a mini-table of the matches between them, rather than pair by pair: three sides who each beat one of the others would otherwise rank differently depending on the order they were looked at. Sides the order cannot separate share a rank, and the next rank skips.</p>
     <p>The <strong>Trend</strong> line is a side's points after each of its last ten matches, and Form is its last five results, oldest first.</p>`],
-  individual: ['The Individual Table', `<p>In a team league every player also has a record of their own: the legs they threw in across the team matches, and how many they won.</p>
-    <p><strong>Dart figures — the average, 180s and checkouts — count only legs one person threw alone.</strong> A doubles leg cannot say whose 180 it was, so it adds to the legs played and won and to nothing else.</p>`],
-  matches: ['How Matches Are Scored', `<p>Tap a match to score it. Add a leg, tap who won it, and the match ends itself when the format says it is over — <strong>best of five</strong> is over at three, and a fixed count is over when they have all been played.</p>
+  individual: () => (helpGame().liveScorer === 'frames'
+    ? ['The Individual Table', `<p>In a team league every player also has a record of their own: the games they played in across the team matches, and how many they won.</p>
+    <p><strong>The board figures — points per game, hangers and best frame — count only games one person played alone.</strong> A doubles game cannot say whose hanger it was, so it adds to the games played and won and to nothing else.</p>`]
+    : ['The Individual Table', `<p>In a team league every player also has a record of their own: the legs they threw in across the team matches, and how many they won.</p>
+    <p><strong>Dart figures — the average, 180s and checkouts — count only legs one person threw alone.</strong> A doubles leg cannot say whose 180 it was, so it adds to the legs played and won and to nothing else.</p>`]),
+  matches: () => (helpGame().liveScorer === 'frames'
+    ? ['How Matches Are Scored', `<p>Tap a match to score it. Add a game, tap who won it, and the match ends itself when the format says it is over — <strong>best of five</strong> is over at three, and a fixed count is over when they have all been played.</p>
     <p>A <strong>forfeit</strong> hands the match to the side that turned up, at the full score, and counts in the table. A <strong>void</strong> match keeps whatever was scored but counts for nothing. Both can be reopened.</p>
-    <p>Every tap is saved as it lands, so a scorer can put the phone down mid-match and pick it up on another.</p>`],
-  handicap: ['Handicaps', `<p>A player's handicap is taken off their <strong>starting score</strong>: with a deduction of 40, a 501 leg starts them on 461. It applies to every leg they throw in a singles match, and the leg remembers the start it gave them, so an average is worked out from the darts actually thrown.</p>
-    <p>Team matches start every leg from the full score.</p>`],
+    <p>Every tap is saved as it lands, so a scorer can put the phone down mid-match and pick it up on another.</p>`]
+    : ['How Matches Are Scored', `<p>Tap a match to score it. Add a leg, tap who won it, and the match ends itself when the format says it is over — <strong>best of five</strong> is over at three, and a fixed count is over when they have all been played.</p>
+    <p>A <strong>forfeit</strong> hands the match to the side that turned up, at the full score, and counts in the table. A <strong>void</strong> match keeps whatever was scored but counts for nothing. Both can be reopened.</p>
+    <p>Every tap is saved as it lands, so a scorer can put the phone down mid-match and pick it up on another.</p>`]),
+  handicap: () => (helpGame().liveScorer === 'frames'
+    ? ['Handicaps', `<p>A player's handicap is a <strong>head start</strong>, taken off the target they are playing to: with a head start of 4, a game to 15 is a game to 11 for them. It applies to every game they play in a singles match, and the game remembers the target it gave them, so a points-per-game figure is worked out from what they actually scored.</p>
+    <p>Team matches play every game to the full target.</p>`]
+    : ['Handicaps', `<p>A player's handicap is taken off their <strong>starting score</strong>: with a deduction of 40, a 501 leg starts them on 461. It applies to every leg they throw in a singles match, and the leg remembers the start it gave them, so an average is worked out from the darts actually thrown.</p>
+    <p>Team matches start every leg from the full score.</p>`]),
   tournament: ['How a Bracket Works', `<p>Entrants are <strong>seeded</strong> — from the standings, at random, or in roster order — and paired so the top seed meets the bottom seed first. When the count is not a power of two, the <strong>byes go to the top seeds</strong>, who skip the first round.</p>
     <p>In a <strong>double-elimination</strong> bracket a first loss drops a side into the losers' bracket and a second puts them out. The two survivors meet in the grand final; if the one from the losers' bracket wins it, both have lost once, so a second final decides it.</p>
     <p>Tap a match with both sides known to score it. Changing an earlier result after later matches were played marks those results as no longer fitting, rather than quietly moving sides around.</p>`],
@@ -5681,8 +6038,9 @@ const helpDialog = $('helpDialog');
 document.addEventListener('click', (e) => {
   const btn = e.target.closest ? e.target.closest('.tile-help') : null;
   if (!btn) return;
-  const h = HELP[btn.dataset.help];
-  if (!h) return;
+  const raw = HELP[btn.dataset.help];
+  if (!raw) return;
+  const h = typeof raw === 'function' ? raw() : raw;
   $('helpTitle').textContent = h[0];
   $('helpBody').innerHTML = h[1];
   openModal(helpDialog);
@@ -5926,7 +6284,7 @@ async function refreshShareLink() {
     setBusy(false);
     meta.textContent = plural(payload.matches.length, 'match', 'matches') + ' · ' + url.length.toLocaleString() + ' characters';
     scope.textContent = [seasonId ? payload.season + ' only.' : 'Every season.',
-      details ? '' : 'Leg detail is left behind — scores and results only.'].filter(Boolean).join(' ');
+      details ? '' : capUnit(G().unit.one) + ' detail is left behind — scores and results only.'].filter(Boolean).join(' ');
     warn.textContent = url.length > SHARE_WARN_AT
       ? 'Long enough that some chat apps and mail clients will cut it. Send it as a link rather than pasting the text, or share one season without the detail.' : '';
   } catch (e) {
@@ -5936,6 +6294,7 @@ async function refreshShareLink() {
 }
 $('shareBtn').addEventListener('click', () => {
   if (!state) return;
+  $('shareDetailsLabel').textContent = capUnit(G().unit.one) + ' detail — ' + G().detail;
   $('shareKeep').innerHTML = '<option value="">Every season</option>' + seasonsSorted().map((s) => '<option value="' + esc(s.id) + '">' + esc(s.name) + '</option>').join('');
   const cur = currentSeason();
   $('shareKeep').value = cur && state.seasons.length > 1 ? cur.id : '';
@@ -6059,7 +6418,10 @@ $('main').addEventListener('click', (e) => {
    demo is the same every time, and dated back from TODAY so it is never stale.
    Their ids are not valid League IDs, so they can never reach the cloud. */
 const DEMO_TEAMS_ID = 'LN-DEMOTEAMS';
-function isDemoId(id) { return id === DEMO_ID || id === DEMO_TEAMS_ID; }
+/* Eight characters like the others, and an O in it like the others, so it is
+   not a League ID and can never be pushed to the cloud. */
+const DEMO_BOARD_ID = 'LN-DEMOBORD';
+function isDemoId(id) { return id === DEMO_ID || id === DEMO_TEAMS_ID || id === DEMO_BOARD_ID; }
 function daysAgo(n) {
   const d = new Date();
   d.setDate(d.getDate() - n);
@@ -6090,6 +6452,68 @@ function simulateLeg(leg, skill, rnd) {
     if (next.error) { const alt = x01Visit(cur, 26, 3); if (alt.error) break; cur = alt; } else cur = next;
   }
   return cur;
+}
+/* A plausible game of shuffleboard between two players of given strength,
+   scored through frameScore() so every rule the sheet enforces holds here
+   too — including the one that stops a frame being added after the game is
+   won, which is what ends the loop. */
+function simulateGame(leg, skill, rnd) {
+  let cur = leg, guard = 0;
+  while (!frameState(cur).winner && guard++ < 60) {
+    const st = frameState(cur);
+    /* A frame nobody scores — every weight off the end or in the gutter. */
+    if (rnd() < 0.07) { const blank = frameScore(cur, null, 0, 0); if (blank.error) break; cur = blank; continue; }
+    /* The hammer is the last weight of the frame, so it is worth having. */
+    const bias = st.hammer === 'a' ? 1.25 : 1 / 1.25;
+    const side = rnd() < (skill.a * bias) / (skill.a * bias + skill.b) ? 'a' : 'b';
+    const r = rnd();
+    const t = r < 0.42 ? 1 : r < 0.70 ? 2 : r < 0.86 ? 3 : r < 0.95 ? 4 : 5 + Math.floor(rnd() * 4);
+    const h = (t >= 4 && rnd() < 0.45) ? 1 : 0;
+    const next = frameScore(cur, side, t, h);
+    if (next.error) break;
+    cur = next;
+  }
+  return cur;
+}
+function demoPlayShuffle(st, m, strength, rnd, live) {
+  const fmt = S_of(st).matchFormat;
+  const base = 15;
+  m.legs = [];
+  let guard = 0;
+  while (!matchDone(m, fmt) && guard++ < 25) {
+    const startFor = (side) => {
+      const p = st.players.find((x) => x.id === m[side]);
+      return base - (p && p.hcp != null ? p.hcp : 0);
+    };
+    const leg = { w: null, by: { a: [m.a], b: [m.b] }, start: { a: startFor('a'), b: startFor('b') },
+                  first: m.legs.length % 2 ? 'b' : 'a' };
+    const skill = { a: strength(m.a), b: strength(m.b) };
+    if (live) {
+      const played = simulateGame(Object.assign({}, leg, { frames: [] }), skill, rnd);
+      const fs = frameState(played);
+      leg.w = fs.winner || (skill.a >= skill.b ? 'a' : 'b');
+      leg.frames = played.frames;
+    } else {
+      /* A typed game: the figures a scorer would write down afterwards. The
+         winner is on or past their target and the loser short of theirs, or
+         the Details boxes would describe a game that could not have ended. */
+      const pA = skill.a / (skill.a + skill.b);
+      leg.w = rnd() < pA ? 'a' : 'b';
+      const other = leg.w === 'a' ? 'b' : 'a';
+      const wp = leg.start[leg.w] + Math.floor(rnd() * 4);
+      const lp = Math.max(0, leg.start[other] - 2 - Math.floor(rnd() * 8));
+      const fig = (points) => {
+        const o = { points: points, hang: points >= 8 ? Math.floor(rnd() * 3) : rnd() < 0.4 ? 1 : 0 };
+        o.high = Math.min(FRAME_MAX, Math.max(1, Math.min(points, 2 + Math.floor(rnd() * 5))));
+        if (o.hang * 4 > points) o.hang = Math.floor(points / 4);
+        return o;
+      };
+      leg[leg.w] = fig(wp);
+      leg[other] = fig(lp);
+    }
+    m.legs.push(leg);
+  }
+  m.status = 'played';
 }
 function demoPlay(st, m, strength, rnd, live) {
   const fmt = S_of(st).matchFormat;
@@ -6241,13 +6665,61 @@ function buildDemoTeams() {
   st.brackets.push(ko);
   return normalizeLeague(st);
 }
+/* ── The shuffleboard demo ─────────────────────────────────────────────────
+   The third league, and the one that carries the SECOND GAME: a singles
+   season under way with head starts, the last round scored frame by frame so
+   the live sheet has something in it, and a knockout from the table. Kept
+   singles on purpose — the two darts leagues already cover singles and teams
+   between them, and what this one is for is the game. */
+function buildDemoShuffle() {
+  const rnd = mulberry32(20260908);
+  const st = blankLeague({ id: DEMO_BOARD_ID, name: 'Sunday Shuffleboard (demo)', game: 'shuffleboard' });
+  st.league.settings.legFormat = '15';
+  st.league.settings.matchFormat = { mode: 'bestOf', n: 3 };
+  st.league.createdAt = daysAgo(60);
+  st.league.u = 1;
+  const P = [
+    { id: 'demo-b-vera',  name: 'Vera Lindholm', board: 58 },
+    { id: 'demo-b-otis',  name: 'Otis Mbeki',    board: 54 },
+    { id: 'demo-b-junie', name: 'Junie Falk',    board: 50 },
+    { id: 'demo-b-raf',   name: 'Raf Delgado',   board: 47 },
+    { id: 'demo-b-marta', name: 'Marta Kovač',   board: 42, hcp: 3 },
+    { id: 'demo-b-wes',   name: 'Wes Okonkwo',   board: 38, hcp: 5 },
+  ];
+  P.forEach((p, i) => st.players.push({ id: p.id, name: p.name, teamId: null,
+    hcp: p.hcp == null ? null : p.hcp, active: true, u: 2 + i }));
+  const strength = (id) => (P.find((p) => p.id === id) || { board: 50 }).board;
+  const season = { id: 'demo-s-board', name: 'Sunday League', startsOn: daysAgo(35), status: 'active', u: 10 };
+  st.seasons.push(season);
+  let n = 0;
+  /* Six players, so five rounds and nobody sits out. Played to round four,
+     with that round scored frame by frame. */
+  dateRounds(roundRobin(P.map((p) => p.id)), season.startsOn, 7).forEach((rd) => rd.pairs.forEach((pr) => {
+    const m = { id: 'demo-m-b-' + (++n), seasonId: season.id, bracketId: null, slot: null, round: rd.round,
+                date: rd.date, venue: rd.round % 2 ? 'The Long Room' : 'The Tap House',
+                a: pr.a, b: pr.b, status: 'scheduled', score: { a: 0, b: 0 }, legs: [], u: 100 + n };
+    if (rd.round <= 4) demoPlayShuffle(st, m, strength, rnd, rd.round === 4);
+    st.matches.push(m);
+  }));
+  const cup = { id: 'demo-b-board-cup', name: 'Board Cup', seasonId: season.id, type: 'single', bestOf: 3,
+                reset: true, seeded: 'standings',
+                entrants: seedFromStandings(rankSides(standings(st.matches, P.map((p) => p.id), st.league.settings), st.league.settings,
+                  { matches: st.matches, nameOf: (id) => sideName(st, id) })),
+                createdAt: daysAgo(4), u: 30 };
+  st.brackets.push(cup);
+  return normalizeLeague(st);
+}
 function loadDemo() {
+  const board = buildDemoShuffle();
   const teams = buildDemoTeams();
   const singles = buildDemoSingles();
+  /* Adopted in this order so the darts singles league is the one on screen —
+     it is the fullest, and the header picker is how the others are reached. */
+  adoptLeague(board, 'owner', false);
   adoptLeague(teams, 'owner', false);
   adoptLeague(singles, 'owner', false);
   setTab('standings');
-  toast('Two demo leagues loaded — switch between them in the header');
+  toast('Three demo leagues loaded — switch between them in the header');
 }
 
 
@@ -7087,13 +7559,26 @@ function qrSvg(text, px) {
 
 
 /* ═══════════════════════════ The live x01 scorer ══════════════════════════
-   A sheet a scorer holds at the oche: the two remaining scores, whose throw
-   it is, a checkout hint, and a keypad. Every visit is recorded through
-   x01Visit() — the same pure fold the tests pin — and saved as it lands, so
-   the phone can be put down mid-leg and picked up on another. A finish asks
-   how many darts it took, offering only the counts canFinish() allows. */
+   A sheet a scorer holds at the oche, or at the end of the board. ONE window,
+   two bottom halves: renderLive() writes the title and who is down, then forks
+   on GAMES[game].liveScorer — 'x01' for the darts keypad, 'frames' for the
+   shuffleboard one. The three shared parts (the two side panels, the who-is-
+   down line, the entry box) are shared because the reason for them is the same
+   at both games; everything below the entry box is the game's own.
+
+   Darts: the two remaining scores, whose throw it is, a checkout hint, and a
+   keypad. Every visit is recorded through x01Visit() — the same pure fold the
+   tests pin — and saved as it lands, so the phone can be put down mid-leg and
+   picked up on another. A finish asks how many darts it took, offering only
+   the counts canFinish() allows.
+
+   Shuffleboard: the two running totals counting up to their targets, whose
+   hammer it is, and a frame typed as a number and then given to a SIDE —
+   because the number alone says nothing. Every frame goes through
+   frameScore(), which is the only thing that decides what a frame may be. */
 let liveCtx = null;          /* { matchId, leg } while the sheet is open */
 let liveEntry = '';          /* the digits typed so far */
+let liveHang = 0;            /* shuffleboard: hangers in the frame being typed */
 function curLive() {
   if (!liveCtx || !state) return null;
   const m = state.matches.find((x) => x.id === liveCtx.matchId);
@@ -7102,22 +7587,52 @@ function curLive() {
 }
 function openLive(matchId, legIndex) {
   liveCtx = { matchId: matchId, leg: legIndex };
-  liveEntry = '';
+  liveEntry = ''; liveHang = 0;
   const c = curLive();
   if (!c) { liveCtx = null; return; }
-  if (!c.leg.visits) { c.leg.visits = { a: [], b: [] }; }
+  /* Each scorer plants its own empty record, and ONLY its own: a darts leg
+     that grew a `frames: []` would read as scored live to legIsLive() and
+     lose its Details boxes for a record nothing wrote to. */
+  if (G().liveScorer === 'frames') { if (!c.leg.frames) c.leg.frames = []; }
+  else if (!c.leg.visits) { c.leg.visits = { a: [], b: [] }; }
   if (!c.leg.first) c.leg.first = legIndex % 2 ? 'b' : 'a';
   if (c.leg.dOut == null) c.leg.dOut = S().dOut;
   renderLive();
   openModal($('liveDialog'));
 }
+/* Who is down as playing this leg — the same warning either way, because the
+   reason is the same: every per-player figure in the app is credited from a
+   side with exactly ONE name on it, so a live leg with nobody down keeps its
+   result and quietly loses every figure that needs a player. */
+function renderLiveWho(m, leg) {
+  const lw = $('lvWho');
+  if (!isTeams()) { lw.textContent = ''; lw.className = 'hint'; return; }
+  const nm = (k) => leg.by[k].map((id) => { const p = playerById(id); return p ? p.name : null; }).filter(Boolean);
+  const empty = ['a', 'b'].filter((k) => !nm(k).length);
+  if (empty.length) {
+    lw.className = 'warn-line';
+    lw.textContent = 'Nobody is down as playing for ' + empty.map((k) => nameOf(m[k])).join(' or ')
+      + ' — tap Done and tick who played, or this ' + G().unit.one + ' keeps no figures.';
+  } else {
+    lw.className = 'hint';
+    lw.textContent = ['a', 'b'].map((k) => nameOf(m[k]) + ': ' + nm(k).join(', ')).join(' · ');
+  }
+}
 function renderLive() {
   const c = curLive();
   if (!c) { $('liveDialog').close(); return; }
+  $('liveTitle').textContent = capUnit(G().unit.one) + ' ' + (liveCtx.leg + 1) + ' · ' + nameOf(c.m.a) + ' v ' + nameOf(c.m.b);
+  renderLiveWho(c.m, c.leg);
+  if (G().liveScorer === 'frames') renderLiveSb(c); else renderLiveX01(c);
+}
+function renderLiveX01(c) {
   const { m, leg } = c;
   const st = x01State(leg);
   const edit = canEdit() && leg.w === null;
-  $('liveTitle').textContent = G().unit.one.charAt(0).toUpperCase() + G().unit.one.slice(1) + ' ' + (liveCtx.leg + 1) + ' · ' + nameOf(m.a) + ' v ' + nameOf(m.b);
+  $('lvHangRow').hidden = true;
+  $('lvScoredRow').hidden = true;
+  $('lvSbPad').hidden = true;
+  $('lvUndo').textContent = 'Undo last visit';
   const side = (k) => {
     const s = x01LegStats(leg, k);
     return '<div class="lvside' + (st.turn === k ? ' turn' : '') + (st.winner === k ? ' won' : '') + '"' + (st.turn === k ? ' aria-current="true"' : '') + '>'
@@ -7126,25 +7641,6 @@ function renderLive() {
       + '<div class="hint">' + s.darts + ' darts' + (s.avg3 != null ? ' · avg ' + s.avg3.toFixed(1) : '') + (st.busts[k] ? ' · ' + plural(st.busts[k], 'bust') : '') + '</div></div>';
   };
   $('lvSides').innerHTML = side('a') + side('b');
-  /* In a team league the leg says who threw it, and it is the ONLY thing
-     that does: dartsPlayerStats credits an average, a 180 and a checkout
-     only from a leg with one name on that side. An empty `by` here is that
-     figure quietly lost, so it is said out loud rather than discovered in a
-     season's stats later. */
-  const lw = $('lvWho');
-  if (!isTeams()) { lw.textContent = ''; lw.className = 'hint'; }
-  else {
-    const nm = (k) => leg.by[k].map((id) => { const p = playerById(id); return p ? p.name : null; }).filter(Boolean);
-    const empty = ['a', 'b'].filter((k) => !nm(k).length);
-    if (empty.length) {
-      lw.className = 'warn-line';
-      lw.textContent = 'Nobody is down as throwing for ' + empty.map((k) => nameOf(m[k])).join(' or ')
-        + ' — tap Done and tick who threw, or this ' + G().unit.one + ' keeps no average.';
-    } else {
-      lw.className = 'hint';
-      lw.textContent = ['a', 'b'].map((k) => nameOf(m[k]) + ': ' + nm(k).join(', ')).join(' · ');
-    }
-  }
   const noVisits = st.visits === 0;
   $('lvFirstRow').hidden = !noVisits || !edit;
   $('lvFirstA').textContent = nameOf(m.a) + ' throws first';
@@ -7164,6 +7660,62 @@ function renderLive() {
   $('lvPad').hidden = !edit;
   $('lvUndo').hidden = !canEdit() || st.visits === 0;
   $('lvUndo').disabled = st.visits === 0;
+}
+/* ── The shuffleboard sheet ────────────────────────────────────────────────
+   The same window, the same three shared parts (the two sides, who is down,
+   the entry box), and a different bottom half: a frame is a NUMBER given to a
+   SIDE, so the commit is two named buttons rather than one ✓. Nothing is
+   disabled to stop a wrong press — frameScore() answers every one of them in
+   a sentence a scorer can read, which is the same bargain the darts pad makes
+   with a total three darts cannot score. */
+function renderLiveSb(c) {
+  const { m, leg } = c;
+  const st = frameState(leg);
+  const edit = canEdit() && leg.w === null;
+  $('lvFinishRow').hidden = true;
+  $('lvPad').hidden = true;
+  $('lvUndo').textContent = 'Undo last frame';
+  const side = (k) => {
+    const need = st.target[k] == null ? null : Math.max(0, st.target[k] - st.pts[k]);
+    const bits = [need == null ? 'no target' : need === 0 ? 'there' : 'needs ' + need,
+                  plural(st.fw[k], 'frame')];
+    if (st.hang[k]) bits.push(plural(st.hang[k], 'hanger'));
+    return '<div class="lvside' + (st.hammer === k ? ' turn' : '') + (st.winner === k ? ' won' : '') + '"'
+      + (st.hammer === k ? ' aria-current="true"' : '') + '>'
+      + '<div class="lvname">' + esc(nameOf(m[k]))
+      + (st.hammer === k ? ' <span class="pill">hammer</span>' : '')
+      + (st.winner === k ? ' <span class="pill ok">won</span>' : '') + '</div>'
+      + '<div class="lvrem">' + st.pts[k] + '</div>'
+      + '<div class="hint">' + esc(bits.join(' · ')) + '</div></div>';
+  };
+  $('lvSides').innerHTML = side('a') + side('b');
+  /* Who has the hammer in frame ONE. After that it alternates, so this is the
+     only frame anyone gets to choose — the same shape as who throws first. */
+  const noFrames = st.frames === 0;
+  $('lvFirstRow').hidden = !noFrames || !edit;
+  $('lvFirstA').textContent = nameOf(m.a) + ' has the hammer';
+  $('lvFirstB').textContent = nameOf(m.b) + ' has the hammer';
+  $('lvFirstA').setAttribute('aria-pressed', String(leg.first !== 'b'));
+  $('lvFirstB').setAttribute('aria-pressed', String(leg.first === 'b'));
+  $('lvHint').textContent = st.winner
+    ? nameOf(m[st.winner]) + ' wins the game ' + st.pts[st.winner] + '–' + st.pts[st.winner === 'a' ? 'b' : 'a'] + '.'
+    : 'Frame ' + (st.frames + 1) + ' — ' + nameOf(m[st.hammer]) + ' has the hammer.';
+  $('lvEntry').textContent = liveEntry || '0';
+  $('lvEntry').setAttribute('aria-label', 'Frame score ' + (liveEntry || 0));
+  const total = Number(liveEntry || 0);
+  $('lvHangRow').hidden = !edit;
+  $('lvHangN').textContent = String(liveHang);
+  $('lvHangDown').disabled = liveHang === 0;
+  /* A hanger IS four of the points typed, so the stepper can only reach what
+     the frame will hold. Typing 3 and claiming a hanger is not a style of
+     scoring, it is two figures that disagree. */
+  $('lvHangUp').disabled = liveHang >= 4 || (liveHang + 1) * 4 > total;
+  $('lvScoredRow').hidden = !edit;
+  $('lvScoredA').textContent = nameOf(m.a);
+  $('lvScoredB').textContent = nameOf(m.b);
+  $('lvSbPad').hidden = !edit;
+  $('lvUndo').hidden = !canEdit() || !(leg.frames || []).length;
+  $('lvUndo').disabled = !(leg.frames || []).length;
 }
 function liveCommit(total, dartsUsed) {
   const c = curLive();
@@ -7219,20 +7771,68 @@ $('lvPad').addEventListener('click', (e) => {
   }
 });
 [1, 2, 3].forEach((k) => $('lvIn' + k).addEventListener('click', () => { liveCommit(Number(liveEntry), k); }));
+/* Records one frame for `side`, or the frame nobody scored when side is null.
+   The x01 twin of this is liveCommit(); they save, re-render and toast the
+   same way, because a scorer moving between the two games should find the
+   sheet behaves the same even though the game does not. */
+function sbCommit(side) {
+  const c = curLive();
+  if (!c || !canEdit()) return;
+  const { m, leg } = c;
+  const next = frameScore(leg, side, Number(liveEntry || 0), liveHang);
+  if (next.error) { toast(next.error); return; }
+  leg.frames = next.frames;
+  liveEntry = ''; liveHang = 0;
+  const after = frameState(leg);
+  if (after.winner) { leg.w = after.winner; syncMatchStatus(m); }
+  touch(m); save(); render(); renderLive(); renderMatchDialog();
+  if (after.winner) {
+    const lost = after.winner === 'a' ? 'b' : 'a';
+    toast(nameOf(m[after.winner]) + ' takes the game ' + after.pts[after.winner] + '–' + after.pts[lost]);
+  }
+}
+$('lvSbPad').addEventListener('click', (e) => {
+  const key = e.target.closest('[data-key]');
+  if (!key || !curLive()) return;
+  const k = key.dataset.key;
+  if (k === 'back') liveEntry = liveEntry.slice(0, -1);
+  /* A quick key REPLACES what was typed rather than committing: the number is
+     only half a frame, and the other half is which side it was for. */
+  else if (/^q\d+$/.test(k)) liveEntry = k.slice(1);
+  else if (/^\d$/.test(k)) {
+    if (liveEntry.length >= 2) return;
+    liveEntry = (liveEntry + k).replace(/^0+(?=\d)/, '');
+  } else return;
+  /* Lowering the total can leave more hangers claimed than it can hold, so
+     the count comes down with it rather than waiting to be refused. */
+  const total = Number(liveEntry || 0);
+  if (liveHang * 4 > total) liveHang = Math.floor(total / 4);
+  renderLive();
+});
+$('lvScoredA').addEventListener('click', () => sbCommit('a'));
+$('lvScoredB').addEventListener('click', () => sbCommit('b'));
+/* Nobody scored: the total and the hangers are not asked and not read. */
+$('lvScoredNone').addEventListener('click', () => sbCommit(null));
+$('lvHangDown').addEventListener('click', () => { if (liveHang > 0) { liveHang--; renderLive(); } });
+$('lvHangUp').addEventListener('click', () => { if (liveHang < 4) { liveHang++; renderLive(); } });
 $('lvUndo').addEventListener('click', () => {
   const c = curLive();
   if (!c || !canEdit()) return;
   const { m, leg } = c;
-  const undone = x01Undo(leg);
-  leg.visits = undone.visits;
-  if (leg.w !== null && !x01State(leg).winner) { leg.w = null; syncMatchStatus(m); }
-  liveEntry = '';
+  if (G().liveScorer === 'frames') {
+    leg.frames = frameUndo(leg).frames;
+    if (leg.w !== null && !frameState(leg).winner) { leg.w = null; syncMatchStatus(m); }
+  } else {
+    leg.visits = x01Undo(leg).visits;
+    if (leg.w !== null && !x01State(leg).winner) { leg.w = null; syncMatchStatus(m); }
+  }
+  liveEntry = ''; liveHang = 0;
   touch(m); save(); render(); renderLive(); renderMatchDialog();
 });
 $('lvFirstA').addEventListener('click', () => { const c = curLive(); if (c && canEdit()) { c.leg.first = 'a'; touch(c.m); save(); renderLive(); } });
 $('lvFirstB').addEventListener('click', () => { const c = curLive(); if (c && canEdit()) { c.leg.first = 'b'; touch(c.m); save(); renderLive(); } });
 $('liveDone').addEventListener('click', () => $('liveDialog').close());
-$('liveDialog').addEventListener('close', () => { if (!$('liveDialog').open) { liveCtx = null; liveEntry = ''; renderMatchDialog(); } });
+$('liveDialog').addEventListener('close', () => { if (!$('liveDialog').open) { liveCtx = null; liveEntry = ''; liveHang = 0; renderMatchDialog(); } });
 /* The scorer's leg rows open the sheet. */
 $('legsWrap').addEventListener('click', (e) => {
   const live = e.target.closest('[data-live]');
@@ -7400,7 +8000,8 @@ window.__lnTestHooks = {
   __viewOnly: function (on) { viewOnly = !!on; window.lnViewOnly = viewOnly; render(); },
   SCHEMA: SCHEMA, ID_RE: ID_RE, DEVICE_KEY: DEVICE_KEY, LEAGUE_KEY: LEAGUE_KEY, THEME_KEY: THEME_KEY, TAB_KEY: TAB_KEY,
   TABS: TABS, SHARE_FORMAT: SHARE_FORMAT, SHARE_PAYLOAD_V: SHARE_PAYLOAD_V, SHARED_ID: SHARED_ID,
-  DEMO_ID: DEMO_ID, DEMO_TEAMS_ID: DEMO_TEAMS_ID, LEAGUE_ID_RE: LEAGUE_ID_RE, ADMIN_KEY_RE: ADMIN_KEY_RE,
+  DEMO_ID: DEMO_ID, DEMO_TEAMS_ID: DEMO_TEAMS_ID, DEMO_BOARD_ID: DEMO_BOARD_ID,
+  LEAGUE_ID_RE: LEAGUE_ID_RE, ADMIN_KEY_RE: ADMIN_KEY_RE,
   NAME_MAX: NAME_MAX, GAMES: GAMES, GAME_CONTRACT: GAME_CONTRACT, CHECKOUTS: CHECKOUTS, IMPOSSIBLE_VISITS: IMPOSSIBLE_VISITS,
   TIEBREAK_KEYS: TIEBREAK_KEYS, TIEBREAK_PRESETS: TIEBREAK_PRESETS, TOMBSTONE_KEEP_MS: TOMBSTONE_KEEP_MS,
   blankLeague: blankLeague, normalizeLeague: normalizeLeague, defaultSettings: defaultSettings, blankDevice: blankDevice,
@@ -7418,7 +8019,11 @@ window.__lnTestHooks = {
   canFinish: canFinish, possibleVisit: possibleVisit, x01State: x01State, x01Visit: x01Visit, x01Undo: x01Undo,
   x01LegStats: x01LegStats, legSideStats: legSideStats, checkoutRoute: checkoutRoute, dartValue: dartValue,
   dartsPlayerStats: dartsPlayerStats, legsIn: legsIn,
-  buildDemoSingles: buildDemoSingles, buildDemoTeams: buildDemoTeams, isDemoId: isDemoId,
+  buildDemoSingles: buildDemoSingles, buildDemoTeams: buildDemoTeams, buildDemoShuffle: buildDemoShuffle,
+  isDemoId: isDemoId,
+  frameState: frameState, frameScore: frameScore, frameUndo: frameUndo, frameLegStats: frameLegStats,
+  sbSideStats: sbSideStats, legIsLive: legIsLive, FRAME_MAX: FRAME_MAX,
+  shuffleboardPlayerStats: shuffleboardPlayerStats,
   compactSeason: compactSeason, TRIM_AT: TRIM_AT,
   buildSharePayload: buildSharePayload, encodeShare: encodeShare, decodeShare: decodeShare,
   csvMatches: csvMatches, csvCell: csvCell, toCsv: toCsv, toTsv: toTsv, FORMULA_LEAD: FORMULA_LEAD, PLAIN_NUMBER: PLAIN_NUMBER,
