@@ -51,7 +51,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 206;
+const EXPECTED = 223;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -267,7 +267,10 @@ async function runAsync() {
     H.__plant(H.buildDemoTeams());
     walk('teams:');
     doc.getElementById('tab-matches').click();
-    doc.querySelector('#matchesWrap .mrow').click(); doc.getElementById('matchDialog').close();
+    doc.querySelector('#matchesWrap .mrow').click();
+    /* The card only exists in a TEAM league, and only inside this window. */
+    drawn['teams:lineup'] = doc.getElementById('mtLineup').textContent.trim().length;
+    doc.getElementById('matchDialog').close();
     doc.getElementById('tab-standings').click();
     doc.querySelector('#stModeWrap [data-mode="players"]').click();
     drawn['teams:individual'] = doc.getElementById('standingsWrap').textContent.trim().length;
@@ -1063,6 +1066,10 @@ function define() {
     const s = asyncResults.smoke;
     H.TABS.forEach((tab) => ok(s.drawn['teams:' + tab] > 0, 'the doubles demo left ' + tab + ' empty'));
   });
+  t('the card drew inside a team league’s match window', () => {
+    const s = asyncResults.smoke;
+    ok(s.drawn['teams:lineup'] > 0, 'the match window showed no lineup at all', s.drawn['teams:lineup']);
+  });
 
   group('the scorer saves as it goes');
   t('adding a leg and tapping a winner is written at once, and the match ends itself', () => {
@@ -1474,8 +1481,8 @@ function define() {
   });
 
   group('the live scorer');
-  t('a new leg remembers who throws first and the double-out rule, and SCHEMA is 3', () => {
-    eq(H.SCHEMA, 3);
+  t('a new leg remembers who throws first and the double-out rule, and SCHEMA is 4', () => {
+    eq(H.SCHEMA, 4);
     const out = H.normalizeLeague({ league: { id: 'L' }, matches: [{ id: 'm', a: 'x', b: 'y', legs: [{ first: 'b', dOut: false }, {}] }] });
     eq(out.matches[0].legs.map((l) => [l.first, l.dOut]), [['b', false], ['a', true]]);
   });
@@ -2182,6 +2189,271 @@ function define() {
     const desc = (APP_SRC.match(/<meta name="description" content="([^"]*)"/) || [])[1] || '';
     ok(/darts league/.test(desc) && !/shell every app/.test(desc),
        'the description is this app’s, not the starter’s', JSON.stringify(desc));
+  });
+
+  /* ── Subs, the card, and what a member may ask for ──────────────────────
+     The whole of it turns on two distinctions the app has been bitten by
+     before: a lineup NEVER RECORDED is not an empty one, and NOTHING SAID
+     about a night is not "cannot make it". Both are pinned here. */
+  group('lineups, availability and self-service');
+  const teamsFixture = () => ({
+    league: { id: 'LN-TESTTEST', name: 'T', game: 'darts', settings: { format: 'teams', teamSize: 2 } },
+    teams: [{ id: 'ta', name: 'A' }, { id: 'tb', name: 'B' }],
+    players: [{ id: 'p1', name: 'One', teamId: 'ta' }, { id: 'p2', name: 'Two', teamId: 'ta' },
+              { id: 'p3', name: 'Three', teamId: 'tb' }, { id: 'p4', name: 'Four', teamId: 'tb' },
+              { id: 'p5', name: 'Five', teamId: null }, { id: 'p6', name: 'Six', teamId: null },
+              { id: 'p7', name: 'Seven', teamId: null }, { id: 'p8', name: 'Eight', teamId: null },
+              { id: 'p9', name: 'Nine', teamId: null }, { id: 'pa', name: 'Ten', teamId: null }],
+    matches: [{ id: 'm1', a: 'ta', b: 'tb', date: '2026-09-10', legs: [] }],
+  });
+
+  t('a lineup that was never recorded is not the same as an empty one', () => {
+    const st = H.normalizeLeague(teamsFixture());
+    ok(!('lineup' in st.matches[0]), 'an absent lineup must stay absent, not become {a:[],b:[]}');
+    eq(H.lineupFor(st, st.matches[0], 'a'), { ids: ['p1', 'p2'], recorded: false });
+    const raw = teamsFixture();
+    raw.matches[0].lineup = { a: [], b: ['p3'] };
+    const st2 = H.normalizeLeague(raw);
+    eq(st2.matches[0].lineup, { a: [], b: ['p3'] }, 'a recorded empty side survives as itself');
+    eq(H.lineupFor(st2, st2.matches[0], 'a'), { ids: [], recorded: true },
+      'recorded-and-nobody must NOT fall back to the team — testing .length instead of Array.isArray is the bug');
+  });
+
+  t('a card is capped and deduped, and an id it does not recognise survives the boundary', () => {
+    const raw = teamsFixture();
+    raw.matches[0].lineup = { a: ['p1', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'pa', 'p1'], b: ['nobody'] };
+    const st = H.normalizeLeague(raw);
+    eq(st.matches[0].lineup.a.length, H.LINEUP_MAX, 'capped at the constant 8, and not at the league’s teamSize of 2');
+    eq(st.matches[0].lineup.a.slice(0, 5), ['p1', 'p2', 'p3', 'p4', 'p5'], 'deduped, first-seen order');
+    /* KEPT on purpose: mergeLeague normalizes each side alone, so a copy that
+       has not yet seen a new player would strip them here and lose the name
+       whenever its match record carried the higher u. Dropped when drawn. */
+    eq(st.matches[0].lineup.b, ['nobody'], 'an unknown id must survive normalize');
+    ok(!st.players.some((p) => p.id === 'nobody'), 'and must still name nobody');
+  });
+
+  t('a singles league carries no card at all', () => {
+    const raw = teamsFixture();
+    raw.league.settings.format = 'singles';
+    raw.matches[0] = { id: 'm1', a: 'p1', b: 'p3', legs: [], lineup: { a: ['p1'], b: ['p3'] } };
+    const st = H.normalizeLeague(raw);
+    ok(!('lineup' in st.matches[0]), 'a side in singles IS the player; a lineup there is corrupt');
+    eq(H.lineupFor(st, st.matches[0], 'a'), { ids: ['p1'], recorded: false });
+  });
+
+  t('a card moves no figure — not a standing, not a player average', () => {
+    const base = H.buildDemoTeams();
+    const sides = H.sidesOf(base);
+    const table = (st) => H.standings(st.matches, sides, st.league.settings);
+    const figures = (st) => st.players.map((p) => H.dartsPlayerStats(H.legsIn(st, null), p.id));
+    const before = { table: table(base), players: figures(base) };
+    const withCards = H.normalizeLeague(JSON.parse(JSON.stringify(Object.assign({}, base, {
+      matches: base.matches.map((m) => Object.assign({}, m, {
+        lineup: { a: base.players.filter((p) => p.teamId === m.a).map((p) => p.id),
+                  b: base.players.filter((p) => p.teamId === m.b).map((p) => p.id) },
+      })),
+    }))));
+    ok(withCards.matches.every((m) => m.lineup), 'the fixture really did get lineups');
+    eq(table(withCards), before.table, 'the table must not move');
+    eq(figures(withCards), before.players,
+      'no player figure may move — every one of them reads leg.by, never the card');
+  });
+
+  t('a sub gets the credit, because every figure reads who THREW', () => {
+    const raw = teamsFixture();
+    raw.matches[0].lineup = { a: ['p1', 'p3'], b: ['p3', 'p4'] };
+    /* p3 is on team B and threw for team A: that is the whole of a sub. */
+    raw.matches[0].status = 'played';
+    raw.matches[0].legs = [{ w: 'a', by: { a: ['p3'], b: ['p4'] }, start: { a: 501, b: 501 },
+                             a: { darts: 15 }, b: { darts: 18 } }];
+    const st = H.normalizeLeague(raw);
+    const legs = H.legsIn(st, null);
+    ok(legs.length === 1, 'the leg counts at all', legs.length);
+    eq(H.dartsPlayerStats(legs, 'p3').legs, 1, 'the sub played it');
+    eq(H.dartsPlayerStats(legs, 'p3').won, 1, 'and won it');
+    eq(H.dartsPlayerStats(legs, 'p1').legs, 0, 'the player they stood in for threw nothing');
+    eq(H.matchScore(st.matches[0]), { a: 1, b: 0 }, 'and team A took the leg');
+  });
+
+  t('a new leg is pre-filled only when one name is down', () => {
+    const raw = teamsFixture();
+    raw.matches[0].lineup = { a: ['p1'], b: ['p3', 'p4'] };
+    const st = H.normalizeLeague(raw);
+    H.__plant(st);
+    try {
+      const m = H.__state().matches[0];
+      const leg = H.newLeg(m);
+      eq(leg.by.a, ['p1'], 'one name down is who threw');
+      /* A whole squad pre-filled makes by[side].length !== 1, and
+         dartsPlayerStats then drops every average, 180 and checkout. */
+      eq(leg.by.b, [], 'two names down pre-fills NOTHING');
+      const m2 = H.__state().matches[0];
+      delete m2.lineup;
+      eq(H.newLeg(m2).by, { a: [], b: [] }, 'and no card down pre-fills nothing either');
+    } finally { H.__plant(FIXTURE); }
+  });
+
+  t('availability is dates, three answers, and a capped map', () => {
+    const raw = teamsFixture();
+    const big = {};
+    for (let i = 1; i <= 60; i++) big['2026-' + String(Math.ceil(i / 28)).padStart(2, '0') + '-' + String((i % 28) + 1).padStart(2, '0')] = 'y';
+    raw.players[0].avail = big;
+    /* The SHAPE of a date, which is the one rule the whole app uses for one —
+       m.date and a season's start are pinned the same way. A 13th month is
+       not a date anybody can be free on, and it is harmless where it lands. */
+    raw.players[1].avail = { '2026-09-10': 'maybe', 'nope': 'y', '9': 'n', '2026-09-11': 's' };
+    raw.players[2].avail = { 'bad': 'y' };
+    const st = H.normalizeLeague(raw);
+    eq(Object.keys(st.players[0].avail).length, H.AVAIL_MAX, 'capped at AVAIL_MAX');
+    eq(st.players[1].avail, { '2026-09-11': 's' }, 'a key that is not date-shaped and an answer that is not one of three both go');
+    ok(!('avail' in st.players[2]), 'an empty map writes NO key — Firestore refuses a document over one undefined');
+    ok(!('avail' in st.players[3]), 'and a player who said nothing carries none');
+  });
+
+  t('nothing recorded is not the same as “cannot make it”', () => {
+    const st = H.normalizeLeague(teamsFixture());
+    eq(H.availFor(st, [], 'p1', '2026-09-10'), { answer: null, source: null },
+      'silence must be null, never n — an app that reads it as "out" is inventing a claim');
+    const noted = H.normalizeLeague(Object.assign(teamsFixture(), {
+      players: teamsFixture().players.map((p) => p.id === 'p1' ? Object.assign({}, p, { avail: { '2026-09-10': 'n' } }) : p),
+    }));
+    eq(H.availFor(noted, [], 'p1', '2026-09-10'), { answer: 'n', source: 'admin' }, 'an admin’s note stands on its own');
+    const members = [{ uid: 'u1', name: 'One', playerId: 'p1', avail: { '2026-09-10': 's' } }];
+    eq(H.availFor(noted, members, 'p1', '2026-09-10'), { answer: 's', source: 'player' },
+      'the player’s OWN answer wins over the note — the sentence the card says');
+    eq(H.availFor(noted, members, 'p1', null), { answer: null, source: null }, 'and a match with no date has no answer');
+  });
+
+  t('a request is judged against the league as it stands now', () => {
+    const st = H.normalizeLeague(teamsFixture());
+    const mem = [{ uid: 'u1', name: 'One', playerId: 'p1' }];
+    eq(H.requestVerdict(st, mem, { uid: 'u1', playerId: 'p1', name: 'Won' }), 'apply');
+    eq(H.requestVerdict(st, mem, { uid: 'u1', playerId: 'p1', name: 'One' }), 'already', 'an admin got there first');
+    eq(H.requestVerdict(st, mem, { uid: 'u1', playerId: 'gone', name: 'X' }), 'not-theirs',
+      'THE security check: a request may only name the player the server says this account is');
+    eq(H.requestVerdict(st, [{ uid: 'u1', name: 'One', playerId: 'zz' }], { uid: 'u1', playerId: 'zz', name: 'X' }), 'gone');
+    eq(H.requestVerdict(st, mem, { uid: 'u1', playerId: 'p1', teamId: 'tb', teamName: 'X' }), 'not-theirs',
+      'and only that player’s OWN team');
+    eq(H.requestVerdict(st, mem, { uid: 'u1', playerId: 'p1', teamId: 'ta', teamName: 'Aces' }), 'apply');
+  });
+
+  t('a request from somebody who has left the league is an orphan', () => {
+    const st = H.normalizeLeague(teamsFixture());
+    eq(H.requestVerdict(st, [], { uid: 'u1', playerId: 'p1', name: 'X' }), 'orphan');
+    eq(H.requestVerdict(st, null, null), 'orphan', 'and no request at all is not a crash');
+  });
+
+  t('the rules let a member say only what is theirs', () => {
+    const R = RULES_SRC;
+    ok(/match \/requests\/\{uid\}/.test(R), 'the requests subcollection has a rule at all');
+    ok(/allow list:\s*if signedIn\(\) && \(memberIsAdmin\(\) \|\| isOwner\(\)\)/.test(R),
+      'only somebody who could act on a request may list them');
+    ok(/allow create, update: if signedIn\(\) && me\(\) == uid[\s\S]{0,120}exists\(memberPath\(me\(\)\)\)/.test(R),
+      'only the member themselves, and only once they have actually joined');
+    ok(/hasOnly\(\['at', 'playerId', 'name', 'teamId', 'teamName'\]\)/.test(R), 'the key whitelist is exactly five');
+    ok(/d\.name\.size\(\) <= 40/.test(R) && /d\.teamName\.size\(\) <= 40/.test(R), 'both names capped at 40');
+    ok(/d\.playerId\.size\(\) <= 64/.test(R) && /d\.teamId\.size\(\) <= 64/.test(R), 'both ids capped at 64');
+    ok(/hasOnly\(\['role', 'name', 'playerId', 'joinedAt', 'avail'\]\)/.test(R), 'a member document carries avail and nothing new besides');
+    ok(/d\.avail\.size\(\) <= 40/.test(R) && /d\.avail\.values\(\)\.hasOnly\(\['y', 'n', 's'\]\)/.test(R),
+      'availability is capped and can only be one of three answers');
+    /* Every get() in this file is guarded — an unguarded one on a missing
+       document is an evaluation ERROR, not false. */
+    const gets = R.match(/get\(/g) || [];
+    const exists = R.match(/exists\(/g) || [];
+    ok(gets.length >= 4 && exists.length >= gets.length, 'every get() still has an exists() to guard it', exists.length + ' vs ' + gets.length);
+  });
+
+  t('a league that goes takes its requests with it, and so does a member who leaves', () => {
+    const src = APP_SRC;
+    ok(/const requestRef = \(id, uid\) => F\.doc\(db, 'leagues', id, 'requests', uid\)/.test(src), 'there is a ref to delete');
+    ok(/getDocs\(F\.collection\(db, 'leagues', id, 'requests'\)\)[\s\S]{0,400}reqs\.forEach\(\(d\) => batch\.delete\(d\.ref\)\)/.test(src),
+      'deleteLeague takes the requests in the SAME batch — a league deleted first leaves them undeletable for good');
+    ok(/async function leaveLeague[\s\S]{0,400}deleteDoc\(requestRef\(id, user\.uid\)\)/.test(src), 'leaving takes yours');
+    ok(/async function removeMember[\s\S]{0,400}deleteDoc\(requestRef\(id, uid\)\)/.test(src), 'and being removed takes yours');
+  });
+
+  t('nothing a member writes reaches the league without an admin’s tap', () => {
+    const src = APP_SRC;
+    ok(/function applyRequest\(uid\)/.test(src), 'there is one place a request becomes an edit');
+    ok(/function applyRequest[\s\S]{0,700}requestVerdict\(state, members, r\) !== 'apply'[\s\S]{0,700}save\(\);/.test(src),
+      'and it re-reads the verdict and goes through the ordinary save()');
+    const push = src.slice(src.indexOf('async function pushNow'), src.indexOf('async function pushNow') + 1600);
+    ok(push.length > 400, 'pushNow was found');
+    ok(!/request/i.test(push), 'nothing about a request rides the league push');
+    /* The rebuild boundary is the backstop: a field nobody allowed does not
+       survive a save, whoever wrote it. */
+    const st = H.normalizeLeague({ league: { id: 'L' }, players: [{ id: 'p1', name: 'One', requestedName: 'Hacked' }] });
+    ok(!JSON.stringify(st).includes('requestedName'), 'an unlisted field does not survive normalizeLeague');
+  });
+
+  t('the queue and its badge are an admin’s, and a viewer sees neither', () => {
+    const D = W.document;
+    const st = H.normalizeLeague(teamsFixture());
+    H.__plant(st);
+    W.lnCloudUser({ uid: 'u1', name: 'One', email: 'o@x' });
+    W.lnMembers(st.league.id, [{ uid: 'u1', name: 'One', role: 'viewer', playerId: 'p1', avail: null }]);
+    W.lnRequests(st.league.id, [{ uid: 'u1', at: 1, playerId: 'p1', name: 'Won', teamId: null, teamName: null }]);
+    try {
+      H.__setRole('viewer');
+      ok(D.getElementById('requestsCard').hidden, 'a viewer is not shown the queue');
+      ok(!D.getElementById('tab-league').querySelector('.pill'), 'nor a count on the tab');
+      H.__setRole('admin');
+      ok(!D.getElementById('requestsCard').hidden, 'an admin is');
+      ok(D.querySelector('#requestsWrap [data-apply="u1"]'), 'and is offered Apply');
+    } finally {
+      W.lnRequests(st.league.id, []); W.lnMembers(st.league.id, []); W.lnCloudUser(null);
+      H.__setRole('owner'); H.__plant(FIXTURE);
+    }
+  });
+
+  t('the badge says the count in its accessible name, not only in a pill', () => {
+    const D = W.document;
+    const st = H.normalizeLeague(teamsFixture());
+    H.__plant(st);
+    W.lnCloudUser({ uid: 'u1', name: 'One', email: 'o@x' });
+    W.lnMembers(st.league.id, [{ uid: 'u1', name: 'One', role: 'viewer', playerId: 'p1', avail: null },
+                               { uid: 'u2', name: 'Two', role: 'viewer', playerId: 'p2', avail: null }]);
+    W.lnRequests(st.league.id, [{ uid: 'u1', at: 1, playerId: 'p1', name: 'Won', teamId: null, teamName: null },
+                                { uid: 'u2', at: 2, playerId: 'p2', name: 'Too', teamId: null, teamName: null }]);
+    try {
+      const tab = D.getElementById('tab-league');
+      ok(/2/.test(tab.getAttribute('aria-label') || ''), 'the count is in the name a screen reader reads', tab.getAttribute('aria-label'));
+      const pill = tab.querySelector('.pill');
+      ok(pill && pill.getAttribute('aria-hidden') === 'true', 'and the pill itself is decoration');
+      eq(pill.textContent, '2');
+      W.lnRequests(st.league.id, []);
+      ok(!tab.getAttribute('aria-label'), 'and an empty queue leaves no stale count behind');
+    } finally {
+      W.lnMembers(st.league.id, []); W.lnCloudUser(null); H.__plant(FIXTURE);
+    }
+  });
+
+  t('a viewer sees the card, cannot change it, and can still say if they are in', () => {
+    const D = W.document;
+    const st = H.normalizeLeague(teamsFixture());
+    H.__plant(st);
+    W.lnCloudUser({ uid: 'u1', name: 'One', email: 'o@x' });
+    W.lnMembers(st.league.id, [{ uid: 'u1', name: 'One', role: 'viewer', playerId: 'p1', avail: null }]);
+    W.lnMe({ role: 'viewer', name: 'One', playerId: 'p1' });
+    try {
+      H.__setRole('viewer');
+      D.getElementById('tab-matches').click();
+      D.querySelector('#matchesWrap .mrow').click();
+      const lu = D.getElementById('mtLineup'), av = D.getElementById('mtAvail');
+      ok(lu.textContent.indexOf('One') !== -1, 'the card is drawn for them', lu.textContent.slice(0, 60));
+      eq(lu.querySelectorAll('input, select').length, 0, 'and offers them no control over it');
+      const mine = [...av.querySelectorAll('[data-my-avail]')];
+      eq(mine.length, 3, 'their own three answers are there');
+      /* The ONE deliberate exception to the read-only stylesheet: what a
+         player says about their own night is theirs to say, and it never
+         enters the league. */
+      ok(mine.every((b) => !b.disabled && b.offsetParent !== null), 'and are live for a viewer');
+      eq(av.querySelectorAll('[data-note-avail]').length, 0, 'while an admin’s notes are not offered to them');
+      D.getElementById('matchDialog').close();
+    } finally {
+      W.lnMe(null); W.lnMembers(st.league.id, []); W.lnCloudUser(null);
+      H.__setRole('owner'); H.__plant(FIXTURE);
+    }
   });
 
   group('installable, and it works offline');
