@@ -1286,6 +1286,13 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
   .side-btn.on::before { content: '✓ '; }
   .who { margin-top: var(--sp-4); }
   .who .checkline { margin-bottom: 2px; }
+  .lineup, .avail { margin-top: var(--sp-6); }
+  .lineup .lside { margin-top: var(--sp-4); }
+  .lineup select { margin-top: var(--sp-3); }
+  .lineup .names { color: var(--text-secondary); font-size: var(--fs-xs); }
+  .availrow { display: flex; align-items: center; gap: var(--sp-4); flex-wrap: wrap; margin-top: var(--sp-3); }
+  .availrow .aname { flex: 1 1 140px; min-width: 0; }
+  .availrow .row { flex: 1 1 240px; margin: 0; }
   .legstats { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: var(--sp-3); margin-top: var(--sp-4); }
   .legstats .label { grid-column: 1 / -1; }
   .legstats label { display: flex; flex-direction: column; font-size: var(--fs-xs); color: var(--text-secondary); gap: 2px; }
@@ -1840,6 +1847,10 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
   <h2 id="matchTitle">Match</h2>
   <div class="mtscore" id="mtScore"></div>
   <p class="hint" id="mtFormat"></p>
+  <!-- Who is actually throwing tonight, and who can make it. A name in a
+       lineup who is not on that team IS the sub — there is no second list. -->
+  <div id="mtLineup" hidden></div>
+  <div id="mtAvail"></div>
   <div id="legsWrap"></div>
   <div class="row" style="margin-top:var(--sp-5)">
     <button type="button" class="primary" id="addLegBtn">＋ Add leg</button>
@@ -1869,6 +1880,9 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
 <dialog id="liveDialog" class="sheet" aria-labelledby="liveTitle">
   <h2 id="liveTitle">Live</h2>
   <div class="lvsides" id="lvSides"></div>
+  <!-- Who is down as throwing this leg. A leg scored live with nobody down
+       keeps its darts and loses every figure that needs one thrower. -->
+  <p class="hint" id="lvWho"></p>
   <div class="row no-print" id="lvFirstRow" hidden>
     <span class="hint">Who throws first?</span>
     <button type="button" class="btn-small" id="lvFirstA" aria-pressed="true">A throws first</button>
@@ -2233,11 +2247,25 @@ const GAMES = {
    `schema`, and every boundary refuses a copy carrying a higher one — see the
    halt below. BUMP IT AND normalizeLeague TOGETHER when a stored field is
    added. */
-const SCHEMA = 3;   /* 2: a leg carries `first` and `dOut` for the live scorer (2026-09-07)
+const SCHEMA = 4;   /* 2: a leg carries `first` and `dOut` for the live scorer (2026-09-07)
                        3: a trimmed leg carries `scored` per side, so Trim Closed
-                          Seasons keeps its promise that no figure moves (2026-09-07) */
+                          Seasons keeps its promise that no figure moves (2026-09-07)
+                       4: a match carries `lineup` and a player carries `avail`, so a
+                          sub can be put on the card and a night can be missed (2026-09-08) */
 const TIEBREAK_KEYS = ['pts', 'legDiff', 'legsFor', 'wins', 'h2h', 'name'];
 const NAME_MAX = 40;
+/* The most names a lineup may hold. A CONSTANT, deliberately, and not
+   settings.teamSize: teamSize can be lowered from 8 to 2 long after a match
+   was thrown, and a boundary that silently drops two names off a night
+   already played because a setting moved is the int()-clamps-up bug wearing a
+   new coat. 8 is the ceiling teamSize itself is clamped to. The LIVE cap —
+   what the picker refuses to go past — is S().teamSize, as it is for a team's
+   own roster. */
+const LINEUP_MAX = 8;
+/* What a player can say about a night, and the most nights either side will
+   keep. Ordered so a value is one of three words wherever it is rendered. */
+const AVAIL_ANSWERS = ['y', 'n', 's'];
+const AVAIL_MAX = 40;
 
 function defaultSettings(game) {
   const g = GAMES[game] || GAMES.darts;
@@ -2291,6 +2319,20 @@ function normalizeLeague(raw) {
   };
   const stamp = (v) => (Number.isFinite(Number(v)) && Number(v) > 0) ? Number(v) : 0;
   const isoDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : null;
+  /* Which nights somebody can play, keyed by date. Anything that is not a
+     date or not one of the three answers is dropped, then the NEWEST 40 are
+     kept — by descending key, which is a plain string sort on an ISO date and
+     so lands on the same 40 on both sides of a merge. Returns null, never an
+     empty object: a key is written only when it has a value. */
+  const avail = (v) => {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+    const keys = Object.keys(v).filter((k) => isoDate(k) && AVAIL_ANSWERS.indexOf(v[k]) !== -1)
+      .sort().reverse().slice(0, AVAIL_MAX);
+    if (!keys.length) return null;
+    const o = {};
+    keys.sort().forEach((k) => { o[k] = v[k]; });
+    return o;
+  };
   const list = (v) => Array.isArray(v) ? v.filter((x) => x && typeof x === 'object') : [];
   /* A leg's starting score, or null for a game that has none. Written out
      rather than through int(): int() CLAMPS UP, so a null (Number(null) is 0,
@@ -2335,13 +2377,19 @@ function normalizeLeague(raw) {
   const teamIds = new Set(out.teams.map((t) => t.id));
   out.players = list(raw.players).map((p) => {
     const teamId = ref(p.teamId);
-    return {
+    const av = avail(p.avail);
+    const o = {
       id: fixId(p.id), name: str(p.name, NAME_MAX),
       /* A team that no longer exists is no team. */
       teamId: teamId && teamIds.has(teamId) ? teamId : null,
       hcp: (p.hcp == null || p.hcp === '') ? null : int(p.hcp, G.handicap.min, G.handicap.max, null),
       active: p.active !== false, u: stamp(p.u),
     };
+    /* An ADMIN'S note about which nights this player can make, for the many
+       players who will never sign in. What the player says about themselves
+       lives on their own member document and wins over this — see availFor. */
+    if (av) o.avail = av;
+    return o;
   });
   out.seasons = list(raw.seasons).map((s) => ({
     id: fixId(s.id), name: str(s.name, NAME_MAX),
@@ -2391,6 +2439,9 @@ function normalizeLeague(raw) {
       return o;
     });
   };
+  /* Player ids in a fixed order, deduped, blanks dropped. Shared by a leg's
+     `by` and a match's `lineup` — they are the same list of the same people. */
+  const ids = (v) => (Array.isArray(v) ? v : []).map(ref).filter((x, i, a) => x && a.indexOf(x) === i);
   out.matches = list(raw.matches).map((m) => {
     const seasonId = ref(m.seasonId), bracketId = ref(m.bracketId);
     const sc = (m.score && typeof m.score === 'object') ? m.score : {};
@@ -2408,7 +2459,6 @@ function normalizeLeague(raw) {
       legs: list(m.legs).map((lg) => {
         const by = (lg.by && typeof lg.by === 'object') ? lg.by : {};
         const start = (lg.start && typeof lg.start === 'object') ? lg.start : {};
-        const ids = (v) => (Array.isArray(v) ? v : []).map(ref).filter((x, i, a) => x && a.indexOf(x) === i);
         const leg = {
           w: lg.w === 'a' || lg.w === 'b' ? lg.w : null,
           by: { a: ids(by.a), b: ids(by.b) },
@@ -2434,6 +2484,22 @@ function normalizeLeague(raw) {
       }),
       u: stamp(m.u),
     };
+    /* WHO IS ACTUALLY THROWING tonight. Written ONLY when a lineup was
+       recorded: an absent key means "nobody has said", an empty array means
+       "recorded, and nobody is down for that side" — two different claims,
+       and the reason every reader tests Array.isArray and never `.length`.
+
+       Ids naming a player this copy has never seen are KEPT. mergeLeague
+       normalizes each side alone before merging, so a copy that has not yet
+       received a new player would strip them here, and if its match record
+       carried the higher `u` the name would be gone for good. Unknown ids are
+       dropped where they are drawn, exactly as a leg's `by` already is.
+
+       A side in a singles league IS the player, so a lineup there could only
+       have come from a corrupt or hostile copy — it goes. */
+    if (m.lineup && typeof m.lineup === 'object' && out.league.settings.format === 'teams') {
+      o.lineup = { a: ids(m.lineup.a).slice(0, LINEUP_MAX), b: ids(m.lineup.b).slice(0, LINEUP_MAX) };
+    }
     return o;
   }).filter((m) => m.a && m.b && m.a !== m.b);
   out.tombstones = list(raw.tombstones).map((t) => ({
@@ -2566,6 +2632,75 @@ function sideName(st, sideId) {
   }
   const p = st.players.find((x) => x.id === sideId);
   return p ? p.name : '—';
+}
+
+/* ── Who is throwing, and who can make it ──────────────────────────────────
+   Three pure readers, and between them the whole of subs and self-service.
+   Nothing below them moves a figure: a sub is credited because they are named
+   in a LEG's `by`, and all a lineup does is put them there. */
+
+/* The names down for one side of a match.
+   `recorded` is the whole point: an absent `lineup` key means nobody has said
+   who is playing, and the team's own active players are the honest guess; a
+   recorded but EMPTY side means somebody said, and said nobody. Testing
+   `m.lineup && m.lineup[side].length` collapses those two, which is the same
+   mistake as reading a stated zero as nothing recorded. */
+function lineupFor(st, m, side) {
+  if (m.lineup && Array.isArray(m.lineup[side])) return { ids: m.lineup[side].slice(), recorded: true };
+  if (st.league.settings.format !== 'teams') return { ids: [m[side]], recorded: false };
+  return { ids: st.players.filter((p) => p.teamId === m[side] && p.active).map((p) => p.id), recorded: false };
+}
+
+/* Whether somebody said they were on a roster player. `members` is the cloud
+   member list, which carries an account's own answers; it may be empty. */
+function memberForPlayer(members, playerId) {
+  return (members || []).find((mb) => mb.playerId && mb.playerId === playerId) || null;
+}
+
+/* What a player said about a night, or what an admin noted for them.
+   THE RULE, and it is written on the card in these words: a player's own
+   answer is the one shown; a note an admin made stands only until the player
+   answers for themselves. No clock comes into it — `u` is monotonic per
+   device, not wall time, and a member document has no `u` at all.
+
+   Returns null and never 'n'. Nothing recorded is not "cannot make it", and
+   the difference is the whole reason availability never GATES anything: it
+   sorts and annotates the picker, and an admin can always pick anyone. */
+function availFor(st, members, playerId, dateISO) {
+  if (!dateISO) return { answer: null, source: null };
+  const mb = memberForPlayer(members, playerId);
+  const said = mb && mb.avail ? mb.avail[dateISO] : null;
+  if (AVAIL_ANSWERS.indexOf(said) !== -1) return { answer: said, source: 'player' };
+  const p = st.players.find((x) => x.id === playerId);
+  const noted = p && p.avail ? p.avail[dateISO] : null;
+  if (AVAIL_ANSWERS.indexOf(noted) !== -1) return { answer: noted, source: 'admin' };
+  return { answer: null, source: null };
+}
+
+/* What an admin may do with a request, read against the league AS IT IS NOW.
+   A request stores the value asked for and the id it is for — never a diff —
+   so it can be judged whenever it is looked at rather than when it was filed.
+
+   `not-theirs` is the security check. The rules cannot know what a member is
+   entitled to change, so the client re-derives it from the league and the
+   member list: the request may only name the player this account is linked to
+   on the server, and only that player's own team. */
+function requestVerdict(st, members, req) {
+  if (!req) return 'orphan';
+  const mb = (members || []).find((x) => x.uid === req.uid);
+  if (!mb) return 'orphan';
+  if (!mb.playerId || mb.playerId !== req.playerId) return 'not-theirs';
+  const p = st.players.find((x) => x.id === req.playerId);
+  if (!p) return 'gone';
+  if (req.teamName != null) {
+    if (!req.teamId || p.teamId !== req.teamId) return 'not-theirs';
+    const t = st.teams.find((x) => x.id === req.teamId);
+    if (!t) return 'gone';
+    if (t.name === req.teamName && (req.name == null || p.name === req.name)) return 'already';
+    return 'apply';
+  }
+  if (p.name === req.name) return 'already';
+  return 'apply';
 }
 
 /* ── What a match came to ──────────────────────────────────────────────────
@@ -4624,7 +4759,13 @@ function openMatch(id) {
 }
 function newLeg(m) {
   const base = (G().legFormats.find((f) => f.id === S().legFormat) || G().legFormats[0]).start || null;
-  const by = isTeams() ? { a: [], b: [] } : { a: [m.a], b: [m.b] };
+  /* Pre-filled from the card ONLY when that side has one name down. A whole
+     squad ticked onto every leg would make by[side].length !== 1, and
+     dartsPlayerStats then credits legs played and won and NOTHING else —
+     every average, 180 and checkout for that team's season would quietly
+     vanish. The card is the night's roster; the leg still asks who threw. */
+  const one = (side) => { const l = lineupFor(state, m, side); return l.recorded && l.ids.length === 1 ? l.ids.slice() : []; };
+  const by = isTeams() ? { a: one('a'), b: one('b') } : { a: [m.a], b: [m.b] };
   const startFor = (side) => {
     if (base == null) return null;
     if (isTeams()) return base;
@@ -4665,11 +4806,18 @@ function renderMatchDialog() {
     const who = (side) => {
       if (!isTeams()) return '';
       const team = teamById(m[side]);
-      const members = state.players.filter((p) => p.teamId === m[side] && (p.active || leg.by[side].indexOf(p.id) !== -1));
+      /* Everyone on the CARD, plus anyone already ticked. Sourcing this from
+         the team alone — which is what it did — meant a sub could not be
+         ticked at all, so the person who actually threw got no credit for the
+         night. Anyone already in `by` stays listed even after they come off
+         the card, or a tick could never be taken back. */
+      const down = lineupFor(state, m, side).ids.map(playerById).filter(Boolean);
+      leg.by[side].forEach((id) => { const p = playerById(id); if (p && down.indexOf(p) === -1) down.push(p); });
       return '<div class="who"><span class="label">' + esc(team ? team.name : side) + ' threw</span>'
-        + (members.length ? members.map((p) => '<label class="checkline"><input type="checkbox" data-leg="' + i + '" data-by="' + side + '" data-pid="' + esc(p.id) + '"'
-          + (leg.by[side].indexOf(p.id) !== -1 ? ' checked' : '') + (edit ? '' : ' disabled') + '><span>' + esc(p.name) + '</span></label>').join('')
-          : '<span class="hint">no players in this team</span>') + '</div>';
+        + (down.length ? down.map((p) => '<label class="checkline"><input type="checkbox" data-leg="' + i + '" data-by="' + side + '" data-pid="' + esc(p.id) + '"'
+          + (leg.by[side].indexOf(p.id) !== -1 ? ' checked' : '') + (edit ? '' : ' disabled') + '><span>' + esc(p.name)
+          + (p.teamId !== m[side] ? ' <span class="pill">sub</span>' : '') + '</span></label>').join('')
+          : '<span class="hint">nobody is down for this team</span>') + '</div>';
     };
     const stats = (side) => '<div class="legstats"><span class="label">' + esc(nameOf(m[side])) + '</span>'
       + fields.map((f) => '<label><span>' + esc(f.label) + '</span><input type="number" inputmode="numeric" min="' + f.min + '" max="' + f.max
@@ -4698,7 +4846,172 @@ function renderMatchDialog() {
   $('mtForfeitRow').hidden = true;
   $('forfeitA').textContent = nameOf(m.a) + ' did not show';
   $('forfeitB').textContent = nameOf(m.b) + ' did not show';
+  renderLineup(m);
+  renderAvail(m);
 }
+
+/* ── The card, and who can make it ─────────────────────────────────────────
+   One block says who is throwing for each team tonight; the one under it is
+   where a player says whether they can be there. A name on the card who is
+   not on that team is the sub — the app keeps no other record of one. */
+const AVAIL_WORD = { y: 'playing', n: 'cannot make it', s: 'can sub' };
+const AVAIL_LABEL = { y: 'I’m Playing', n: 'Can’t Make It', s: 'Can Sub' };
+
+/* The card, in a fixed order: the team's own actives as the roster reads
+   them, then anyone else who is down. Objects, so identity is the test. */
+function lineupRows(m, side) {
+  const rows = state.players.filter((p) => p.teamId === m[side] && p.active);
+  lineupFor(state, m, side).ids.forEach((id) => { const p = playerById(id); if (p && rows.indexOf(p) === -1) rows.push(p); });
+  return rows;
+}
+
+/* Writing a card down. The FIRST edit to either side records BOTH, from what
+   the block was already showing — a half-recorded match would claim nobody
+   was playing for the other team, which is a different thing from nobody
+   having said yet. */
+function setLineup(m, side, ids) {
+  if (!m.lineup) m.lineup = { a: lineupFor(state, m, 'a').ids, b: lineupFor(state, m, 'b').ids };
+  m.lineup[side] = ids.slice(0, LINEUP_MAX);
+  touch(m); save(); render(); renderMatchDialog();
+}
+
+/* Somebody who could stand in: sorted by what they have said about the
+   night, volunteers first, and never filtered by it — availability annotates
+   this list, it does not decide it. */
+function subCandidates(m, side) {
+  const down = lineupRows(m, side);
+  const rank = { s: 0, y: 1, n: 3 };
+  return state.players.filter((p) => p.active && down.indexOf(p) === -1)
+    .map((p) => ({ p: p, a: availFor(state, members, p.id, m.date) }))
+    .sort((x, y) => (rank[x.a.answer] == null ? 2 : rank[x.a.answer]) - (rank[y.a.answer] == null ? 2 : rank[y.a.answer])
+      || x.p.name.localeCompare(y.p.name));
+}
+
+function renderLineup(m) {
+  const box = $('mtLineup');
+  box.hidden = !isTeams();
+  if (!isTeams()) { box.innerHTML = ''; return; }
+  const edit = canEdit();
+  const side = (sd) => {
+    const l = lineupFor(state, m, sd);
+    const team = teamById(m[sd]);
+    const rows = lineupRows(m, sd);
+    const one = (p) => {
+      const on = l.ids.indexOf(p.id) !== -1;
+      const sub = p.teamId !== m[sd] ? ' <span class="pill">sub</span>' : '';
+      if (!edit) return on ? '<span class="pname">' + esc(p.name) + sub + '</span>' : '';
+      return '<label class="checkline"><input type="checkbox" data-lineup="' + esc(sd) + '" data-pid="' + esc(p.id) + '"'
+        + (on ? ' checked' : '') + '><span>' + esc(p.name) + sub + '</span></label>';
+    };
+    const picked = rows.filter((p) => l.ids.indexOf(p.id) !== -1);
+    const opts = edit ? subCandidates(m, sd).map((c) => '<option value="' + esc(c.p.id) + '">' + esc(c.p.name)
+      + (c.a.answer ? ' — ' + AVAIL_WORD[c.a.answer] : '') + '</option>').join('') : '';
+    return '<div class="lside"><span class="label">' + esc(team ? team.name : nameOf(m[sd])) + '</span>'
+      + (edit ? '<div class="entrants">' + rows.map(one).join('') + '</div>'
+        : '<div class="names">' + (picked.length ? picked.map(one).join(' · ') : 'nobody is down') + '</div>')
+      + (edit ? '<select data-lineup-add="' + esc(sd) + '"><option value="">Add someone from another team…</option>' + opts + '</select>' : '')
+      + '</div>';
+  };
+  box.innerHTML = '<div class="lineup"><span class="label">Playing Tonight'
+    + ' <button class="tile-help" type="button" data-help="lineup" aria-label="About subs and the card">i</button></span>'
+    + side('a') + side('b') + '<p class="warn-line" id="mtLineupWarn"></p></div>';
+}
+
+function renderAvail(m) {
+  const box = $('mtAvail');
+  const mine = meDoc && meDoc.playerId ? playerById(meDoc.playerId) : null;
+  const down = isTeams() ? lineupFor(state, m, 'a').ids.concat(lineupFor(state, m, 'b').ids) : [m.a, m.b];
+  const inThis = mine && down.indexOf(mine.id) !== -1;
+  const edit = canEdit();
+  if (!inThis && !(edit && down.length)) { box.innerHTML = ''; return; }
+  if (!m.date) {
+    box.innerHTML = '<div class="avail"><span class="label">Can You Make It?</span>'
+      + '<p class="hint">Set a date below, and players can say if they are in.</p></div>';
+    return;
+  }
+  const btns = (pid, now, attr) => '<div class="row">' + AVAIL_ANSWERS.map((k) => '<button type="button" class="side-btn'
+    + (now === k ? ' on' : '') + '" ' + attr + '="' + esc(pid) + '" data-answer="' + k + '" aria-pressed="' + (now === k) + '">'
+    + esc(AVAIL_LABEL[k]) + '</button>').join('') + '</div>';
+  let html = '<div class="avail"><span class="label">Can You Make It?</span>';
+  /* A VIEWER may use these, and they are the only controls in the app that
+     may: what a player says about their own night is theirs to say, and it
+     goes to their own member document, never into the league. So this block
+     must never carry .no-edit, which the read-only stylesheet hides. */
+  if (inThis) {
+    const now = availFor(state, members, mine.id, m.date);
+    html += '<p class="hint">' + esc(m.date) + ' — you are down as ' + esc(mine.name) + '.</p>'
+      + btns(mine.id, now.source === 'player' ? now.answer : null, 'data-my-avail');
+  }
+  if (edit && down.length) {
+    const seen = [];
+    html += '<p class="hint">A player’s own answer is the one shown; a note you make stands only until they answer for themselves.</p>'
+      + down.map((id) => {
+        const p = playerById(id);
+        if (!p || seen.indexOf(p.id) !== -1) return '';
+        seen.push(p.id);
+        const a = availFor(state, members, p.id, m.date);
+        return '<div class="availrow"><span class="aname">' + esc(p.name)
+          + (a.answer ? ' <span class="hint">' + esc(AVAIL_WORD[a.answer]) + ' — ' + (a.source === 'player' ? 'said so' : 'your note') + '</span>'
+            : ' <span class="hint">has not said</span>') + '</span>'
+          + btns(p.id, a.source === 'admin' ? a.answer : null, 'data-note-avail') + '</div>';
+      }).join('');
+  }
+  box.innerHTML = html + '</div>';
+}
+
+/* A note an ADMIN makes about a player who will never sign in. It is written
+   on the player, in the league; what the player says themselves lives on
+   their member document and wins. Only the nights that still mean something
+   are kept — the boundary keeps the newest AVAIL_MAX and drops the rest. */
+function noteAvail(p, dateISO, answer) {
+  const av = Object.assign({}, p.avail || {});
+  if (av[dateISO] === answer) delete av[dateISO]; else av[dateISO] = answer;
+  if (Object.keys(av).length) p.avail = av; else delete p.avail;
+  touch(p); save(); renderMatchDialog();
+}
+
+$('mtLineup').addEventListener('change', (e) => {
+  const m = curMatch();
+  if (!m || !canEdit()) return;
+  const box = e.target.closest('[data-lineup]');
+  if (box) {
+    const ids = lineupFor(state, m, box.dataset.lineup).ids.filter((id) => id !== box.dataset.pid);
+    if (box.checked) {
+      if (ids.length >= S().teamSize) {
+        box.checked = false;
+        $('mtLineupWarn').textContent = 'That is ' + S().teamSize + ' already — take somebody off first.';
+        return;
+      }
+      ids.push(box.dataset.pid);
+    }
+    setLineup(m, box.dataset.lineup, ids);
+    return;
+  }
+  const add = e.target.closest('[data-lineup-add]');
+  if (add && add.value) {
+    const sd = add.dataset.lineupAdd;
+    const ids = lineupFor(state, m, sd).ids;
+    if (ids.length >= S().teamSize) {
+      add.value = '';
+      $('mtLineupWarn').textContent = 'That is ' + S().teamSize + ' already — take somebody off first.';
+      return;
+    }
+    setLineup(m, sd, ids.concat([add.value]));
+  }
+});
+
+$('mtAvail').addEventListener('click', (e) => {
+  const m = curMatch();
+  if (!m || !m.date) return;
+  const note = e.target.closest('[data-note-avail]');
+  if (note && canEdit()) {
+    const p = playerById(note.dataset.noteAvail);
+    if (p) noteAvail(p, m.date, note.dataset.answer);
+    return;
+  }
+  const my = e.target.closest('[data-my-avail]');
+  if (my && window.lnCloud) window.lnCloud.setAvail(m.date, my.dataset.answer);
+});
 function liveSummary(leg) {
   const a = x01LegStats(leg, 'a'), b = x01LegStats(leg, 'b');
   const one = (n, s) => esc(n) + ': ' + s.darts + ' darts' + (s.avg3 != null ? ', avg ' + s.avg3.toFixed(1) : '') + (s.checkout ? ', out ' + s.checkout : '');
@@ -5089,6 +5402,12 @@ const HELP = {
     <p>Both are kept by your browser's password manager, never by the app's sync or backups. Removing a member takes them off the list; anyone who still has the ID can rejoin as a viewer, so a league that must be closed to someone is a new league with a new ID.</p>`],
   device: ['This League on This Device', `<p>A league is kept in this browser, and once shared, in the cloud too. <strong>Forget</strong> removes only this device's copy. <strong>Delete</strong> removes the league itself, for everyone, and only its owner can.</p>
     <p>The size line is how much of the space one league may hold is used. A season of leg-by-leg scoring is a small fraction of it; a league that grows past the warning can close old seasons to trim them.</p>`],
+  lineup: ['Subs and the Card', `<p>The <strong>card</strong> is who is actually throwing for each team tonight. Until somebody sets it, the app assumes the team's own players. Anyone on a card who is not on that team is a <strong>sub</strong> — the app keeps no other record of one, and needs none.</p>
+    <p>A sub's legs count for the <strong>team</strong> they stood in for and for the <strong>sub's own record</strong>, because every figure is worked out from who threw the leg rather than from who the team is. Nothing on the card moves a result by itself: it decides who can be ticked as having thrown.</p>
+    <p>Players say whether they can make a night themselves, and an admin can note it for anyone who does not use the app. <strong>A player's own answer is the one shown.</strong> It sorts the list of people who could stand in — it never decides who plays.</p>`],
+  requests: ['What Members Can Ask For', `<p>A member who is not an admin can ask for <strong>their own name</strong> on the roster and <strong>their team's name</strong> to be changed. What they type is kept apart from the league and changes nothing until an admin taps <strong>Apply</strong> — the league is one record, and it is the admins who write it.</p>
+    <p>Each row shows the name as it is now against the one asked for, so a request that has been overtaken can be seen before it is applied. A request from somebody no longer linked to that player, or for a player or team since deleted, offers only <strong>Dismiss</strong>.</p>
+    <p>Saying whether you can make a night needs no approval: that is a member's own answer, and it is kept with their account rather than in the league.</p>`],
 };
 const helpDialog = $('helpDialog');
 document.addEventListener('click', (e) => {
@@ -6234,6 +6553,25 @@ function renderLive() {
       + '<div class="hint">' + s.darts + ' darts' + (s.avg3 != null ? ' · avg ' + s.avg3.toFixed(1) : '') + (st.busts[k] ? ' · ' + plural(st.busts[k], 'bust') : '') + '</div></div>';
   };
   $('lvSides').innerHTML = side('a') + side('b');
+  /* In a team league the leg says who threw it, and it is the ONLY thing
+     that does: dartsPlayerStats credits an average, a 180 and a checkout
+     only from a leg with one name on that side. An empty `by` here is that
+     figure quietly lost, so it is said out loud rather than discovered in a
+     season's stats later. */
+  const lw = $('lvWho');
+  if (!isTeams()) { lw.textContent = ''; lw.className = 'hint'; }
+  else {
+    const nm = (k) => leg.by[k].map((id) => { const p = playerById(id); return p ? p.name : null; }).filter(Boolean);
+    const empty = ['a', 'b'].filter((k) => !nm(k).length);
+    if (empty.length) {
+      lw.className = 'warn-line';
+      lw.textContent = 'Nobody is down as throwing for ' + empty.map((k) => nameOf(m[k])).join(' or ')
+        + ' — tap Done and tick who threw, or this ' + G().unit.one + ' keeps no average.';
+    } else {
+      lw.className = 'hint';
+      lw.textContent = ['a', 'b'].map((k) => nameOf(m[k]) + ': ' + nm(k).join(', ')).join(' · ');
+    }
+  }
   const noVisits = st.visits === 0;
   $('lvFirstRow').hidden = !noVisits || !edit;
   $('lvFirstA').textContent = nameOf(m.a) + ' throws first';
@@ -6498,6 +6836,8 @@ window.__lnTestHooks = {
   newLeagueId: newLeagueId, newAdminKey: newAdminKey, cleanCode: cleanCode,
   roundRobin: roundRobin, dateRounds: dateRounds, standings: standings, rankSides: rankSides, h2hTable: h2hTable,
   matchScore: matchScore, winnerSide: winnerSide, legsToWin: legsToWin, matchDone: matchDone, sidesOf: sidesOf, sideName: sideName,
+  lineupFor: lineupFor, availFor: availFor, requestVerdict: requestVerdict, memberForPlayer: memberForPlayer, newLeg: newLeg,
+  LINEUP_MAX: LINEUP_MAX, AVAIL_MAX: AVAIL_MAX, AVAIL_ANSWERS: AVAIL_ANSWERS,
   seedOrder: seedOrder, bracketSize: bracketSize, firstRoundSlots: firstRoundSlots, resolveSingle: resolveSingle,
   resolveDouble: resolveDouble, resolveBracket: resolveBracket, bracketCells: bracketCells, seedFromStandings: seedFromStandings,
   seedRandom: seedRandom, mulberry32: mulberry32,

@@ -112,11 +112,20 @@ service cloud.firestore {
       // published version forgot this and every Share stopped halfway); the
       // owner may set anyone's role or remove anyone; anyone may leave.
       match /members/{uid} {
+        // `avail` is what this account has said about ITSELF — which nights it
+        // can play, keyed by date. It rides on the member document and not in
+        // the league because it needs no admin: the self-update clause below
+        // (own uid, role unchanged) is what already lets a viewer set playerId,
+        // and it lets them set this too. Capped at 40 nights so a member
+        // document cannot grow without bound, and to three answers so a value
+        // reaching another player's screen can only be one of three words.
         function validMember(d) {
-          return d.keys().hasOnly(['role', 'name', 'playerId', 'joinedAt'])
+          return d.keys().hasOnly(['role', 'name', 'playerId', 'joinedAt', 'avail'])
             && d.role in ['admin', 'viewer']
             && d.name is string && d.name.size() <= 40
-            && (!('playerId' in d) || (d.playerId is string && d.playerId.size() <= 64));
+            && (!('playerId' in d) || (d.playerId is string && d.playerId.size() <= 64))
+            && (!('avail' in d) || (d.avail is map && d.avail.size() <= 40
+                                    && d.avail.values().hasOnly(['y', 'n', 's'])));
         }
         allow read:   if signedIn();
         allow create: if signedIn() && me() == uid && exists(leaguePath())
@@ -127,6 +136,38 @@ service cloud.firestore {
                       || (me() == uid && request.resource.data.role == resource.data.role)
                       || (me() == uid && request.resource.data.role == 'admin' && keyMatches()));
         allow delete: if signedIn() && (isOwner() || me() == uid);
+      }
+
+      // A member's PROPOSAL, and the ONLY way anything they type reaches the
+      // league. The league document is one map to these rules — they can say
+      // "may write all of it" or "none of it", never "may write their own
+      // name" — so a member writes what they are asking for here, and an
+      // admin's tap is what applies it through the ordinary save path. What
+      // lands here has authority over nothing until then.
+      //
+      // Note `list` is allowed where it is false on /leagues, and the
+      // difference is the id: a League ID is a capability, a uid is not, and
+      // /members is already listable and hands out every uid in the league.
+      // Only somebody who could act on a request carries the listener.
+      match /requests/{uid} {
+        function validRequest(d) {
+          return d.keys().hasOnly(['at', 'playerId', 'name', 'teamId', 'teamName'])
+            && d.at is number
+            && (('name' in d) || ('teamName' in d))
+            && (!('name' in d)     || (d.name is string && d.name.size() > 0 && d.name.size() <= 40))
+            && (!('teamName' in d) || (d.teamName is string && d.teamName.size() > 0 && d.teamName.size() <= 40))
+            && (!('playerId' in d) || (d.playerId is string && d.playerId.size() <= 64))
+            && (!('teamId' in d)   || (d.teamId is string && d.teamId.size() <= 64));
+        }
+        allow get:    if signedIn() && (me() == uid || memberIsAdmin() || isOwner());
+        allow list:   if signedIn() && (memberIsAdmin() || isOwner());
+        // exists(memberPath(me())): only somebody who has actually JOINED may
+        // file, so knowing the League ID is not enough to fill the queue.
+        allow create, update: if signedIn() && me() == uid
+                              && exists(leaguePath()) && exists(memberPath(me()))
+                              && validRequest(request.resource.data);
+        // Withdrawing your own and an admin dismissing it are the same act.
+        allow delete: if signedIn() && (me() == uid || memberIsAdmin() || isOwner());
       }
     }
 
