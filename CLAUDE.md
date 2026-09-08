@@ -31,6 +31,47 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
   copy wins" dialog: `mergeLeague(mine, theirs)` is pure, per-entity newest-`u` wins,
   deletions are tombstones, and the rules refuse any update whose `rev` is not exactly one
   ahead. `nextU()` is monotonic so a phone with a slow clock cannot lose an edit.
+- **A member may sort the teams out, and the server can only say so much** (2026-09-08).
+  `setup` is a boolean on the LEAGUE DOCUMENT — not in `state`, for the same reason as `owner`:
+  it is about this cloud copy, and `state` travels into backups and share links where it means
+  nothing. While it is on, the rules let a member update the league if `diff().affectedKeys()`
+  says the document changed only `state`/`rev`/`updatedAt` and `state` changed only
+  `players`/`teams`/`tombstones`. **That is the whole promise: no result, fixture, season,
+  bracket or league setting can move — and it cannot say WHICH player.** Rules have no
+  per-element list diff, so a member who went digging could rename or move somebody else during
+  setup; the UI is what keeps it to teams and their own membership. Charles chose that trade
+  knowingly. `resource.data.get('setup', false)` reads an absent flag as OFF, which is why a
+  league that predates this needs no data edit. `diff()` and not four `==` comparisons because
+  four list equalities walk `matches` element by element and push a big league past the
+  per-request expression budget, failing in a way nobody can read.
+- **`pushSetup` is not `pushNow` with a wider gate.** It builds the outgoing state with
+  `setupState(mine, theirs)` — the CLOUD's own copy with three lists swapped in — so the rule
+  passes because the client BUILT it that way, never because a merge happened to agree.
+  `mergeList`'s order is stable here only while tombstones stop a stale copy re-adding a match,
+  and that is exactly the undocumented dependency `setupState` removes. It writes `{state, rev,
+  updatedAt}`: the same three words as the rule, in both files. And it re-reads `setup` INSIDE
+  the transaction, because the flag can close between the tap and the write and a refusal the
+  reader can read beats a `permission-denied` they cannot.
+- **`canEdit()` is byte-identical and must stay so.** ~50 call sites, and it gates every result
+  in the app. Team Setup is a SECOND predicate, `canSetUp()`; a predicate that becomes true in
+  more places than it was is a bug you cannot see.
+- **One account is one player, and one player is one account** (2026-09-08).
+  `leagues/{id}/roster/{playerId}` is create-only and **its document id IS the player** — that
+  is the entire uniqueness index, and it gives one account per player server-side. One player
+  per account comes from the member document, which has one `playerId` field. What is enforced
+  only **by agreement** is that the two name each other: checked at create and never after. So
+  `members[].playerId` is what an account ASKED for and `claim` (set by `reconcileClaims`) is
+  what the roster CONFIRMS — every half-written switch, abandoned row and duplicate reads as
+  "not claimed" rather than as two people. The agreement is required of everyone, including an
+  admin assigning somebody else, which makes the write ORDER load-bearing: the member document
+  first, then the row.
+- **An account lets go of a claim on what the roster SHOWS, never on a refusal.** A
+  `permission-denied` on the roster create means EITHER somebody beat us to it OR the rules
+  for that collection are not published yet, and the client cannot tell those apart. Only one
+  of them is a reason to un-link an account, so neither does: `reapMyRoster` clears the link
+  when a row it can see names somebody else. The first draft cleared on the error code, which
+  would have quietly un-linked every account in the league the first time a build shipped
+  ahead of its rules.
 - **A member who is not an admin ASKS; an admin's tap is the only bridge into the league**
   (2026-09-08). `state` is one opaque map to the rules — they can say "may write all of it" or
   "none of it" and nothing between — so a member writes what they want into
@@ -161,8 +202,9 @@ showed it.
   parser takes the first thing shaped like an ID after `#join=`.
 - **The league name is edited in its box, inside `rulesChanged`** — a second `change` listener
   would run after `render()` had put the old name back.
-- **Deleting a league is one `writeBatch`** — members, the key, the claim, the league — because
-  the subcollection rules `get()` the league and would be undeletable after it went.
+- **Deleting a league is one `writeBatch`** — members, the key, the claim, the requests, the
+  roster, the league — because the subcollection rules `get()` the league and would be
+  undeletable after it went. **Nothing may be added under a league without this line.**
 - **The demo ids carry an O** and so fail `LEAGUE_ID_RE`; that is what keeps them off the cloud.
 
 - **Trim Closed Seasons must not move a figure, and the leg has to carry the points for
@@ -183,6 +225,11 @@ showed it.
   it took. Anything new on the keypad routes through the `total === rem && canFinish` check.
 
 ## Things a tidy-up would break
+
+- **`memberForPlayer` reads `claim` and NEVER `playerId`.** `.find` on `playerId` cannot express
+  a conflict, so it silently picked one — and two accounts were pointing at one player in the
+  live league, which meant `availFor` guessed and `requestVerdict` returned `apply` to both of
+  them for a rename of the same player.
 
 - **A place in a bracket holds one of THREE things**: a side id, `null` (a bye — nobody, for
   good) or `undefined` (not decided yet). `resolveCell` marks a cell `pending` only when a SIDE is

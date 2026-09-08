@@ -75,6 +75,18 @@ can **Share** it from the League tab, and from then on:
 - **Every change is a transaction.** Two admins scoring two matches at once both land; the
   same match scored on two phones resolves to the later tap. Offline, a change is saved on the
   phone and goes up on its own when the network is back.
+- **Team Setup: members sort the teams out themselves.** While an admin has Team Setup open,
+  anyone in the league can make a team, rename one, and put themselves in or take themselves
+  out — no asking, no waiting. Nothing else in the league can be changed by them: not a
+  result, not a fixture, not a season, not a tournament and not a setting, and the server is
+  what says so rather than the app. Close it once the teams are settled, and open it again
+  between seasons. It starts open for a brand-new league, and the app offers to close it the
+  moment you generate a season's fixtures.
+- **One account is one player, and one player is one account.** Say which player you are and
+  that name is yours: nobody else can claim it, and you cannot be two people. Tap your own
+  name on the Players tab, or pick it on the League tab. While Team Setup is open you claim
+  it directly; once it has closed, claiming is a request like any other. An admin can always
+  say who is who, in case somebody claimed the wrong name or never got round to it.
 - **A member can ask for their own name, and their team's.** The league is one record and only
   its admins write it, so what a member types is kept beside the league and changes nothing
   until an admin taps **Apply**. The League tab carries a count of what is waiting, and each row
@@ -128,6 +140,31 @@ never tell the published rules from the default deny-all; only a real signed-in 
 Then prove it with two Google accounts: one shares a league, the other joins with the ID and
 sees the table; the second enters the Admin Key and can score; the first makes the second the
 owner; a viewer's attempt to score is refused on the sync button with the rules' own message.
+
+## If something goes wrong
+
+The whole league lives in one Firebase project, **`league-night-dff31`**, and everything below
+is at `console.firebase.google.com`. There is deliberately no owner's view inside the app: a
+league can never be listed, which is what makes an unguessable League ID a key rather than a
+hint, and a cross-league view would have to live in the page's own JavaScript.
+
+- **The rules are the kill switch.** Firestore Database → Rules. Pasting the previous
+  `firestore.rules` from this repo's git history closes the members' write path in seconds —
+  no deploy, no release, no data lost. Everything an owner or an admin can do keeps working.
+- **A disputed claim.** Firestore Database → Data → `leagues/{id}/roster` holds one document
+  per claimed player, keyed by the player's id and naming the account that holds it;
+  `leagues/{id}/members` holds what each account asked for. The app shows a claim only when
+  the two agree, so a mismatch reads as "not claimed" rather than as two people. Deleting a
+  roster document frees that name for whoever it really is.
+- **A league that has grown too big.** The rules cap what one league may hold — 500 players,
+  250 teams, 100 seasons, 2,000 matches, 200 tournaments — and the League tab meters the
+  bytes against the 1,000 KB a league may hold. Closing old seasons trims them.
+- **Cost.** Billing → Usage, and a budget alert on the project. **The twenty-leagues-per-account
+  limit is enforced in the browser only** — it is a speed bump against an accident, not a
+  control. The budget alert is the control.
+- **An old tab.** A browser still running a previous build writes the older kind of player
+  link and no roster document, so the new app reads it as unclaimed rather than as a second
+  claimant. It fixes itself when that tab is reloaded.
 
 ## Inviting people
 
