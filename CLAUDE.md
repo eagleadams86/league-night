@@ -111,6 +111,28 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
   them be ticked there at all. Which is why **`newLeg` pre-fills `by` only from a side with ONE
   name down** — a squad makes `by[side].length !== 1`, and `dartsPlayerStats` then credits legs
   played and won and silently drops every average, 180 and checkout for that team's season.
+- **A sign-in that finds a league OPENS it, and only when the screen is empty** (2026-09-08).
+  `onSignedIn` had always downloaded the account's leagues and registered them with
+  `current: false` — correct, because a sign-in must never move somebody off the league they are
+  looking at, and wrong on the one device where it mattered: a new phone or a cleared browser was
+  left on the welcome card with its own leagues sitting behind it in the picker, and the only way
+  in was to type a League ID the account had just handed over. (A RELOAD cured it, because
+  `normalizeDevice` falls `current` back to `leagues[0]`, which is why nothing about it was
+  discoverable.) `lnOpenLatest(preferred)` is the whole fix and its first line is the guard:
+  `if (viewOnly || state) return null`. `preferred` is `users/{uid}.current` — the league this
+  account was last in, written by `cloudOpen` on a switch and by `noteUserLeague` on an arrival —
+  and the fallback is the END of the device list, because both lists are appended to. Each
+  candidate is `loadLeague`d before it is opened, so a record naming data that is gone falls
+  through rather than raising openLeague's "no longer on this device" at somebody who was only
+  signing in. **Every write to `users/{uid}` now MERGES**: a plain `setDoc` replaces the document,
+  and the league list and `current` are written on different schedules, so whichever landed last
+  would have dropped the other's field. The account document still holds ids and names only —
+  never a key, and the rules there validate nothing, so the app is the only thing keeping one out.
+- **The welcome card has a FIFTH door, and it is the only conditional one.** *Sign In* is for
+  somebody coming back, and `renderWelcome` derives it from `!virgin || !!cloudUser` — an account
+  already behind the page has nothing to sign in to. It is on `SIGNIN_DOORS` like every other
+  route to a popup (that list is now six), and its handler awaits nothing, because an `await`
+  before `requireSignIn` spends the gesture the popup opens inside.
 - **A player's own answer is the one shown; a note an admin made stands only until the player
   answers for themselves.** That sentence is on the card, and `availFor` is it in code. Two
   sinks on purpose: `members/{uid}.avail` for an account (self-written, no admin needed — the

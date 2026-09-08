@@ -1466,7 +1466,13 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
        Money Map's card: no tabs, no empty tables, three choices and a sentence
        each. The three here differ from Money Map's in their words because the
        actions differ — as PAPTrack's do — and "Join a League" arrives with
-       sign-in rather than sitting here as a button that does nothing. -->
+       sign-in rather than sitting here as a button that does nothing.
+
+       "Sign In" is the FIFTH door and the only one shown conditionally: it is
+       here for somebody coming back to a league they are already in, on a
+       phone that has forgotten it, and it disappears the moment an account is
+       behind it. Without it the only route back was Join a League, which asks
+       for a League ID the account already knows — see lnOpenLatest(). -->
   <div class="card welcome" id="welcomeCard" hidden>
     <div class="empty">
       <h2>Welcome to League Night</h2>
@@ -1477,12 +1483,16 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
         this browser only.</p>
       <p class="actions">
         <button type="button" class="primary" id="firstCreate">Create a League</button>
+        <button type="button" id="firstSignIn" class="cloud-only" hidden>Sign In</button>
         <button type="button" id="firstJoin" class="cloud-only">Join a League</button>
         <button type="button" id="firstDemo">Try the Demo</button>
         <button type="button" id="firstRestore">Restore a Backup</button></p>
       <p><strong>Create a League</strong> asks for a name and whether it is played as singles or
         in teams, and opens on the Players tab — add the people, start a season, and the
         fixtures generate themselves.</p>
+      <p class="cloud-only" id="firstSignInNote" hidden><strong>Sign In</strong> brings back the leagues already on your
+        Google account — this browser opens on the one you were in last, and you need no League ID for a
+        league you have already joined.</p>
       <p class="cloud-only"><strong>Join a League</strong> asks for the League ID someone sent you — and the
         Admin Key, if they want you running it — and signs you in to Google, because a shared league
         is tied to real accounts.</p>
@@ -4169,6 +4179,12 @@ function renderWelcome() {
   const virgin = !viewOnly && !state;
   $('welcomeCard').hidden = !virgin;
   document.documentElement.toggleAttribute('data-welcome', virgin);
+  /* The Sign In door and its sentence are for somebody who is NOT signed in:
+     once an account is behind the page it has already been asked what leagues
+     it has, and a button that would answer "these ones, which you can see in
+     the picker" is a button that does nothing. */
+  $('firstSignIn').hidden = !virgin || !!cloudUser;
+  $('firstSignInNote').hidden = !virgin || !!cloudUser;
   $('findBtn').hidden = virgin;
   $('dataBtn').hidden = virgin && !viewOnly;
   $('shareBtn').hidden = virgin;
@@ -5614,6 +5630,10 @@ $('leagueSave').addEventListener('click', () => {
   toast(name + ' created — add the players next');
 });
 $('leagueCancel').addEventListener('click', () => $('leagueDialog').close());
+/* Signing in is the whole action: onSignedIn() fetches the account's leagues
+   and opens the latest, which is what takes this card off the screen. Nothing
+   is awaited here — the popup has to open inside the gesture. */
+$('firstSignIn').addEventListener('click', () => { if (window.lnCloud) window.lnCloud.signIn(); });
 $('firstCreate').addEventListener('click', openCreate);
 $('newLeagueBtn').addEventListener('click', openCreate);
 $('firstDemo').addEventListener('click', loadDemo);
@@ -6306,6 +6326,33 @@ window.lnRegisterCloud = (o) => {
   entry.dirty = false;
   saveLocal();
   render();
+};
+/* ── The league this account was last in, reopened ─────────────────────────
+   A league arrives from the account with `current: false`, and deliberately
+   so: a sign-in must never move somebody off the league they are looking at.
+   But a device holding NOTHING — a new phone, a cleared browser — was then
+   left on the welcome card with its leagues sitting behind it in the picker,
+   and the only way in was to type a League ID the account had just handed
+   over. (A reload cured it, because normalizeDevice falls `current` back to
+   the first league; nothing about that was discoverable.)
+
+   So: only when this device is showing nothing. `preferred` is what the
+   account remembers being in last; the fallback is the END of the device
+   list, because leagues are appended as they arrive and the account's list is
+   appended to as leagues are joined — the last one is the newest. Each
+   candidate is loaded before it is opened, so a record naming a league whose
+   data is gone falls through to the next rather than raising openLeague's
+   "no longer on this device" at somebody who was only signing in. */
+window.lnOpenLatest = (preferred) => {
+  if (viewOnly || state) return null;
+  const cloud = device.leagues.filter((l) => l.cloud);
+  const order = (preferred ? cloud.filter((l) => l.id === preferred) : []).concat(cloud.slice().reverse());
+  for (const l of order) {
+    if (!loadLeague(l.id)) continue;
+    openLeague(l.id);
+    return state ? l.id : null;
+  }
+  return null;
 };
 window.lnSetRole = (id, role) => {
   const entry = device.leagues.find((l) => l.id === id);
@@ -7473,9 +7520,9 @@ function armSync() { ensureInit().catch(() => { /* the click that follows report
 /* ── EVERY DOOR TO A SIGN-IN IS WARMED, not just the header button ──────────
    This is where League Night differs from its three siblings and where it went
    wrong. They sign in from exactly ONE control — the header button — and that
-   is the one thing armSync was wired to. This app signs in from five: the
-   header button, Share This League, both Join buttons, Become an Admin and the
-   join form itself.
+   is the one thing armSync was wired to. This app signs in from six: the
+   header button, Share This League, both Join buttons, the welcome card's Sign
+   In, Become an Admin and the join form itself.
 
    Press an unwarmed one on a phone and the SDK import is still in flight, so
    requestAccessToken() lands seconds after the tap with the user activation
@@ -7490,7 +7537,7 @@ function armSync() { ensureInit().catch(() => { /* the click that follows report
    page still fetches nothing from Google for someone who never touches one.
    `pointerenter` for a mouse, `focus` for the keyboard, `pointerdown` for a
    thumb — all of which fire BEFORE click, which is the entire point. */
-const SIGNIN_DOORS = ['syncBtn', 'shareLeagueBtn', 'joinBtn', 'firstJoin', 'keyClaimBtn', 'jn_id', 'jn_key'];
+const SIGNIN_DOORS = ['syncBtn', 'shareLeagueBtn', 'joinBtn', 'firstJoin', 'firstSignIn', 'keyClaimBtn', 'jn_id', 'jn_key'];
 function armDoors() {
   for (const id of SIGNIN_DOORS) {
     const el = document.getElementById(id);
@@ -7741,10 +7788,19 @@ async function onSignedIn() {
       await adoptCloudLeague(l.id, doc.data(), false);
     } catch (e) { console.warn('could not fetch', l.id, e); }
   }
-  /* And this device's shared leagues onto the account. */
+  /* And this device's shared leagues onto the account. MERGE, here and in the
+     two writes below: a plain setDoc replaces the document, and `current` —
+     which is written from cloudOpen, on its own schedule — would be dropped by
+     whichever of them happened to run last. */
   const deviceCloud = window.lnDevice().leagues.filter((l) => l.cloud).map((l) => ({ id: l.id, name: l.name, game: l.game }));
   const merged = mine.filter((l) => l && !deviceCloud.some((d) => d.id === l.id)).concat(deviceCloud);
-  await F.setDoc(userRef(), { leagues: merged, updatedAt: Date.now() });
+  await F.setDoc(userRef(), { leagues: merged, updatedAt: Date.now() }, { merge: true });
+  /* Nothing on screen: open the league this account was last in rather than
+     leaving the welcome card up in front of leagues already downloaded. */
+  if (!window.lnGet()) {
+    const last = (snap.exists() && window.lnIsLeagueId(snap.data().current)) ? snap.data().current : null;
+    if (!window.lnOpenLatest(last) && !merged.length) window.toast('Signed in — no leagues on this account yet');
+  }
   const cur = window.lnEntry();
   if (cur && cur.cloud) { listenTo(cur.id); if (cur.dirty) window.cloudPush(); }
   window.lnRender();
@@ -7753,7 +7809,20 @@ async function noteUserLeague(id, name, game, remove) {
   const snap = await F.getDoc(userRef());
   let list = (snap.exists() && Array.isArray(snap.data().leagues)) ? snap.data().leagues.filter((l) => l && l.id !== id) : [];
   if (!remove) list.push({ id: id, name: name, game: game });
-  await F.setDoc(userRef(), { leagues: list, updatedAt: Date.now() });
+  const patch = { leagues: list, updatedAt: Date.now() };
+  /* Joining or sharing IS opening, so it is also the answer to "which one was
+     I last in" — cloudOpen fires for a switch, and this for an arrival. */
+  if (!remove) patch.current = id;
+  await F.setDoc(userRef(), patch, { merge: true });
+}
+/* Which league this account is in, so another device opens on the same one.
+   Ids only, as with the list above — never a name a stranger could not
+   already read, and never a key. Best effort: failing to record it costs the
+   account a nicer landing next time and nothing else. */
+async function noteUserCurrent(id) {
+  if (!user || !window.lnIsLeagueId(id)) return;
+  try { await F.setDoc(userRef(), { current: id, updatedAt: Date.now() }, { merge: true }); }
+  catch (e) { console.warn('could not note the current league', e); }
 }
 
 /* Who this account is in a league: the owner if the league says so, else what
@@ -8213,7 +8282,7 @@ function relistenTo(id) { stopListening(); listenTo(id); }
 /* Called when the league on screen changes. */
 window.cloudOpen = (id) => {
   const entry = window.lnDevice().leagues.find((l) => l.id === id);
-  if (user && entry && entry.cloud) listenTo(id); else stopListening();
+  if (user && entry && entry.cloud) { listenTo(id); noteUserCurrent(id); } else stopListening();
 };
 
 /* ── Pushing: a transaction that merges, never a blind write ──────────────── */

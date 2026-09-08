@@ -138,9 +138,10 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
       one, or have signed in on this browser before. Once you share a
       league, the league itself — its names, fixtures and scores — is stored in that project,
       readable by anyone signed in to Google who knows its League ID, and writable by its admins.
-      Your account's display name and the list of leagues you have joined are stored beside it so
-      the app can show who is a member and find your leagues on a new phone. The <strong>Admin
-      Key</strong> is stored in a document nobody can read.</p>
+      Your account's display name, the list of leagues you have joined and which of them you were
+      last in are stored beside it so the app can show who is a member, find your leagues on a new
+      phone and open on the right one. That record holds ids and names, nothing else. The
+      <strong>Admin Key</strong> is stored in a document nobody can read.</p>
     <p>An invite link carries the League ID — and the Admin Key, if the sender chose to include
       it — in the part of the address after the <code>#</code>, which never reaches a server; the
       app takes it off the address bar the moment the link is opened. The QR code is drawn by the app

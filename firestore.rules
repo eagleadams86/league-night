@@ -276,8 +276,11 @@ service cloud.firestore {
     }
 
     // The family's per-account document: which leagues this account has
-    // joined, so "Your leagues" follows a Google account to a new phone. Ids
-    // and names only — never a key.
+    // joined, and which of them it is in (`current`), so the leagues AND the
+    // landing follow a Google account to a new phone. Ids and names only —
+    // never a key. Nothing here is validated, so the app is the only thing
+    // keeping a credential out of it; every write to it merges, because the
+    // list and `current` are written on different schedules.
     match /users/{uid} {
       allow read, write: if signedIn() && request.auth.uid == uid;
     }

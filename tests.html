@@ -51,7 +51,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 254;
+const EXPECTED = 257;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -1329,6 +1329,24 @@ function define() {
     ok(!/document\.addEventListener\('pointerdown', armSync/.test(m) && !/body\.addEventListener\([^)]*armSync/.test(m),
        'warming the whole page would make the privacy page untrue');
   });
+  t('the account remembers which league it is in, and every write to it merges', () => {
+    const m = stripComments(moduleSrc());
+    ok(/if \(!window\.lnGet\(\)\) \{[\s\S]{0,320}?window\.lnOpenLatest\(last\)/.test(m),
+       'onSignedIn opens the account\u2019s latest league ONLY when this device is showing none');
+    ok(/window\.lnIsLeagueId\(snap\.data\(\)\.current\)/.test(m), 'and the account\u2019s own answer is shape-checked like every other id');
+    ok(/listenTo\(id\); noteUserCurrent\(id\);/.test(m), 'switching leagues records which one');
+    ok(/async function noteUserCurrent\(id\)[\s\S]*?\{ current: id, updatedAt: Date\.now\(\) \}, \{ merge: true \}/.test(m),
+       'ids only \u2014 never a name, never a key');
+    /* MERGE on every write to users/{uid}. A plain setDoc REPLACES the
+       document: noteUserCurrent and the two league-list writes run on their
+       own schedules, and whichever landed last would drop the other's field. */
+    const writes = m.match(/F\.setDoc\(userRef\(\)[^;]*;/g) || [];
+    ok(writes.length >= 3, 'the writes to the account document: ' + writes.length);
+    writes.forEach((w) => ok(/\{ merge: true \}/.test(w), 'a setDoc on userRef that replaces rather than merges: ' + w));
+    /* The rules do not validate this document's fields, so the app is the only
+       thing keeping a credential out of it. */
+    ok(!/userRef\(\)[^;]*(key|Key)/.test(m), 'nothing to do with the Admin Key goes near the account document');
+  });
   t('the popup opens inside the gesture, or it does not open at all', () => {
     const m = stripComments(moduleSrc());
     /* THE WARM PATH DOES NOT AWAIT. An async body runs synchronously to its
@@ -1988,6 +2006,58 @@ function define() {
     ok(!W.document.documentElement.hasAttribute('data-cloud') && W.getComputedStyle(W.document.getElementById('firstJoin')).display === 'none',
        'and with no Firebase config it is not on screen');
     ok(/html\[data-welcome\] \.tabrow/.test(css()), 'and the tab ROW goes with it, pin button and all');
+  });
+  t('the fifth door is Sign In, and it is there only for somebody who is not', () => {
+    const card = (APP_SRC.match(/<div class="card welcome"[\s\S]*?<\/div>\s*<\/div>/) || [''])[0];
+    ok(/id="firstSignIn" class="cloud-only" hidden/.test(card), 'cloud-only, like Join — never a button that does nothing');
+    ok(/id="firstSignInNote"/.test(card), 'and a sentence of its own, as every door on this card has');
+    const src = stripComments(APP_SRC);
+    ok(/\$\('firstSignIn'\)\.hidden = !virgin \|\| !!cloudUser;/.test(src)
+       && /\$\('firstSignInNote'\)\.hidden = !virgin \|\| !!cloudUser;/.test(src),
+       'derived in renderWelcome from BOTH — an account already behind the page has nothing to sign in to');
+    /* The whole point of the door: it signs in and nothing else. onSignedIn()
+       is what opens the league, and awaiting anything here would spend the
+       gesture the popup needs. */
+    const handler = (src.match(/\$\('firstSignIn'\)\.addEventListener\('click', [\s\S]*?\);\n/) || [''])[0];
+    ok(/window\.lnCloud\.signIn\(\)/.test(handler) && !/await/.test(handler), 'it signs in, synchronously, and asks for nothing else');
+  });
+  t('signing back in opens the league the account was last in, not the welcome card', () => {
+    const A = 'LN-AAAA2222', B = 'LN-BBBB3333';
+    const wasDevice = W.localStorage.getItem(H.DEVICE_KEY);
+    const put = (id, name) => {
+      const st = H.normalizeLeague(FIXTURE); st.league.id = id; st.league.name = name;
+      W.localStorage.setItem(H.LEAGUE_KEY(id), JSON.stringify(st));
+    };
+    /* Two cloud leagues on the device and NOTHING on screen — a phone that has
+       just been handed the account's leagues and is still showing the welcome
+       card. B is last, which is how the newest arrives. */
+    const arm = () => {
+      H.__plant(null);
+      [[A, 'First'], [B, 'Second']].forEach(([id, name]) =>
+        H.__device().leagues.push({ id: id, name: name, game: 'darts', role: 'viewer', cloud: true, rev: 0, dirty: false }));
+    };
+    try {
+      put(A, 'First'); put(B, 'Second');
+      arm();
+      ok(!H.__state(), 'nothing on screen, which is exactly when the welcome card is up');
+      eq(W.lnOpenLatest(A), A, 'what the account remembers wins');
+      eq(H.__state().league.id, A, 'and it is the one on screen');
+      arm();
+      eq(W.lnOpenLatest(null), B, 'with nothing remembered, the newest on the account');
+      /* The half that matters most: a sign-in must never move somebody off
+         the league they are looking at. */
+      eq(W.lnOpenLatest(A), null, 'a league already on screen is left alone');
+      eq(H.__state().league.id, B);
+      arm();
+      eq(W.lnOpenLatest('LN-GONE2345'), B, 'a league this device does not hold falls through to one it does');
+      W.localStorage.removeItem(H.LEAGUE_KEY(A));
+      arm();
+      eq(W.lnOpenLatest(A), B, 'and a record naming data that is gone falls through rather than toasting at somebody signing in');
+    } finally {
+      [A, B].forEach((id) => W.localStorage.removeItem(H.LEAGUE_KEY(id)));
+      H.__plant(null); H.__plant(FIXTURE); W.setTab('standings');
+      if (wasDevice === null) W.localStorage.removeItem(H.DEVICE_KEY); else W.localStorage.setItem(H.DEVICE_KEY, wasDevice);
+    }
   });
   t('the welcome card is ONE measure and ONE colour', () => {
     const card = W.document.querySelector('#welcomeCard .empty');

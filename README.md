@@ -72,6 +72,11 @@ can **Share** it from the League tab, and from then on:
   of the key in this browser's local storage, under a key of its own, so it can show it to you —
   what it never does is put it inside the league, where it would ride into every backup, every
   share link and every member's copy.
+- **Signing back in opens your league — there is no ID to type twice.** Your Google account
+  carries the leagues you are in, so a new phone, or a browser that has been cleared, needs only
+  **Sign In** on the welcome screen: the leagues come back, and the app opens on the one you were
+  in last. *Join a League* is for a league you have not joined yet. Signing in never moves you off
+  a league you already have open.
 - **Every change is a transaction.** Two admins scoring two matches at once both land; the
   same match scored on two phones resolves to the later tap. Offline, a change is saved on the
   phone and goes up on its own when the network is back.
