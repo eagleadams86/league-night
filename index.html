@@ -1545,7 +1545,10 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
       <h2>Teams
         <span class="spacer"></span>
         <span class="pill" id="teamCount"></span>
-        <button type="button" class="btn-small no-print no-edit" id="addTeamBtn">＋ Add Team</button>
+        <!-- No .no-edit: this one is shown from JS, because a member may create
+           a team while Team Setup is open. #addPlayerBtn above KEEPS it —
+           creating a player is creating a person, and that is an admin's. -->
+      <button type="button" class="btn-small no-print" id="addTeamBtn" hidden>＋ Add Team</button>
       </h2>
       <div id="teamsWrap"></div>
     </div>
@@ -1810,7 +1813,9 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
 <dialog id="teamDialog" aria-labelledby="teamTitle">
   <h2 id="teamTitle">Team</h2>
   <div class="field"><label for="tm_name">Name</label><input type="text" id="tm_name" maxlength="40" autocomplete="off"></div>
-  <fieldset class="formpanel"><legend>Players</legend><div id="tm_members"></div></fieldset>
+  <fieldset class="formpanel"><legend>Players</legend>
+    <p class="hint" id="tm_membersNote"></p>
+    <div id="tm_members"></div></fieldset>
   <p class="warn-line" id="teamWarn" role="status"></p>
   <div class="row-actions">
     <button type="button" class="danger" id="teamDelete">Delete</button>
@@ -3536,6 +3541,34 @@ function myEntry() { return state ? device.leagues.find((l) => l.id === state.le
 function myRole() { const e = myEntry(); return e ? e.role : 'viewer'; }
 function canEdit() { return !!state && !viewOnly && myRole() !== 'viewer'; }
 function isOwner() { return !!state && !viewOnly && myRole() === 'owner'; }
+/* ── Team Setup ────────────────────────────────────────────────────────────
+   The one window in which a member who is not an admin may change something
+   in the league itself: the teams, and their own place in one.
+
+   A SECOND predicate, and never a widening of canEdit(). canEdit() has some
+   fifty call sites and gates every result in the app; a predicate that becomes
+   true in more places than it used to is a bug nobody can see. Everything this
+   turns on is turned on from JS, by name, one control at a time.
+
+   What the SERVER guarantees is narrower than what this gates. The rules
+   compare whole lists, so they can say "no result, fixture, season, bracket or
+   league setting changed" and cannot say WHICH player moved — a member who
+   went digging could rename or move somebody else while setup is open. The UI
+   is what keeps it to teams and their own membership. Charles chose that trade
+   knowingly; CLAUDE.md records it. */
+let setupOf = null;          /* { id, on } — the league document's `setup` field */
+function setupOpen() { return !!(state && setupOf && setupOf.id === state.league.id && setupOf.on); }
+function canSetUp() {
+  return canEdit()
+    || (!!state && !viewOnly && setupOpen() && isCloudLeague() && !!cloudUser && !!meDoc);
+}
+/* The player this account HOLDS — confirmed by the roster, never merely asked
+   for. Null until both documents agree. */
+function myClaim() {
+  const me = cloudUser ? cloudUser.uid : null;
+  const mine = me ? members.find((m) => m.uid === me) : null;
+  return (mine && mine.claim) || null;
+}
 
 /* Stamps an entity as changed now. Every edit goes through here so the merge
    can tell which copy is newer. */
@@ -4128,6 +4161,10 @@ function render() {
   /* Every edit surface goes for a viewer and in a shared view. */
   const edit = canEdit();
   document.documentElement.toggleAttribute('data-readonly', !edit);
+  /* A member sorting the teams out is read-only AND setting up: the stylesheet
+     goes on hiding every .no-edit surface, and the few controls this phase
+     turns on are shown from JS, one at a time, by name. */
+  document.documentElement.toggleAttribute('data-setup', !edit && canSetUp());
 }
 
 function renderLeaguePicker() {
@@ -4356,6 +4393,7 @@ function renderPlayers() {
       + '<div class="plist">' + retired.map(row).join('') + '</div></details>' : '');
   $('playerCount').textContent = plural(active.length, 'player');
   $('teamsCard').hidden = !isTeams();
+  $('addTeamBtn').hidden = !canSetUp();
   if (isTeams()) {
     const teams = state.teams.slice().sort((a, b) => a.name.localeCompare(b.name));
     $('teamCount').textContent = plural(teams.length, 'team');
@@ -4525,7 +4563,11 @@ function suggestSeasonName() {
 $('addSave').addEventListener('click', () => {
   /* A viewer's add would land locally and be refused by the cloud — the
      buttons are hidden for them, and this is the guard behind the buttons. */
-  if (!canEdit()) { $('addDialog').close(); toast('Only an admin can change the league'); return; }
+  if (!(addKind === 'team' ? canSetUp() : canEdit())) {
+    $('addDialog').close();
+    toast(addKind === 'team' ? 'Teams are an admin’s once Team Setup is closed' : 'Only an admin can change the league');
+    return;
+  }
   const name = $('ad_name').value.trim().slice(0, NAME_MAX);
   if (!name) { $('addWarn').textContent = 'Give it a name.'; $('ad_name').focus(); return; }
   let note = '';
@@ -4647,16 +4689,25 @@ function curTeam() { return teamCtx && state ? teamById(teamCtx) : null; }
 function openTeam(id) {
   const t = teamById(id);
   if (!t) return;
-  if (!canEdit()) { openSide(id); return; }
+  /* A member gets the real editor while Team Setup is open, and the read-only
+     sheet the rest of the time. openPlayer is deliberately NOT changed to
+     match: a member may arrange the teams, never edit a person. */
+  if (!canEdit() && !canSetUp()) { openSide(id); return; }
+  const mine = canEdit() ? null : myClaim();
   teamCtx = id;
   $('teamTitle').textContent = t.name;
   $('tm_name').value = t.name;
   const players = state.players.filter((p) => p.active).sort((a, b) => a.name.localeCompare(b.name));
   $('tm_members').innerHTML = players.length ? players.map((p) => {
     const other = p.teamId && p.teamId !== t.id ? teamById(p.teamId) : null;
-    return '<label class="checkline"><input type="checkbox" data-member="' + esc(p.id) + '"' + (p.teamId === t.id ? ' checked' : '') + '>'
+    return '<label class="checkline"><input type="checkbox" data-member="' + esc(p.id) + '"' + (p.teamId === t.id ? ' checked' : '')
+      + (mine && p.id !== mine ? ' disabled' : '') + '>'
       + '<span>' + esc(p.name) + (other ? ' <span class="hint">(in ' + esc(other.name) + ')</span>' : '') + '</span></label>';
   }).join('') : '<p class="hint">Add players first, then put them in this team.</p>';
+  /* A member sees the whole list so they can tell who is in — and can only
+     move the one row that is them. */
+  $('tm_membersNote').textContent = mine ? 'You can put yourself in or take yourself out. An admin moves anybody else.'
+    : (canEdit() ? '' : 'Say which player you are on the Players tab, and you can put yourself in a team.');
   $('teamWarn').textContent = '';
   openModal($('teamDialog'));
 }
@@ -4673,6 +4724,9 @@ $('tm_members').addEventListener('change', (e) => {
   const box = e.target.closest('[data-member]');
   const t = curTeam();
   if (!box || !t) return;
+  /* The guard behind the disabled control, in the addSave idiom: a member may
+     move exactly one player, and it is them. */
+  if (!canEdit() && box.dataset.member !== myClaim()) { box.checked = !box.checked; return; }
   const p = playerById(box.dataset.member);
   if (!p) return;
   if (box.checked) {
@@ -6227,6 +6281,7 @@ window.lnOwner = (id, uid) => {
 };
 window.lnMe = (doc) => { meDoc = doc; renderMembers(); };
 window.lnMembers = (id, list) => { membersFor = id; members = reconcileClaims(list, roster); renderMembers(); render(); };
+window.lnSetup = (id, on) => { setupOf = { id: id, on: !!on }; render(); };
 window.lnRoster = (id, list) => { rosterFor = id; roster = list; reconcileClaims(members, roster); renderMembers(); render(); };
 window.lnRequests = (id, list) => { requestsFor = id; requests = list; renderRequests(); };
 window.lnRoster.get = () => roster;
@@ -7422,12 +7477,27 @@ async function adoptCloudLeague(id, data, makeCurrent) {
   if (Number(data.schema || 1) > window.lnSchema()) { window.lnStoreVerbatim(id, data.state); window.lnHalt(data.schema); return; }
   const role = await roleIn(id, data);
   window.lnOwner(id, data.owner);
+  window.lnSetup(id, data.setup === true);
   window.lnRegisterCloud({ id: id, name: data.name, game: data.game, role: role, rev: Number(data.rev) || 0, state: data.state, current: !!makeCurrent });
 }
 
 /* ── Share: this device's league goes up, and this account owns it ───────── */
+/* Twenty shared leagues per account. CLIENT-SIDE, and honestly so: it lives
+   in this browser and a determined account can step around it with a script.
+   It is a speed bump against an accident and a bored afternoon, not a control
+   — the control is the budget alert on the Firebase project, and the README
+   says both of those things in the same words. */
+const LEAGUES_MAX = 20;
+function tooManyLeagues() {
+  const n = (window.lnDevice().leagues || []).filter((l) => l.cloud).length;
+  if (n < LEAGUES_MAX) return false;
+  window.toast('That is ' + LEAGUES_MAX + ' shared leagues on this account — forget one first');
+  return true;
+}
+
 async function shareLeague() {
   if (!(await requireSignIn())) return false;
+  if (tooManyLeagues()) return false;
   const st = window.lnGet();
   if (!st || !window.lnIsLeagueId(st.league.id)) { window.toast('The demo cannot be shared — create a league of your own.'); return false; }
   const id = st.league.id;
@@ -7446,7 +7516,11 @@ async function shareLeague() {
       if (k.exists() && k.data().key) key = k.data().key;
       else await F.setDoc(keyRef(id), { key: key });
     } else {
-      await F.setDoc(leagueRef(id), { state: forCloud(st), rev: 0, owner: user.uid, game: st.league.game,
+      /* A brand-new league starts with Team Setup OPEN: the teams are the
+         first thing anybody wants to sort out, and nobody has played yet.
+         Only on CREATE — the repair branch above must never flip a switch an
+         admin has already set. */
+      await F.setDoc(leagueRef(id), { setup: true, state: forCloud(st), rev: 0, owner: user.uid, game: st.league.game,
                                       name: st.league.name, schema: window.lnSchema(), updatedAt: Date.now() });
       await F.setDoc(keyRef(id), { key: key });
     }
@@ -7465,6 +7539,7 @@ async function shareLeague() {
 /* ── Join: the League ID opens a league, the Admin Key runs it ───────────── */
 async function joinLeague(id, key) {
   if (!(await requireSignIn())) return 'no-signin';
+  if (tooManyLeagues()) return 'error';
   let snap;
   try { snap = await F.getDoc(leagueRef(id)); }
   catch (e) { setSyncError(e); return 'error'; }
@@ -7517,6 +7592,8 @@ async function removeMember(uid) {
      who is no longer there. The queue shows such a one as an orphan too —
      this is the tidy path, that is the backstop. */
   try { await F.deleteDoc(requestRef(id, uid)); } catch (e) { /* there may be none */ }
+  const held = (window.lnRoster.get() || []).find((r) => r.uid === uid);
+  if (held) { try { await F.deleteDoc(rosterRef(id, held.playerId)); } catch (e) { /* already gone */ } }
   try { await F.deleteDoc(memberRef(id, uid)); return true; }
   catch (e) { setSyncError(e); return false; }
 }
@@ -7547,10 +7624,58 @@ async function fetchKey() {
   catch (e) { /* not the owner, or offline */ }
   return null;
 }
-async function linkPlayer(playerId) {
+/* ── Claiming a player ─────────────────────────────────────────────────────
+   Three writes, and the ORDER is the design. Every intermediate state has to
+   read as "not claimed" rather than as a lie, and the roster rule requires the
+   member document to already name the player, so:
+
+     (a) let go of the row I hold — I now hold nothing and my member document
+         still names the old player, so the two disagree and I read unclaimed;
+     (b) point my member document at the new one — no row exists for it, so
+         the two disagree and I still read unclaimed;
+     (c) take the row. Only this makes a claim, and only this can be refused.
+
+   A refusal is somebody else having taken it between the draw and the tap: a
+   RACE, not a fault, so it puts (a) and (b) back and says so rather than
+   raising the "Not syncing" banner. Renamed from linkPlayer deliberately —
+   nothing about this is a single field any more. */
+async function claimPlayer(next) {
   const id = window.lnLeagueId();
-  try { await F.updateDoc(memberRef(id, user.uid), playerId ? { playerId: playerId } : { playerId: F.deleteField() }); return true; }
-  catch (e) { setSyncError(e); return false; }
+  const was = (meDocLocal && meDocLocal.playerId) || null;
+  if (next === was) return true;
+  try {
+    if (was) await F.deleteDoc(rosterRef(id, was));
+    await F.updateDoc(memberRef(id, user.uid), next ? { playerId: next } : { playerId: F.deleteField() });
+    if (next) await F.setDoc(rosterRef(id, next), { uid: user.uid, at: Date.now() });
+    return true;
+  } catch (e) {
+    try {
+      await F.updateDoc(memberRef(id, user.uid), was ? { playerId: was } : { playerId: F.deleteField() });
+      if (was) await F.setDoc(rosterRef(id, was), { uid: user.uid, at: Date.now() });
+    } catch (e2) { /* they lost the old one too; the roster listener will say so */ }
+    if (String((e && e.code) || '').indexOf('permission-denied') !== -1) {
+      window.toast('Somebody else is down as that player');
+      return false;
+    }
+    setSyncError(e); return false;
+  }
+}
+
+/* An admin saying who somebody is. Same order and the same reason: the roster
+   rule checks the CLAIMANT's member document, so it must be written first or
+   the create is refused. The old row goes whether it was theirs or not — an
+   admin may delete any of them. */
+async function assign(uid, playerId) {
+  const id = window.lnLeagueId();
+  const held = window.lnRoster.get() || [];
+  try {
+    for (const r of held.filter((x) => x.uid === uid || (playerId && x.playerId === playerId))) {
+      await F.deleteDoc(rosterRef(id, r.playerId));
+    }
+    await F.updateDoc(memberRef(id, uid), playerId ? { playerId: playerId } : { playerId: F.deleteField() });
+    if (playerId) await F.setDoc(rosterRef(id, playerId), { uid: uid, at: Date.now() });
+    return true;
+  } catch (e) { setSyncError(e); return false; }
 }
 /* What THIS account says about its own night. It goes on this account's own
    member document and never into the league, which is why it needs no admin:
@@ -7578,7 +7703,7 @@ async function setAvail(dateISO, answer) {
 async function fileRequest(req) {
   const id = window.lnLeagueId();
   const doc = { at: Date.now() };
-  ['playerId', 'name', 'teamId', 'teamName'].forEach((k) => { if (req[k] != null && req[k] !== '') doc[k] = req[k]; });
+  ['playerId', 'name', 'teamId', 'teamName', 'claim'].forEach((k) => { if (req[k] != null && req[k] !== '') doc[k] = req[k]; });
   try { await F.setDoc(requestRef(id, user.uid), doc); return true; }
   catch (e) { setSyncError(e); return false; }
 }
@@ -7594,6 +7719,7 @@ async function leaveLeague(id) {
      or not the member document still exists, but leaving nothing behind is
      cheaper than relying on that. */
   try { await F.deleteDoc(requestRef(id, user.uid)); } catch (e) { /* there may be none */ }
+  if (meDocLocal && meDocLocal.playerId) { try { await F.deleteDoc(rosterRef(id, meDocLocal.playerId)); } catch (e) { /* already gone */ } }
   try { await F.deleteDoc(memberRef(id, user.uid)); await noteUserLeague(id, '', '', true); } catch (e) { /* best effort */ }
 }
 /* Deleting, as the owner: everything under the league and the league itself,
@@ -7609,9 +7735,11 @@ async function deleteLeague(id) {
        request undeletable for good — the trap the members list already
        records. Nothing else may be added under a league without this line. */
     const reqs = await F.getDocs(F.collection(db, 'leagues', id, 'requests'));
+    const rost = await F.getDocs(F.collection(db, 'leagues', id, 'roster'));
     const batch = F.writeBatch(db);
     members.forEach((d) => batch.delete(d.ref));
     reqs.forEach((d) => batch.delete(d.ref));
+    rost.forEach((d) => batch.delete(d.ref));
     batch.delete(keyRef(id));
     batch.delete(claimRef(id));
     batch.delete(leagueRef(id));
@@ -7684,6 +7812,7 @@ function listenTo(id) {
     /* WHO owns it, and not merely whether we do: the Members card names the
        owner, and every other member would otherwise see them as an admin. */
     window.lnOwner(id, r.owner);
+    window.lnSetup(id, r.setup === true);
     window.lnRemote(id, r.state, Number(r.rev) || 0, r.owner === user.uid);
   }, onListenError));
   unsubs.push(F.onSnapshot(memberRef(id, user.uid), (s) => {
@@ -7751,7 +7880,8 @@ window.cloudOpen = (id) => {
 /* ── Pushing: a transaction that merges, never a blind write ──────────────── */
 async function pushNow() {
   const entry = window.lnEntry();
-  if (!user || !entry || !entry.cloud || entry.role === 'viewer') return;
+  if (!user || !entry || !entry.cloud) return;
+  if (entry.role === 'viewer') return pushSetup(entry);
   const id = entry.id;
   const mine = forCloud(window.lnGet());
   const seq = window.lnEditSeq();
@@ -7770,11 +7900,65 @@ async function pushNow() {
   updateUI();
   if (listening !== id) listenTo(id);
 }
+
+/* ── A member's push, while Team Setup is open ─────────────────────────────
+   Narrower than pushNow on purpose, and NOT pushNow with a wider gate.
+
+   It sends the CLOUD's own state with only the players, the teams and the
+   tombstones replaced — lnSetupState builds that, so the rules' diff clause
+   passes because the client meant it and not because a merge happened to
+   agree. And it writes exactly `state`, `rev` and `updatedAt`: the same three
+   words the member clause in firestore.rules names, in both files, where a
+   reader can check them against each other. pushNow also writes `name` and
+   `schema`, which that clause forbids.
+
+   The setup check is repeated against the copy read INSIDE the transaction:
+   an admin can close the switch between the tap and the write, and a refusal
+   the reader can read beats a permission-denied they cannot. */
+async function pushSetup(entry) {
+  const id = entry.id;
+  const mine = forCloud(window.lnGet());
+  const seq = window.lnEditSeq();
+  const out = await F.runTransaction(db, async (tx) => {
+    const snap = await tx.get(leagueRef(id));
+    if (!snap.exists()) throw Object.assign(new Error('league gone'), { code: 'ln/gone' });
+    const cloud = snap.data();
+    if (Number(cloud.schema || 1) > window.lnSchema()) throw Object.assign(new Error('newer build'), { code: 'ln/newer' });
+    if (cloud.setup !== true) throw Object.assign(new Error('setup closed'), { code: 'ln/setup-closed' });
+    const next = forCloud(window.lnSetupState(mine, cloud.state));
+    tx.update(leagueRef(id), { state: next, rev: cloud.rev + 1, updatedAt: Date.now() });
+    return { merged: next, rev: cloud.rev + 1 };
+  });
+  window.lnAdopt(id, out.merged, out.rev, seq);
+  clearSyncError();
+  updateUI();
+  if (listening !== id) listenTo(id);
+}
+
+/* The switch itself. Shaped like transferOwner because the rules demand
+   rev + 1 of every update; permitted by the existing owner and admin
+   branches, so it needs no clause of its own. */
+async function setSetup(on) {
+  const id = window.lnLeagueId();
+  try {
+    await F.runTransaction(db, async (tx) => {
+      const snap = await tx.get(leagueRef(id));
+      if (!snap.exists()) throw Object.assign(new Error('gone'), { code: 'ln/gone' });
+      tx.update(leagueRef(id), { setup: !!on, rev: snap.data().rev + 1, updatedAt: Date.now() });
+    });
+    window.lnSetup(id, !!on);
+    return true;
+  } catch (e) { setSyncError(e); return false; }
+}
+
 function pushOrKeep() {
   pushNow().catch((e) => {
     const code = String((e && e.code) || '');
     if (code === 'ln/gone') { window.lnCloudGone(window.lnLeagueId()); return; }
     if (code === 'ln/newer') { window.lnHalt(9999); return; }
+    /* Not a fault: an admin closed the switch while somebody was arranging
+       the teams. Their work stays on the device and the banner stays down. */
+    if (code === 'ln/setup-closed') { window.toast('Team Setup was closed while you were editing — your changes stay on this device'); return; }
     setSyncError(e);
     /* Left dirty: the next edit, the next `online`, the next look at the
        page, or the minute timer tries again. */
@@ -7804,8 +7988,9 @@ window.lnCloud = {
   signedIn: () => !!user,
   signIn: requireSignIn,
   share: shareLeague, join: joinLeague, claim: claimAdmin, setRole: setRole, removeMember: removeMember,
-  transferOwner: transferOwner, rotateKey: rotateKey, fetchKey: fetchKey, linkPlayer: linkPlayer,
+  transferOwner: transferOwner, rotateKey: rotateKey, fetchKey: fetchKey, claimPlayer: claimPlayer,
   setAvail: setAvail, fileRequest: fileRequest, clearRequest: clearRequest,
+  setSetup: setSetup, assign: assign,
 };
 </script>
 
