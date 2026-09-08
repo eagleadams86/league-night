@@ -1292,7 +1292,8 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
   .lineup .names { color: var(--text-secondary); font-size: var(--fs-xs); }
   .availrow { display: flex; align-items: center; gap: var(--sp-4); flex-wrap: wrap; margin-top: var(--sp-3); }
   .availrow .aname { flex: 1 1 140px; min-width: 0; }
-  .availrow .row { flex: 1 1 240px; margin: 0; }
+  .availrow .row { flex: 0 1 auto; margin: 0; gap: var(--sp-3); }
+  .availrow .btn-small.on { background: var(--btn-bg); color: var(--btn-text); border-color: var(--btn-bg); }
   .legstats { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: var(--sp-3); margin-top: var(--sp-4); }
   .legstats .label { grid-column: 1 / -1; }
   .legstats label { display: flex; flex-direction: column; font-size: var(--fs-xs); color: var(--text-secondary); gap: 2px; }
@@ -4937,7 +4938,11 @@ function renderLineup(m) {
     return '<div class="lside"><span class="label">' + esc(team ? team.name : nameOf(m[sd])) + '</span>'
       + (edit ? '<div class="entrants">' + rows.map(one).join('') + '</div>'
         : '<div class="names">' + (picked.length ? picked.map(one).join(' · ') : 'nobody is down') + '</div>')
-      + (edit ? '<select data-lineup-add="' + esc(sd) + '"><option value="">Add someone from another team…</option>' + opts + '</select>' : '')
+      /* NAMED: a select has no placeholder attribute to be mistaken for a
+         label, and a first option is not one either — axe called this
+         critical, and it is the only control in the block without a <label>. */
+      + (edit ? '<select data-lineup-add="' + esc(sd) + '" aria-label="Add somebody to the card for '
+        + esc(team ? team.name : nameOf(m[sd])) + '"><option value="">Add someone from another team…</option>' + opts + '</select>' : '')
       + '</div>';
   };
   box.innerHTML = '<div class="lineup"><span class="label">Playing Tonight'
@@ -4957,9 +4962,12 @@ function renderAvail(m) {
       + '<p class="hint">Set a date below, and players can say if they are in.</p></div>';
     return;
   }
-  const btns = (pid, now, attr) => '<div class="row">' + AVAIL_ANSWERS.map((k) => '<button type="button" class="side-btn'
-    + (now === k ? ' on' : '') + '" ' + attr + '="' + esc(pid) + '" data-answer="' + k + '" aria-pressed="' + (now === k) + '">'
-    + esc(AVAIL_LABEL[k]) + '</button>').join('') + '</div>';
+  /* The member's own three are the big ones — that is the answer the block
+     exists to collect. An admin's note beside a name is a small control, or
+     three full-width buttons per player wrap two lines deep down the list. */
+  const btns = (pid, now, attr, small) => '<div class="row">' + AVAIL_ANSWERS.map((k) => '<button type="button" class="'
+    + (small ? 'btn-small' : 'side-btn') + (now === k ? ' on' : '') + '" ' + attr + '="' + esc(pid) + '" data-answer="' + k
+    + '" aria-pressed="' + (now === k) + '">' + esc(AVAIL_LABEL[k]) + '</button>').join('') + '</div>';
   let html = '<div class="avail"><span class="label">Can You Make It?</span>';
   /* A VIEWER may use these, and they are the only controls in the app that
      may: what a player says about their own night is theirs to say, and it
@@ -4981,7 +4989,7 @@ function renderAvail(m) {
         return '<div class="availrow"><span class="aname">' + esc(p.name)
           + (a.answer ? ' <span class="hint">' + esc(AVAIL_WORD[a.answer]) + ' — ' + (a.source === 'player' ? 'said so' : 'your note') + '</span>'
             : ' <span class="hint">has not said</span>') + '</span>'
-          + btns(p.id, a.source === 'admin' ? a.answer : null, 'data-note-avail') + '</div>';
+          + btns(p.id, a.source === 'admin' ? a.answer : null, 'data-note-avail', true) + '</div>';
       }).join('');
   }
   box.innerHTML = html + '</div>';

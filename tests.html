@@ -51,7 +51,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 223;
+const EXPECTED = 224;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -2426,6 +2426,24 @@ function define() {
     } finally {
       W.lnMembers(st.league.id, []); W.lnCloudUser(null); H.__plant(FIXTURE);
     }
+  });
+
+  t('every control on the card has a name a screen reader can read', () => {
+    const D = W.document;
+    H.__plant(H.buildDemoTeams());
+    try {
+      D.getElementById('tab-matches').click();
+      D.querySelector('#matchesWrap .mrow').click();
+      const named = (el) => !!(el.getAttribute('aria-label')
+        || (el.id && D.querySelector('label[for="' + el.id + '"]'))
+        || el.closest('label'));
+      [...D.querySelectorAll('#mtLineup select, #mtLineup input, #mtAvail button')].forEach((el) => {
+        /* A <select> has no placeholder to be mistaken for a label and its
+           first option is not one either — axe called this critical. */
+        ok(named(el) || el.textContent.trim(), 'unnamed control on the card', el.outerHTML.slice(0, 90));
+      });
+      D.getElementById('matchDialog').close();
+    } finally { H.__plant(FIXTURE); }
   });
 
   t('a viewer sees the card, cannot change it, and can still say if they are in', () => {
