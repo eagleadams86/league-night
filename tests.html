@@ -51,7 +51,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 251;
+const EXPECTED = 254;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -1297,6 +1297,72 @@ function define() {
     ok(gets.length >= 4, 'gets found: ' + gets.length);
     gets.forEach((p) => ok(r.indexOf('exists(' + p + ')') !== -1, 'unguarded get on ' + p));
     ok(!/match \/\{document=\*\*\}/.test(r), 'no catch-all');
+  });
+  /* The LAST module tag: a comment in the classic script names the tag in prose,
+     and a match from there would read the wrong block. */
+  const moduleSrc = () => {
+    const at = APP_SRC.lastIndexOf('<script type="module">');
+    return at === -1 ? '' : APP_SRC.slice(at, APP_SRC.indexOf('</scr' + 'ipt>', at));
+  };
+  /* ── The sign-in popup, and the gesture that opens it (2026-09-08) ────────
+     Charles got a blank accounts.google.com on his phone that never came back,
+     with eleven dead tabs behind it. Both causes were things this app had that
+     its three siblings did not, so both are pinned here. */
+  t('every door to a sign-in warms the SDK, not just the header button', () => {
+    const m = stripComments(moduleSrc());
+    const list = (m.match(/const SIGNIN_DOORS = \[([^\]]*)\]/) || [])[1] || '';
+    const doors = (list.match(/'([^']+)'/g) || []).map((x) => x.replace(/'/g, ''));
+    ok(doors.length >= 6, 'the list exists', JSON.stringify(doors));
+    /* A typo'd id warms nothing and says nothing about it. */
+    doors.forEach((id) => ok(W.document.getElementById(id), 'no element with id ' + id));
+    /* Every control that can reach a sign-in has to be on it. The three module
+       calls that sign in are share, join and claim; these are the controls the
+       classic script drives them from. */
+    ['syncBtn', 'shareLeagueBtn', 'keyClaimBtn'].forEach((id) =>
+      ok(doors.indexOf(id) > -1, id + ' can sign in and is not warmed'));
+    ok(doors.indexOf('joinBtn') > -1 && doors.indexOf('firstJoin') > -1, 'both Join buttons');
+    ok(doors.indexOf('jn_id') > -1, 'and the join form itself, which is what a #join= link opens on');
+    ok(/for \(const ev of \['pointerenter', 'pointerdown', 'focus'\]\)/.test(m),
+       'on the events that fire BEFORE click, which is the whole point');
+    /* And nothing wider: the privacy page says Google is not fetched until the
+       reader reaches for one of these. */
+    ok(!/document\.addEventListener\('pointerdown', armSync/.test(m) && !/body\.addEventListener\([^)]*armSync/.test(m),
+       'warming the whole page would make the privacy page untrue');
+  });
+  t('the popup opens inside the gesture, or it does not open at all', () => {
+    const m = stripComments(moduleSrc());
+    /* THE WARM PATH DOES NOT AWAIT. An async body runs synchronously to its
+       first `await`, so with the token client in hand the popup opens inside
+       the click that asked for it. This awaited unconditionally, which is the
+       one line here that was not Golf Handicap's. */
+    ok(/async function requireSignIn\(\)[\s\S]*?if \(!tokenClient\) \{\s*try \{ await ensureInit\(\);/.test(m),
+       'ensureInit is awaited only when there is no token client yet');
+    const body = (m.match(/async function requireSignIn\(\)[\s\S]*?\n\}/) || [''])[0];
+    const guard = body.indexOf('if (!tokenClient) {');
+    const close = body.indexOf('\n  }', guard);
+    const after = body.slice(close);
+    ok(after.indexOf('requestAccessToken') > -1, 'the popup is opened after that guard');
+    ok(!/await/.test(after.slice(0, after.indexOf('requestAccessToken'))),
+       'and nothing is awaited between the guard and the popup');
+    /* A window opened without a live activation is not blocked on iOS — it
+       opens as a tab with no opener, which looks like it worked and never
+       comes back. Say so instead. */
+    ok(/function popupIsAffordable\(\)[\s\S]*?navigator\.userActivation/.test(m), 'the activation is asked about');
+    ok(/return !act \|\| act\.isActive;/.test(m), 'and an older browser, which cannot answer, keeps the old behaviour');
+    ok(body.indexOf('popupIsAffordable()') < body.indexOf('requestAccessToken'), 'before the popup, not after it');
+    ok(/function onClick\(\) \{/.test(m) && !/async function onClick/.test(m),
+       'the button hands straight over rather than putting a microtask in the way');
+  });
+  t('a sign-in that does not come back says so', () => {
+    const m = stripComments(moduleSrc());
+    ok(/visibilitychange[\s\S]{0,200}?signInWaiters\.length/.test(m),
+       'coming back to the page with a sign-in still outstanding is the moment to speak');
+    const blk = (m.match(/document\.addEventListener\('visibilitychange'[\s\S]*?\n\}\);/) || [''])[0];
+    ok(/if \(user \|\| !signInWaiters\.length\) return;/.test(blk),
+       'and it re-asks at fire time, so a popup that merely took its time is not called a failure');
+    ok(!/failWaiters\(\)/.test(blk),
+       'the waiters are left alone: a late arrival is still a sign-in, not something a toast cancelled');
+    ok(/\}, 3000\)/.test(blk), 'three seconds of grace for the credential round trip');
   });
   t('the sync module is Golf Handicap’s doorway, and never a blind write', () => {
     /* The LAST module tag: a comment in the classic script names the tag in

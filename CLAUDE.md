@@ -234,6 +234,21 @@ showed it.
   flat three and never showed the finish row, so a checkout scored that way lied about the darts
   it took. Anything new on the keypad routes through the `total === rem && canFinish` check.
 
+- **THE SIGN-IN POPUP OPENS INSIDE THE GESTURE OR IT DOES NOT COME BACK** (2026-09-08). This app
+  signs in from FIVE controls where its three siblings sign in from one — the header button, which
+  is the only thing `armSync` was wired to. Press an unwarmed one on a phone and the SDK import is
+  still in flight when `requestAccessToken()` runs, so the activation is gone; iOS Safari opens
+  that as a plain new TAB with no opener, Google completes the sign-in, finds nobody to hand the
+  token to, and leaves a blank `accounts.google.com` while the app waits for ever. Charles hit it
+  with eleven dead tabs behind him. Three rules came out of it, and adding a sixth door means
+  revisiting all three: every control that can reach `share`, `join` or `claim` goes in
+  `SIGNIN_DOORS`; `requireSignIn()` awaits `ensureInit()` ONLY behind `if (!tokenClient)`, so the
+  warm path reaches the popup with no `await` in front of it (an async body runs synchronously to
+  its first one); and when the activation has gone anyway, `popupIsAffordable()` says so and asks
+  for a second press rather than opening a window that cannot return. **Warming stays on those
+  controls and never on `document` or `body`** — the privacy page says Google is not fetched until
+  the reader reaches for one of them, and a page-wide listener would make that false.
+
 ## Things a tidy-up would break
 
 - **`memberForPlayer` reads `claim` and NEVER `playerId`.** `.find` on `playerId` cannot express

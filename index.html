@@ -7468,14 +7468,44 @@ function shouldBootSync() {
 }
 let initPromise = null;
 function ensureInit() { if (!initPromise) initPromise = init(); return initPromise; }
-function armSync() { ensureInit().catch(() => { /* onClick reports it */ }); }
+function armSync() { ensureInit().catch(() => { /* the click that follows reports it */ }); }
+
+/* ── EVERY DOOR TO A SIGN-IN IS WARMED, not just the header button ──────────
+   This is where League Night differs from its three siblings and where it went
+   wrong. They sign in from exactly ONE control — the header button — and that
+   is the one thing armSync was wired to. This app signs in from five: the
+   header button, Share This League, both Join buttons, Become an Admin and the
+   join form itself.
+
+   Press an unwarmed one on a phone and the SDK import is still in flight, so
+   requestAccessToken() lands seconds after the tap with the user activation
+   long gone. iOS Safari opens that as a plain new TAB with no opener, Google
+   completes the sign-in, finds nobody to hand the token to, and leaves a blank
+   accounts.google.com sitting there while the app waits for ever. Charles hit
+   it on 2026-09-08 with eleven dead tabs to show for it.
+
+   Warming is still the READER asking for Google, which is what keeps the
+   privacy page's sentence true: every id below is a control whose whole purpose
+   is to share or join a league, and reaching for one is a deliberate act. The
+   page still fetches nothing from Google for someone who never touches one.
+   `pointerenter` for a mouse, `focus` for the keyboard, `pointerdown` for a
+   thumb — all of which fire BEFORE click, which is the entire point. */
+const SIGNIN_DOORS = ['syncBtn', 'shareLeagueBtn', 'joinBtn', 'firstJoin', 'keyClaimBtn', 'jn_id', 'jn_key'];
+function armDoors() {
+  for (const id of SIGNIN_DOORS) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    for (const ev of ['pointerenter', 'pointerdown', 'focus'])
+      el.addEventListener(ev, armSync, { once: true, passive: true });
+  }
+}
 
 const cloudOn = !!(FIREBASE_CONFIG && GOOGLE_CLIENT_ID && !inTestHarness && !window.lnViewOnly);
 document.documentElement.toggleAttribute('data-cloud', cloudOn);
 if (cloudOn) {
   btn.hidden = false;
   if (shouldBootSync()) ensureInit().catch((e) => { console.warn('Sync unavailable:', e); btn.hidden = true; });
-  else for (const ev of ['pointerenter', 'pointerdown', 'focus']) btn.addEventListener(ev, armSync, { once: true, passive: true });
+  else armDoors();
   btn.addEventListener('click', onClick);
 } else {
   btn.hidden = true;
@@ -7537,6 +7567,28 @@ async function init() {
 }
 
 function failWaiters() { const w = signInWaiters; signInWaiters = []; w.forEach((r) => r(null)); }
+
+/* ── A SIGN-IN THAT DOES NOT COME BACK SAYS SO ─────────────────────────────
+   The popup is a separate window — a TAB on a phone — and when it fails to
+   hand the token over there is nothing in it to see and nothing here to hear:
+   the reader is left on a blank accounts.google.com, comes back to the app by
+   hand, and finds it exactly as they left it, with the promise above waiting
+   out its two minutes in silence. That is what Charles saw on 2026-09-08, with
+   eleven of those tabs behind him.
+
+   So: when the page is looked at again with a sign-in still outstanding and no
+   account to show for it, say what happened. Three seconds of grace first,
+   because a popup that DID work closes itself, hands the tab back, and then
+   still has a signInWithCredential round trip to finish — and the waiters are
+   deliberately left alone, so a late arrival is still a sign-in rather than
+   something this message has cancelled. */
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || user || !signInWaiters.length) return;
+  setTimeout(() => {
+    if (user || !signInWaiters.length) return;
+    window.toast('Google didn’t come back — close its tab and press Sign In again');
+  }, 3000);
+});
 function onSignInFailed(e) {
   console.warn('sign-in error', e);
   const s = String((e && (e.type || e.code || e.message)) || e || '');
@@ -7548,12 +7600,50 @@ function onSignInFailed(e) {
   failWaiters();
 }
 
+/* THE POPUP OPENS INSIDE THE GESTURE OR IT DOES NOT OPEN AT ALL.
+   requestAccessToken() calls window.open(), and a window opened without a live
+   user activation is not merely blocked — on iOS Safari it opens as an ordinary
+   TAB severed from its opener, which is worse than blocked because it looks
+   like it worked. Google finishes the sign-in, has no opener to postMessage the
+   token to, and the reader is left on a blank accounts.google.com while the app
+   waits for a callback that can never arrive.
+
+   Two things keep the activation alive. The FIRST is that this function does
+   not await when it has nothing to wait for: an async body runs synchronously
+   up to its first `await`, so with the token client already in hand the popup
+   opens inside the very click that asked for it. It used to await ensureInit()
+   unconditionally, which is the one line in this file that is not Golf
+   Handicap's — that app guards it with `if (!tokenClient)` and always has. The
+   SECOND is armDoors() above, which starts the load on the events that fire
+   before the click, so "already in hand" is the ordinary case.
+
+   And when neither holds — a cold page, a slow phone — SAY SO rather than
+   opening a tab that cannot come back. The second press always works, because
+   everything is loaded by then. */
+function popupIsAffordable() {
+  /* Safari 16.4+ and every current engine. Undefined on an older browser, where
+     the answer is unknown and the old behaviour — try it — is the right one. */
+  const act = navigator.userActivation;
+  return !act || act.isActive;
+}
+
 /* Signs in if needed and resolves with the user, or null if they gave up. */
 async function requireSignIn() {
   if (user) return user;
   if (!cloudOn) return null;
-  try { await ensureInit(); } catch (e) { window.toast('Couldn’t reach Google — sharing is unavailable right now'); return null; }
-  if (user) return user;
+  /* NO `await` ON THE WARM PATH. See above: it is what spends the gesture. */
+  if (!tokenClient) {
+    try { await ensureInit(); } catch (e) { window.toast('Couldn’t reach Google — sharing is unavailable right now'); return null; }
+    if (user) return user;
+  }
+  if (!tokenClient) return null;          /* init resolved without one: nothing to press */
+  if (!popupIsAffordable()) {
+    /* The truth, not a hedge: the window this would open cannot come back. A
+       long pause on a confirm() before this point spends the activation the
+       same way a slow import does, and the answer is the same — press again. */
+    window.toast('Google is ready now — press it once more to sign in');
+    return null;
+  }
   return new Promise((resolve) => {
     signInWaiters.push(resolve);
     tokenClient.requestAccessToken();
@@ -7561,12 +7651,14 @@ async function requireSignIn() {
   });
 }
 
-async function onClick() {
+function onClick() {
   if (user) {
     if (confirm('Sign out? Your leagues stay on this device; shared ones stop updating until you sign in again.')) A.signOut(auth);
     return;
   }
-  await requireSignIn();
+  /* Not awaited: nothing here needs the answer, and awaiting would only put a
+     microtask between the press and the popup for no reason. */
+  requireSignIn();
 }
 
 /* ── Errors, said plainly ─────────────────────────────────────────────────── */
