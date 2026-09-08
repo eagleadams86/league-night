@@ -51,7 +51,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 249;
+const EXPECTED = 251;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -2732,6 +2732,35 @@ function define() {
     ok(reap.length > 200, 'reapMyRoster was found');
     ok(/holder && holder\.uid !== user\.uid/.test(reap), 'letting go is driven by a row that names somebody else');
     ok(/playerId: F\.deleteField\(\)/.test(reap), 'and only then');
+  });
+
+  t('a name nobody holds can be taken back, even with a row left behind', () => {
+    const src = stripComments(APP_SRC);
+    const body = (name) => {
+      const at = src.indexOf(name);
+      const end = at === -1 ? -1 : src.indexOf('\n}', at);
+      return end === -1 ? '' : src.slice(at, end);
+    };
+    const fn = body('async function claimPlayer');
+    ok(fn.length > 400, 'claimPlayer was found');
+    /* THE BUG: the roster is create-only, so a setDoc onto a row that already
+       exists is an UPDATE, and `allow update: if false` refuses it. A row left
+       behind by a race therefore made a name permanently unclaimable — and
+       said it belonged to somebody else. */
+    ok(/window\.lnHolderOf\(next\)/.test(fn), 'it asks who CONFIRMEDLY holds the name — a row alone is not a holder');
+    ok(/some\(\(r\) => r\.playerId === next\)[\s\S]{0,200}deleteDoc\(rosterRef\(id, next\)\)/.test(fn),
+      'and clears a leftover at the target before creating, or the create is refused as an update');
+    ok(fn.indexOf('lnHolderOf(next)') < fn.indexOf('deleteDoc(rosterRef(id, next))'),
+      'in that order: it never deletes a row somebody legitimately holds');
+    ok(!/Somebody else is down as that player[\s\S]{0,80}permission-denied/.test(fn),
+      'and a refusal it cannot explain does NOT claim somebody else has the name');
+  });
+
+  t('adoption stops the moment somebody says for themselves who they are', () => {
+    const src = stripComments(APP_SRC);
+    ok(/claimSettled\.add\(id\)/.test(src), 'claimPlayer settles the league');
+    ok(/if \(!user \|\| claimAdopted\.has\(id\) \|\| claimSettled\.has\(id\)\) return;/.test(src),
+      'and adoptClaim never speaks again — un-claiming raced its own listeners, and adoption put the row straight back');
   });
 
   t('a league that goes takes its roster with it, and so does a member who leaves', () => {

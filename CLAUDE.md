@@ -65,6 +65,16 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
   "not claimed" rather than as two people. The agreement is required of everyone, including an
   admin assigning somebody else, which makes the write ORDER load-bearing: the member document
   first, then the row.
+- **A `setDoc` onto an existing roster row is an UPDATE, and `allow update: if false`.** So a
+  row left behind by anything made that name permanently unclaimable — and the catch reported
+  it as somebody else's, which the client had not checked and which was false. `claimPlayer`
+  now asks `lnHolderOf(next)` (a row AND a member document that agree) before it decides
+  anybody holds a name, clears a leftover at the target first, and an owner or admin sweeps
+  rows that agree with nobody. **A row on its own is not a holder.**
+- **Adoption stops the moment somebody says for themselves who they are** (`claimSettled`).
+  Un-claiming raced its own listeners: the roster snapshot arrives with the row gone while
+  the member snapshot has not yet delivered the cleared document, so `adoptClaim` read a
+  `playerId` on its way out and put the row straight back.
 - **An account lets go of a claim on what the roster SHOWS, never on a refusal.** A
   `permission-denied` on the roster create means EITHER somebody beat us to it OR the rules
   for that collection are not published yet, and the client cannot tell those apart. Only one

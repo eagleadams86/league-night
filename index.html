@@ -6378,6 +6378,11 @@ window.lnSetup = (id, on) => { setupOf = { id: id, on: !!on }; render(); };
 window.lnRoster = (id, list) => { rosterFor = id; roster = list; reconcileClaims(members, roster); renderMembers(); render(); };
 window.lnRequests = (id, list) => { requestsFor = id; requests = list; renderRequests(); };
 window.lnRoster.get = () => roster;
+/* Who CONFIRMEDLY holds a player — a row and a member document that agree.
+   A row on its own is not a holder: it may be a leftover, and a leftover must
+   never be reported to somebody as "taken". */
+window.lnHolderOf = (playerId) => { const h = memberForPlayer(members, playerId); return h ? h.uid : null; };
+window.lnCanEdit = () => canEdit();
 window.lnMyRequest = (req) => { myRequest = req; renderMembers(); };
 window.lnMyAvail = () => (meDoc && meDoc.avail) || {};
 window.lnAvailMax = () => AVAIL_MAX;
@@ -7438,6 +7443,10 @@ let unsubs = [];            /* the listeners on the league on screen */
    script's copy is not reachable from here. */
 let meDocLocal = null;
 let claimAdopted = new Set();
+/* Leagues in which this session has said for itself who it is. Adoption is a
+   one-off repair for links made before the roster existed; once somebody has
+   chosen, it must never speak again. */
+let claimSettled = new Set();
 let rosterOf = null;        /* which league the roster last arrived for */
 let listening = null;       /* which league they are on */
 let signInWaiters = [];     /* promises resolved by the next auth report */
@@ -7832,8 +7841,25 @@ async function claimPlayer(next) {
   const id = window.lnLeagueId();
   const was = (meDocLocal && meDocLocal.playerId) || null;
   if (next === was) return true;
+  /* Adoption is over the moment somebody says for themselves who they are.
+     Without this, un-claiming raced its own listeners: the roster snapshot
+     arrives with the row gone while the member snapshot has not yet delivered
+     the cleared document, so adoptClaim reads a playerId that is on its way
+     out and puts the row straight back. */
+  claimSettled.add(id);
+  const holder = next ? window.lnHolderOf(next) : null;
+  if (next && holder && holder !== user.uid) { window.toast('Somebody else is down as that player'); return false; }
   try {
     if (was) await F.deleteDoc(rosterRef(id, was));
+    /* A LEFTOVER at the name being taken. The roster is create-only, so a
+       setDoc onto a row that already exists is an UPDATE, and `allow update:
+       if false` refuses it — which is how a stale row made a name permanently
+       unclaimable and reported it as somebody else's. Nobody holds it (the
+       check above just said so), so it goes. A plain member may only delete
+       their own; an owner or an admin may clear anyone's. */
+    if (next && (window.lnRoster.get() || []).some((r) => r.playerId === next)) {
+      try { await F.deleteDoc(rosterRef(id, next)); } catch (e) { /* not ours to clear — the create below will say so */ }
+    }
     await F.updateDoc(memberRef(id, user.uid), next ? { playerId: next } : { playerId: F.deleteField() });
     if (next) await F.setDoc(rosterRef(id, next), { uid: user.uid, at: Date.now() });
     return true;
@@ -7843,7 +7869,11 @@ async function claimPlayer(next) {
       if (was) await F.setDoc(rosterRef(id, was), { uid: user.uid, at: Date.now() });
     } catch (e2) { /* they lost the old one too; the roster listener will say so */ }
     if (String((e && e.code) || '').indexOf('permission-denied') !== -1) {
-      window.toast('Somebody else is down as that player');
+      /* Only what the roster can support. A refusal here is a row somebody
+         else's account left behind that this account may not delete — saying
+         "somebody is down as that player" would be a claim the client has
+         just checked and found false. */
+      window.toast('That name is stuck — an admin can clear it from Who They Are');
       return false;
     }
     setSyncError(e); return false;
@@ -7959,6 +7989,16 @@ async function reapMyRoster(id, list) {
      client, and one of them is "the rules have not been published yet" — on
      which that draft would have quietly un-linked every account in the
      league on the first load of a build that shipped ahead of its rules. */
+  /* An owner or an admin also clears rows that agree with NOBODY — a member
+     whose own client is not open cannot reap their own leftover, and until
+     somebody does, that name cannot be taken by anyone. */
+  if (window.lnCanEdit && window.lnCanEdit()) {
+    for (const r of rows) {
+      if (r.uid === user.uid) continue;
+      if (window.lnHolderOf(r.playerId)) continue;
+      try { await F.deleteDoc(rosterRef(id, r.playerId)); } catch (e) { /* raced */ }
+    }
+  }
   if (!keep) return;
   const holder = rows.find((r) => r.playerId === keep);
   if (holder && holder.uid !== user.uid) {
@@ -7981,7 +8021,7 @@ async function reapMyRoster(id, list) {
    right — and keeps its role, its name, its availability and any request it
    had already filed. */
 async function adoptClaim(id, list) {
-  if (!user || claimAdopted.has(id)) return;
+  if (!user || claimAdopted.has(id) || claimSettled.has(id)) return;
   if (!meDocLocal || !meDocLocal.playerId) return;
   const held = list || window.lnRoster.get();
   if (!held || rosterOf !== id) return;            /* wait for the roster to arrive */
