@@ -1652,12 +1652,37 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
       </div>
     </div>
 
+    <!-- The queue. Nothing in it has changed anything: a member writes what
+         they are asking for beside the league, and an admin's tap is what
+         puts it in. -->
+    <div class="card cloud-only" id="requestsCard" hidden>
+      <h2>Requests
+        <button class="tile-help" type="button" data-help="requests" aria-label="What members can ask for">i</button>
+      </h2>
+      <p class="lede">What members have asked for. Each row shows the name as it stands against the one asked for.</p>
+      <div id="requestsWrap"></div>
+    </div>
+
     <div class="card cloud-only" id="membersCard" hidden>
       <h2>Members</h2>
       <p class="lede">Everyone who has joined with the League ID. The owner decides who may run the league.</p>
       <div id="membersWrap"></div>
       <div class="field" id="meLinkWrap" hidden style="margin-top:var(--sp-5)"><label for="meLink">That’s me on the roster</label>
         <select id="meLink"></select></div>
+      <!-- A member who is not an admin asks here. An admin edits the roster
+           itself and never sees this. -->
+      <div id="mineWrap" hidden style="margin-top:var(--sp-5)">
+        <span class="label">Ask for a Change</span>
+        <div id="mineForm">
+          <div class="field"><label for="mq_name">My name on the roster</label>
+            <input type="text" id="mq_name" maxlength="40" autocomplete="off"></div>
+          <div class="field" id="mq_teamWrap" hidden><label for="mq_team">My team’s name</label>
+            <input type="text" id="mq_team" maxlength="40" autocomplete="off"></div>
+          <p class="warn-line" id="mineWarn"></p>
+          <div class="row"><button type="button" class="btn-small primary" id="mineSend">Request the Change</button></div>
+        </div>
+        <div id="minePending" hidden></div>
+      </div>
     </div>
 
     <div class="card" id="deviceCard">
@@ -4386,6 +4411,9 @@ function renderLeagueTab() {
   $('inviteCard').hidden = viewOnly;
   $('deviceCard').hidden = viewOnly;
   if (!viewOnly) renderInvite();
+  /* Outside renderInvite, which a shared snapshot never calls: the queue and
+     its badge must be taken DOWN in one, not merely left undrawn. */
+  renderRequests();
   /* This device */
   const bytes = JSON.stringify(state).length;
   $('sizeMeter').textContent = 'League data: ' + (bytes < 10000 ? (bytes / 1024).toFixed(1) : Math.round(bytes / 1024)) + ' KB of the 1,000 KB a league may hold.';
@@ -6007,6 +6035,9 @@ function setAdminKey(id, key) {
 
 let cloudUser = null;        /* { uid, name, email } while signed in */
 let members = [];            /* the members of the league on screen, from the cloud */
+let requests = [];           /* the queue: what members have asked an admin for */
+let requestsFor = null;      /* which league it belongs to */
+let myRequest = null;        /* this account's own pending ask, or null */
 let membersFor = null;       /* which league they belong to */
 let meDoc = null;            /* this account's member document */
 let ownerOf = null;          /* { id, uid } — whose league, from the cloud document */
@@ -6121,6 +6152,30 @@ window.lnOwner = (id, uid) => {
 };
 window.lnMe = (doc) => { meDoc = doc; renderMembers(); };
 window.lnMembers = (id, list) => { membersFor = id; members = list; renderMembers(); };
+window.lnRequests = (id, list) => { requestsFor = id; requests = list; renderRequests(); };
+window.lnMyRequest = (req) => { myRequest = req; renderMembers(); };
+window.lnMyAvail = () => (meDoc && meDoc.avail) || {};
+window.lnAvailMax = () => AVAIL_MAX;
+/* Every boundary the cloud writes through, because a member document is
+   written by ANOTHER Google account: nothing arrives trusted. The shapes are
+   the same ones normalizeLeague pins, said once for data that never enters
+   the league. */
+window.lnCleanAvail = (v) => {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const out = {};
+  Object.keys(v).filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k) && AVAIL_ANSWERS.indexOf(v[k]) !== -1)
+    .sort().reverse().slice(0, AVAIL_MAX).sort()
+    .forEach((k) => { out[k] = v[k]; });
+  return Object.keys(out).length ? out : null;
+};
+window.lnCleanRequest = (uid, v) => {
+  if (!v || typeof v !== 'object' || !ID_RE.test(String(uid))) return null;
+  const str = (x) => (typeof x === 'string' && x.trim()) ? x.trim().slice(0, NAME_MAX) : null;
+  const id = (x) => (typeof x === 'string' && ID_RE.test(x)) ? x : null;
+  const o = { uid: String(uid), at: Number(v.at) || 0, playerId: id(v.playerId), name: str(v.name),
+              teamId: id(v.teamId), teamName: str(v.teamName) };
+  return (o.name || o.teamName) ? o : null;
+};
 
 /* ── The Invite card and the Members card ──────────────────────────────── */
 function renderInvite() {
@@ -6181,7 +6236,145 @@ function renderMembers() {
     .map((p) => '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>').join('');
   sel.value = mine && mine.playerId && playerById(mine.playerId) ? mine.playerId : '';
   $('meLinkWrap').hidden = !mine;
+  renderMine();
 }
+
+/* What a member who is not an admin may ask for: their own name, and their
+   own team's. An admin edits the roster itself and never sees this — one dot,
+   one path. What is typed here reaches nothing until an admin applies it. */
+function renderMine() {
+  const wrap = $('mineWrap');
+  if (!wrap) return;
+  const me = cloudUser ? cloudUser.uid : null;
+  const mine = me ? members.find((m) => m.uid === me) : null;
+  const p = mine && mine.playerId ? playerById(mine.playerId) : null;
+  wrap.hidden = !p || canEdit() || viewOnly;
+  if (wrap.hidden) return;
+  const t = p.teamId ? teamById(p.teamId) : null;
+  const pend = myRequest && requestVerdict(state, members, myRequest) !== 'orphan' ? myRequest : null;
+  $('mineForm').hidden = !!pend;
+  $('minePending').hidden = !pend;
+  if (pend) {
+    const lines = [];
+    if (pend.name) lines.push('your name → ' + pend.name);
+    if (pend.teamName) lines.push('your team’s name → ' + pend.teamName);
+    $('minePending').innerHTML = '<div class="plist"><div class="prow static"><span class="pname">Requested'
+      + ' <span class="pill">waiting</span></span><span class="pstat">' + esc(lines.join(' · '))
+      + ' — an admin has to apply it</span>'
+      + '<span class="row no-print"><button type="button" class="btn-small" id="mineWithdraw">Withdraw</button></span></div></div>';
+    return;
+  }
+  $('mq_name').value = p.name;
+  $('mq_teamWrap').hidden = !isTeams() || !t;
+  if (t) $('mq_team').value = t.name;
+  $('mineWarn').textContent = '';
+}
+
+/* ── The queue ─────────────────────────────────────────────────────────── */
+const REQ_REASON = {
+  already: 'already says that',
+  gone: 'that player or team has gone',
+  'not-theirs': 'not theirs to change any more',
+  orphan: 'they have left the league',
+};
+function renderRequests() {
+  const wrap = $('requestsWrap');
+  if (!wrap) return;
+  const on = !!state && !viewOnly && canEdit() && requestsFor === state.league.id && requests.length;
+  $('requestsCard').hidden = !on;
+  renderRequestBadge(on ? requests.length : 0);
+  if (!on) { wrap.innerHTML = ''; return; }
+  const rows = requests.slice().sort((a, b) => a.at - b.at).map((r) => {
+    const v = requestVerdict(state, members, r);
+    const mb = members.find((x) => x.uid === r.uid);
+    const p = r.playerId ? playerById(r.playerId) : null;
+    const t = r.teamId ? teamById(r.teamId) : null;
+    const asks = [];
+    if (r.name) asks.push(['name', (p ? p.name : '—') + ' → ' + r.name]);
+    if (r.teamName) asks.push(['team', (t ? t.name : '—') + ' → ' + r.teamName]);
+    return '<div class="prow static"><span class="pname">' + esc(mb ? mb.name : 'A member')
+      + asks.map((a) => ' <span class="pill">' + esc(a[0]) + '</span>').join('') + '</span>'
+      + '<span class="pstat">' + esc(asks.map((a) => a[1]).join(' · '))
+      + (v === 'apply' ? '' : ' — ' + esc(REQ_REASON[v] || v)) + '</span>'
+      + '<span class="row no-print" style="gap:6px">'
+      + (v === 'apply' ? '<button type="button" class="btn-small primary" data-apply="' + esc(r.uid) + '">Apply</button>' : '')
+      + '<button type="button" class="icon-btn danger" data-dismiss="' + esc(r.uid) + '" aria-label="Dismiss the request from '
+      + esc(mb ? mb.name : 'a member') + '"><span aria-hidden="true">×</span></button></span></div>';
+  }).join('');
+  wrap.innerHTML = '<div class="plist">' + rows + '</div>';
+}
+
+/* The count belongs in the accessible NAME, not only in a pill a screen
+   reader is told to ignore — the badge is the only thing on the tab that
+   says there is anything to do. */
+function renderRequestBadge(n) {
+  [$('tab-league'), document.querySelector('.tabbar [data-tab="league"]')].forEach((btn) => {
+    if (!btn) return;
+    const old = btn.querySelector('.pill');
+    if (old) old.remove();
+    if (n) {
+      const pill = document.createElement('span');
+      pill.className = 'pill';
+      pill.setAttribute('aria-hidden', 'true');
+      pill.textContent = String(n);
+      btn.appendChild(document.createTextNode(' '));
+      btn.appendChild(pill);
+      btn.setAttribute('aria-label', 'League, ' + plural(n, 'request') + ' waiting');
+    } else btn.removeAttribute('aria-label');
+  });
+}
+
+/* Applying is an ORDINARY edit: the same save() an admin typing the name
+   would take, so it merges like one and a second tap changes nothing. The
+   verdict is re-read here and not trusted from the row, because the league
+   can have moved under an open page. */
+function applyRequest(uid) {
+  const r = requests.find((x) => x.uid === uid);
+  if (!r || !canEdit() || requestVerdict(state, members, r) !== 'apply') return false;
+  const p = playerById(r.playerId);
+  if (r.name && p && p.name !== r.name) { p.name = r.name; touch(p); }
+  if (r.teamName && r.teamId) {
+    const t = teamById(r.teamId);
+    if (t && t.name !== r.teamName) { t.name = r.teamName; touch(t); }
+  }
+  save(); render();
+  return true;
+}
+
+$('requestsWrap').addEventListener('click', async (e) => {
+  if (!window.lnCloud || !canEdit()) return;
+  const ap = e.target.closest('[data-apply]');
+  if (ap) {
+    const uid = ap.dataset.apply;
+    if (applyRequest(uid)) { await window.lnCloud.clearRequest(uid); toast('Applied'); }
+    return;
+  }
+  const dis = e.target.closest('[data-dismiss]');
+  if (dis && await window.lnCloud.clearRequest(dis.dataset.dismiss)) toast('Dismissed');
+});
+
+$('mineSend').addEventListener('click', async () => {
+  if (!window.lnCloud || !state) return;
+  const me = cloudUser ? cloudUser.uid : null;
+  const mine = me ? members.find((m) => m.uid === me) : null;
+  const p = mine && mine.playerId ? playerById(mine.playerId) : null;
+  if (!p) return;
+  const name = $('mq_name').value.trim().slice(0, NAME_MAX);
+  const t = p.teamId ? teamById(p.teamId) : null;
+  const teamName = (t && isTeams()) ? $('mq_team').value.trim().slice(0, NAME_MAX) : '';
+  if (!name || (t && isTeams() && !teamName)) { $('mineWarn').textContent = 'A name cannot be empty.'; return; }
+  const req = {};
+  if (name !== p.name) { req.playerId = p.id; req.name = name; }
+  if (t && teamName !== t.name) { req.playerId = p.id; req.teamId = t.id; req.teamName = teamName; }
+  if (!req.playerId) { $('mineWarn').textContent = 'Nothing has changed yet.'; return; }
+  $('mineWarn').textContent = '';
+  if (await window.lnCloud.fileRequest(req)) toast('Asked — an admin will see it');
+});
+
+$('mineWrap').addEventListener('click', async (e) => {
+  if (!e.target.closest('#mineWithdraw') || !window.lnCloud) return;
+  if (await window.lnCloud.clearRequest()) toast('Withdrawn');
+});
 function ownerUid() {
   /* The owner is a FIELD on the league document, not on `state` — it is never
      synced into the league itself, because the league travels into backups and
@@ -7093,6 +7286,7 @@ const leagueRef = (id) => F.doc(db, 'leagues', id);
 const memberRef = (id, uid) => F.doc(db, 'leagues', id, 'members', uid);
 const claimRef = (id) => F.doc(db, 'leagues', id, 'claims', user.uid);
 const keyRef = (id) => F.doc(db, 'leagues', id, 'private', 'admin');
+const requestRef = (id, uid) => F.doc(db, 'leagues', id, 'requests', uid);
 const userRef = () => F.doc(db, 'users', user.uid);
 const forCloud = (s) => JSON.parse(JSON.stringify(s));
 const myName = () => String(user.displayName || user.email || 'A member').slice(0, 40);
@@ -7226,7 +7420,12 @@ async function setRole(uid, role) {
   catch (e) { setSyncError(e); return false; }
 }
 async function removeMember(uid) {
-  try { await F.deleteDoc(memberRef(window.lnLeagueId(), uid)); return true; }
+  const id = window.lnLeagueId();
+  /* Their request goes with them, or it sits in the queue naming a member
+     who is no longer there. The queue shows such a one as an orphan too —
+     this is the tidy path, that is the backstop. */
+  try { await F.deleteDoc(requestRef(id, uid)); } catch (e) { /* there may be none */ }
+  try { await F.deleteDoc(memberRef(id, uid)); return true; }
   catch (e) { setSyncError(e); return false; }
 }
 async function transferOwner(uid) {
@@ -7261,8 +7460,48 @@ async function linkPlayer(playerId) {
   try { await F.updateDoc(memberRef(id, user.uid), playerId ? { playerId: playerId } : { playerId: F.deleteField() }); return true; }
   catch (e) { setSyncError(e); return false; }
 }
+/* What THIS account says about its own night. It goes on this account's own
+   member document and never into the league, which is why it needs no admin:
+   the rules already let a member write their own record. Tapping the answer
+   that is already there takes it back — three buttons, four states.
+
+   The whole map is rewritten each time, pruned to the newest AVAIL_MAX, so
+   the rule's size cap is never what refuses a write. */
+async function setAvail(dateISO, answer) {
+  const id = window.lnLeagueId();
+  const cur = (window.lnMyAvail() || {});
+  const next = {};
+  Object.keys(cur).forEach((k) => { next[k] = cur[k]; });
+  if (next[dateISO] === answer) delete next[dateISO]; else next[dateISO] = answer;
+  const keys = Object.keys(next).sort().reverse().slice(0, window.lnAvailMax());
+  const out = {};
+  keys.sort().forEach((k) => { out[k] = next[k]; });
+  try { await F.updateDoc(memberRef(id, user.uid), { avail: out }); return true; }
+  catch (e) { setSyncError(e); return false; }
+}
+/* A member's PROPOSAL. It reaches nothing until an admin applies it: the
+   league is one document and only its admins write it, so what a member types
+   waits here, next to the league rather than in it. One document per member,
+   so a second ask replaces the first. */
+async function fileRequest(req) {
+  const id = window.lnLeagueId();
+  const doc = { at: Date.now() };
+  ['playerId', 'name', 'teamId', 'teamName'].forEach((k) => { if (req[k] != null && req[k] !== '') doc[k] = req[k]; });
+  try { await F.setDoc(requestRef(id, user.uid), doc); return true; }
+  catch (e) { setSyncError(e); return false; }
+}
+/* Withdrawing your own and an admin dismissing it are the same delete. */
+async function clearRequest(uid) {
+  const id = window.lnLeagueId();
+  try { await F.deleteDoc(requestRef(id, uid || user.uid)); return true; }
+  catch (e) { setSyncError(e); return false; }
+}
 /* Leaving: this account's member document goes, and the device forgets. */
 async function leaveLeague(id) {
+  /* The request FIRST: its delete rule is `me() == uid`, which holds whether
+     or not the member document still exists, but leaving nothing behind is
+     cheaper than relying on that. */
+  try { await F.deleteDoc(requestRef(id, user.uid)); } catch (e) { /* there may be none */ }
   try { await F.deleteDoc(memberRef(id, user.uid)); await noteUserLeague(id, '', '', true); } catch (e) { /* best effort */ }
 }
 /* Deleting, as the owner: everything under the league and the league itself,
@@ -7273,8 +7512,14 @@ async function deleteLeague(id) {
   if (!user) return false;
   try {
     const members = await F.getDocs(F.collection(db, 'leagues', id, 'members'));
+    /* The requests come too, and in the SAME batch: their delete rule reads
+       the league document, so a league deleted on its own leaves every
+       request undeletable for good — the trap the members list already
+       records. Nothing else may be added under a league without this line. */
+    const reqs = await F.getDocs(F.collection(db, 'leagues', id, 'requests'));
     const batch = F.writeBatch(db);
     members.forEach((d) => batch.delete(d.ref));
+    reqs.forEach((d) => batch.delete(d.ref));
     batch.delete(keyRef(id));
     batch.delete(claimRef(id));
     batch.delete(leagueRef(id));
@@ -7312,15 +7557,42 @@ function listenTo(id) {
     const entry = window.lnDevice().leagues.find((l) => l.id === id);
     if (!entry || entry.role === 'owner') return;
     const role = s.exists() && s.data().role === 'admin' ? 'admin' : 'viewer';
-    if (entry.role !== role) { window.lnSetRole(id, role); window.toast(role === 'admin' ? 'You are an admin of this league now' : 'You are a viewer of this league now'); }
     window.lnMe(s.exists() ? s.data() : null);
+    if (entry.role !== role) {
+      window.lnSetRole(id, role);
+      window.toast(role === 'admin' ? 'You are an admin of this league now' : 'You are a viewer of this league now');
+      /* An account promoted mid-session has a queue to listen to, and one
+         demoted must stop before its listener is refused. */
+      setTimeout(() => relistenTo(id), 0);
+      return;
+    }
   }, onListenError));
   unsubs.push(F.onSnapshot(F.collection(db, 'leagues', id, 'members'), (q) => {
     const list = [];
-    q.forEach((d) => { const m = d.data(); list.push({ uid: d.id, name: String(m.name || '').slice(0, 40), role: m.role === 'admin' ? 'admin' : 'viewer', playerId: m.playerId || null }); });
+    q.forEach((d) => { const m = d.data(); list.push({ uid: d.id, name: String(m.name || '').slice(0, 40), role: m.role === 'admin' ? 'admin' : 'viewer',
+      playerId: m.playerId || null, avail: window.lnCleanAvail(m.avail) }); });
     window.lnMembers(id, list);
   }, onListenError));
+  /* The queue, and only for somebody who could act on it: a viewer's listener
+     would be refused, and a refusal here raises the "Not syncing" banner over
+     a feature they cannot use. The role can change while we are listening —
+     the member snapshot above toggles it — so that branch relistens. */
+  const entry = window.lnDevice().leagues.find((l) => l.id === id);
+  if (entry && entry.role !== 'viewer') {
+    unsubs.push(F.onSnapshot(F.collection(db, 'leagues', id, 'requests'), (q) => {
+      const list = [];
+      q.forEach((d) => list.push(window.lnCleanRequest(d.id, d.data())));
+      window.lnRequests(id, list.filter(Boolean));
+    }, onListenError));
+  }
+  unsubs.push(F.onSnapshot(requestRef(id, user.uid), (s) => {
+    window.lnMyRequest(s.exists() ? window.lnCleanRequest(user.uid, s.data()) : null);
+  }, onListenError));
 }
+/* listenTo returns early when it is already on this league, which is what a
+   role change needs to get past: the queue listener is attached or not
+   according to the role at the time. */
+function relistenTo(id) { stopListening(); listenTo(id); }
 /* Called when the league on screen changes. */
 window.cloudOpen = (id) => {
   const entry = window.lnDevice().leagues.find((l) => l.id === id);
@@ -7384,6 +7656,7 @@ window.lnCloud = {
   signIn: requireSignIn,
   share: shareLeague, join: joinLeague, claim: claimAdmin, setRole: setRole, removeMember: removeMember,
   transferOwner: transferOwner, rotateKey: rotateKey, fetchKey: fetchKey, linkPlayer: linkPlayer,
+  setAvail: setAvail, fileRequest: fileRequest, clearRequest: clearRequest,
 };
 </script>
 
