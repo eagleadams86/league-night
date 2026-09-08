@@ -56,12 +56,37 @@ service cloud.firestore {
       function keyMatches()    { return signedIn() && exists(claimPath()) && exists(keyPath())
                                         && get(claimPath()).data.key == get(keyPath()).data.key; }
 
+      // What ONE league may hold. NOT a size guarantee: a Firestore document is
+      // capped at 1 MiB and the app already warns past 600 KB and meters against
+      // 1,000 KB, so a league of live-scored legs meets that limit long before
+      // any count here. What these bound is the COUNT, so that no single write
+      // can hand every member's browser a million-element list to normalize and
+      // draw. Every number is far above any real pub league and far below
+      // anything a script would want: a 20-side double round robin is 380
+      // fixtures a season, so 2,000 matches is five such seasons.
+      //
+      // `size()` on a non-list is an evaluation ERROR, which denies — so
+      // `d.state is map` must stay ahead of this, and a hostile write missing
+      // one of the six keys is refused rather than let through.
+      function validSize(s) {
+        return s.players.size()    <= 500
+            && s.teams.size()      <= 250
+            && s.seasons.size()    <= 100
+            && s.matches.size()    <= 2000
+            && s.brackets.size()   <= 200
+            && s.tombstones.size() <= 2000;
+      }
+
+      // `hasAll` and NOT `hasOnly`, which is what lets a league written before
+      // Team Setup existed still validate with no `setup` key at all.
       function validLeague(d) {
         return d.keys().hasAll(['state', 'rev', 'owner', 'game', 'name', 'schema', 'updatedAt'])
           && d.owner is string && d.rev is int && d.rev >= 0 && d.schema is int
           && d.name is string && d.name.size() <= 40
           && d.game is string && d.game.size() <= 20
-          && d.state is map && d.updatedAt is number;
+          && d.state is map && d.updatedAt is number
+          && (!('setup' in d) || d.setup is bool)
+          && validSize(d.state);
       }
 
       allow get:    if signedIn();          // knowing the ID is the read capability
@@ -78,6 +103,38 @@ service cloud.firestore {
                               || exists(memberPath(request.resource.data.owner))))
                          // an admin: anything except the owner field
                       || (request.resource.data.owner == resource.data.owner && memberIsAdmin())
+                         // A MEMBER, and only while Team Setup is open. The two
+                         // diffs below are the WHOLE of what the server can
+                         // promise: the document changes only `state`, `rev` and
+                         // `updatedAt`, and inside `state` only the players, the
+                         // teams and the tombstones. No result, no fixture, no
+                         // season, no bracket and no league setting can move.
+                         //
+                         // It cannot say WHICH player. Rules compare whole
+                         // lists — there is no per-element diff — so a member
+                         // who went digging could rename or move somebody else
+                         // during setup. The UI is what keeps it to teams and
+                         // their own membership, and CLAUDE.md records the trade.
+                         //
+                         // diff().affectedKeys() and not four `==` comparisons:
+                         // the document-level diff pins `owner`, `name`, `game`,
+                         // `schema` AND `setup` in one expression (a member
+                         // cannot flip their own gate), the state-level diff pins
+                         // `league` whole — settings included, because an unequal
+                         // nested map is a changed key — and refuses a new key
+                         // besides. Four list equalities would walk `matches`
+                         // element by element and push a big league against the
+                         // per-request expression budget, failing in a way
+                         // nobody can read.
+                         //
+                         // get('setup', false): an ABSENT flag reads as off, so
+                         // nothing widens for a league that already existed.
+                      || (resource.data.get('setup', false) == true
+                          && exists(memberPath(me()))
+                          && request.resource.data.diff(resource.data).affectedKeys()
+                               .hasOnly(['state', 'rev', 'updatedAt'])
+                          && request.resource.data.state.diff(resource.data.state).affectedKeys()
+                               .hasOnly(['players', 'teams', 'tombstones']))
                     );
       allow delete: if signedIn() && resource.data.owner == me();
 
@@ -134,7 +191,16 @@ service cloud.firestore {
         allow update: if signedIn() && validMember(request.resource.data) && (
                          isOwner()
                       || (me() == uid && request.resource.data.role == resource.data.role)
-                      || (me() == uid && request.resource.data.role == 'admin' && keyMatches()));
+                      || (me() == uid && request.resource.data.role == 'admin' && keyMatches())
+                         // An ADMIN may say which player another account is, and
+                         // NOTHING else about them: affectedKeys().hasOnly is
+                         // stronger than three equalities — it covers `joinedAt`
+                         // and refuses a new key too. One predicate away from
+                         // nothing, and deliberately NOT one predicate away from
+                         // an admin writing a `role`, which is the trap recorded
+                         // for the request queue below.
+                      || (memberIsAdmin()
+                          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['playerId'])));
         allow delete: if signedIn() && (isOwner() || me() == uid);
       }
 
@@ -151,13 +217,16 @@ service cloud.firestore {
       // Only somebody who could act on a request carries the listener.
       match /requests/{uid} {
         function validRequest(d) {
-          return d.keys().hasOnly(['at', 'playerId', 'name', 'teamId', 'teamName'])
+          return d.keys().hasOnly(['at', 'playerId', 'name', 'teamId', 'teamName', 'claim'])
             && d.at is number
-            && (('name' in d) || ('teamName' in d))
+            && (('name' in d) || ('teamName' in d) || ('claim' in d))
             && (!('name' in d)     || (d.name is string && d.name.size() > 0 && d.name.size() <= 40))
             && (!('teamName' in d) || (d.teamName is string && d.teamName.size() > 0 && d.teamName.size() <= 40))
             && (!('playerId' in d) || (d.playerId is string && d.playerId.size() <= 64))
-            && (!('teamId' in d)   || (d.teamId is string && d.teamId.size() <= 64));
+            && (!('teamId' in d)   || (d.teamId is string && d.teamId.size() <= 64))
+            // `claim` is "I am this player" — the ask that has no other route
+            // once Team Setup has closed.
+            && (!('claim' in d)    || (d.claim is string && d.claim.size() <= 64));
         }
         allow get:    if signedIn() && (me() == uid || memberIsAdmin() || isOwner());
         allow list:   if signedIn() && (memberIsAdmin() || isOwner());
@@ -168,6 +237,41 @@ service cloud.firestore {
                               && validRequest(request.resource.data);
         // Withdrawing your own and an admin dismissing it are the same act.
         allow delete: if signedIn() && (me() == uid || memberIsAdmin() || isOwner());
+      }
+
+      // ── One account per player, one player per account ─────────────────────
+      // THE DOCUMENT ID IS THE PLAYER'S ID, and that is the whole index: two
+      // accounts cannot both hold one player, because the second create fails.
+      // The other half of the invariant is the MEMBER document, which has one
+      // `playerId` field and therefore names one player. Between them the claim
+      // is exclusive both ways.
+      //
+      //   SERVER-ENFORCED: at most one account per player (this collection),
+      //     and at most one player per account (one field on one document).
+      //   BY AGREEMENT: that the two name each other. Checked at CREATE and
+      //     never after — a member may later re-point their own playerId and
+      //     leave this row squatting. Which is why the client shows a claim only
+      //     when BOTH say so, and why every half-written state reads as "not
+      //     claimed" rather than as "claimed by two people".
+      //
+      // Create-only: switching is delete-then-create, so a swap is never one
+      // write that could half-succeed into a lie. And the agreement is required
+      // of EVERYONE — the last line is only about who may act — which is what
+      // lets an admin assign somebody without a second branch. It makes the
+      // write ORDER load-bearing: the member document first, then the row, or
+      // the create is refused.
+      match /roster/{playerId} {
+        function claimant() { return request.resource.data.uid; }
+        allow read:   if signedIn();          // every member draws the roster
+        allow create: if signedIn()
+                      && request.resource.data.keys().hasOnly(['uid', 'at'])
+                      && request.resource.data.uid is string && request.resource.data.uid.size() <= 128
+                      && request.resource.data.at is number
+                      && exists(memberPath(claimant()))
+                      && get(memberPath(claimant())).data.playerId == playerId
+                      && (claimant() == me() || isOwner() || memberIsAdmin());
+        allow update: if false;
+        allow delete: if signedIn() && (resource.data.uid == me() || isOwner() || memberIsAdmin());
       }
     }
 
