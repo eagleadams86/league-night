@@ -1539,16 +1539,19 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
         <span class="pill" id="playerCount"></span>
         <button type="button" class="btn-small no-print no-edit" id="addPlayerBtn">＋ Add Player</button>
       </h2>
+      <!-- A POINTER, not a second control: the sheet a row already opens is
+           where the claim is made. Two ways to do one thing is one too many. -->
+      <p class="hint" id="claimNote" hidden></p>
       <div id="playersWrap"></div>
     </div>
     <div class="card" id="teamsCard" hidden>
       <h2>Teams
         <span class="spacer"></span>
         <span class="pill" id="teamCount"></span>
-        <!-- No .no-edit: this one is shown from JS, because a member may create
-           a team while Team Setup is open. #addPlayerBtn above KEEPS it —
-           creating a player is creating a person, and that is an admin's. -->
-      <button type="button" class="btn-small no-print" id="addTeamBtn" hidden>＋ Add Team</button>
+        <!-- No .no-edit: this one is shown from JS, because a member may
+             create a team while Team Setup is open. #addPlayerBtn above KEEPS
+             it — creating a player is creating a person, and an admin's. -->
+        <button type="button" class="btn-small no-print" id="addTeamBtn" hidden>＋ Add Team</button>
       </h2>
       <div id="teamsWrap"></div>
     </div>
@@ -1602,6 +1605,20 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
         <button type="button" class="btn-small no-print no-edit" id="addSeasonBtn">＋ Start a Season</button>
       </h2>
       <div id="seasonsWrap"></div>
+    </div>
+
+    <!-- The one window in which a member who is not an admin may change
+         something in the league itself. cloud-only, so a local league and
+         somebody else's snapshot never see it. -->
+    <div class="card cloud-only" id="setupCard" hidden>
+      <h2>Team Setup
+        <button class="tile-help" type="button" data-help="setup" aria-label="What Team Setup lets members do">i</button>
+        <span class="spacer"></span>
+        <span class="pill" id="setupState"></span>
+      </h2>
+      <p class="lede" id="setupNote"></p>
+      <label class="checkline no-edit" id="setupToggleWrap"><input type="checkbox" id="lr_setup">
+        <span>Let members pick their own teams</span></label>
     </div>
 
     <div class="card" id="inviteCard">
@@ -1668,7 +1685,9 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
     </div>
 
     <div class="card cloud-only" id="membersCard" hidden>
-      <h2>Members</h2>
+      <h2>Members
+        <button class="tile-help" type="button" data-help="claim" aria-label="How saying which player you are works">i</button>
+      </h2>
       <p class="lede">Everyone who has joined with the League ID. The owner decides who may run the league.</p>
       <div id="membersWrap"></div>
       <div class="field" id="meLinkWrap" hidden style="margin-top:var(--sp-5)"><label for="meLink">That’s me on the roster</label>
@@ -1906,6 +1925,18 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
   </div>
 </dialog>
 
+<!-- Who an account is on the roster. A window rather than a select on every
+     row: the list is every player, and it has to say who holds which. -->
+<dialog id="assignDialog" aria-labelledby="assignTitle">
+  <h2 id="assignTitle">Who They Are</h2>
+  <p class="hint" id="assignWho">Pick the player this account is on the roster.</p>
+  <div class="field"><label for="as_player">On the roster as</label>
+    <select id="as_player"></select></div>
+  <div class="row-actions">
+    <button type="button" class="primary" id="assignDone">Done</button>
+  </div>
+</dialog>
+
 <!-- The live scorer: a sheet, big remaining scores, a keypad a thumb can
      use at the oche. Every visit is saved as it lands. -->
 <dialog id="liveDialog" class="sheet" aria-labelledby="liveTitle">
@@ -1952,6 +1983,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
   <h2 id="sideTitle">Player</h2>
   <div id="sideBody"></div>
   <div class="row-actions">
+    <button type="button" id="sideClaim" hidden>That’s Me</button>
     <button type="button" id="sideEdit">Edit</button>
     <button type="button" class="primary" id="sideClose">Close</button>
   </div>
@@ -4374,6 +4406,7 @@ function renderMatches() {
 function renderPlayers() {
   const legs = legsIn(state, null);
   const hcpLabel = G().handicap.label;
+  const mineId = myClaim();
   const row = (p) => {
     const st = G().playerStats(legs, p.id);
     const team = p.teamId ? teamById(p.teamId) : null;
@@ -4381,6 +4414,7 @@ function renderPlayers() {
       + '<span class="pname">' + esc(p.name)
       + (team ? ' <span class="pill">' + esc(team.name) + '</span>' : '')
       + (p.hcp != null ? ' <span class="pill" title="' + esc(hcpLabel) + '">' + esc(hcpLabel) + ' ' + p.hcp + '</span>' : '')
+      + (p.id === mineId ? ' <span class="pill ok">you</span>' : '')
       + (!p.active ? ' <span class="pill">retired</span>' : '') + '</span>'
       + '<span class="pstat">' + (st.legs ? plural(st.legs, G().unit.one, G().unit.many) + ' · won ' + st.won
         + (st.avg3 != null ? ' · avg ' + st.avg3.toFixed(1) : '') : 'no ' + G().unit.many + ' yet') + '</span></button>';
@@ -4392,6 +4426,7 @@ function renderPlayers() {
     + (retired.length ? '<details class="round"><summary><span>Retired</span><span class="hint">' + plural(retired.length, 'player') + '</span></summary>'
       + '<div class="plist">' + retired.map(row).join('') + '</div></details>' : '');
   $('playerCount').textContent = plural(active.length, 'player');
+  renderClaimNote();
   $('teamsCard').hidden = !isTeams();
   $('addTeamBtn').hidden = !canSetUp();
   if (isTeams()) {
@@ -4518,6 +4553,7 @@ function renderLeagueTab() {
   /* Outside renderInvite, which a shared snapshot never calls: the queue and
      its badge must be taken DOWN in one, not merely left undrawn. */
   renderRequests();
+  renderSetupCard();
   /* This device */
   const bytes = JSON.stringify(state).length;
   $('sizeMeter').textContent = 'League data: ' + (bytes < 10000 ? (bytes / 1024).toFixed(1) : Math.round(bytes / 1024)) + ' KB of the 1,000 KB a league may hold.';
@@ -4856,6 +4892,13 @@ $('scheduleSave').addEventListener('click', () => {
   save(); render();
   $('scheduleDialog').close();
   toast(plural(rounds.reduce((a, r) => a + r.pairs.length, 0), 'match', 'matches') + ' scheduled');
+  /* The teams are settled the moment there are fixtures to play. An OFFER and
+     never a forced close — a league may well want another week of shuffling,
+     and the switch is one tap away either way. */
+  if (canEdit() && setupOpen() && window.lnCloud
+      && confirm('Close Team Setup?\n\nThe fixtures are drawn, so the teams are settled. Members will ask for a change from now on instead of making it.')) {
+    window.lnCloud.setSetup(false).then((ok) => { if (ok) toast('Team Setup closed'); });
+  }
 });
 $('scheduleCancel').addEventListener('click', () => $('scheduleDialog').close());
 
@@ -5305,10 +5348,54 @@ function openSide(id) {
     .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || b.u - a.u).slice(0, 8);
   html += '<h3>Recent Matches</h3>' + (recent.length ? '<div class="mlist">' + recent.map(matchRow).join('') + '</div>'
     : '<p class="hint">Nothing played yet.</p>');
+  /* Whether this account can say it is this player, and if not, why not —
+     as a HINT and never as a disabled control, because "somebody else is
+     already down as this" is a fact about the league, not a thing to press. */
+  const holder = p ? memberForPlayer(members, p.id) : null;
+  const claimable = !!p && isCloudLeague() && !!cloudUser && !!meDoc && !holder && !myClaim();
+  if (p && isCloudLeague() && cloudUser) {
+    if (holder) html += '<p class="hint">' + esc(holder.name) + ' is down as this player.</p>';
+    else if (myClaim() === p.id) html += '<p class="hint">You are down as this player.</p>';
+  }
   $('sideBody').innerHTML = html;
-  $('sideEdit').hidden = !canEdit();
+  $('sideClaim').hidden = !claimable;
+  $('sideClaim').textContent = setupOpen() ? 'That’s Me' : 'That’s Me — Ask';
+  $('sideClaim').onclick = () => { $('sideDialog').close(); claimOrAsk(p.id); };
+  /* A team's sheet offers Edit during setup; a player's never does — a member
+     may arrange the teams and may not edit a person. */
+  $('sideEdit').hidden = p ? !canEdit() : !canSetUp();
   $('sideEdit').onclick = () => { $('sideDialog').close(); if (p) openPlayer(id); else openTeam(id); };
   openModal($('sideDialog'));
+}
+
+/* ── Saying which player you are ───────────────────────────────────────────
+   While Team Setup is open a member takes the name directly — the roster is
+   what stops two accounts holding one, so nothing here has to. Once it has
+   closed it is a request like every other change to the league, and it goes
+   through the queue that already exists. */
+async function claimOrAsk(playerId) {
+  if (!window.lnCloud || !state) return;
+  const p = playerById(playerId);
+  if (!p) return;
+  if (setupOpen()) {
+    if (await window.lnCloud.claimPlayer(playerId)) toast('You are down as ' + p.name);
+    return;
+  }
+  if (await window.lnCloud.fileRequest({ claim: playerId })) toast('Asked to be ' + p.name + ' — an admin will see it');
+}
+
+/* One line under the Players heading. It POINTS at the row a reader should
+   tap; the sheet that row opens is where the claim is actually made. */
+function renderClaimNote() {
+  const box = $('claimNote');
+  if (!box) return;
+  const on = !!state && !viewOnly && isCloudLeague() && !!cloudUser && !!meDoc;
+  box.hidden = !on;
+  if (!on) return;
+  const mine = myClaim() ? playerById(myClaim()) : null;
+  box.textContent = mine ? 'You are down as ' + mine.name + '.'
+    : setupOpen() ? 'You are not on the roster yet — tap your name to say which player you are.'
+      : 'You are not on the roster yet — tap your name and ask an admin.';
 }
 $('sideClose').addEventListener('click', () => $('sideDialog').close());
 $('sideBody').addEventListener('click', (e) => {
@@ -5563,6 +5650,12 @@ const HELP = {
   requests: ['What Members Can Ask For', `<p>A member who is not an admin can ask for <strong>their own name</strong> on the roster and <strong>their team's name</strong> to be changed. What they type is kept apart from the league and changes nothing until an admin taps <strong>Apply</strong> — the league is one record, and it is the admins who write it.</p>
     <p>Each row shows the name as it is now against the one asked for, so a request that has been overtaken can be seen before it is applied. A request from somebody no longer linked to that player, or for a player or team since deleted, offers only <strong>Dismiss</strong>.</p>
     <p>Saying whether you can make a night needs no approval: that is a member's own answer, and it is kept with their account rather than in the league.</p>`],
+  setup: ['What Team Setup Lets Members Do', `<p>While <strong>Team Setup</strong> is open, anyone in the league can make a team, rename one, and put themselves in or take themselves out — no asking and no waiting. It is on for a brand-new league, and the app offers to close it the moment you generate a season's fixtures.</p>
+    <p><strong>Nothing else in the league can be changed by them.</strong> Not a result, not a fixture, not a season, not a tournament and not a setting — and that is refused by the server rather than merely hidden by the app. Adding a player is still an admin's: an admin puts the names in, and the members sort themselves into teams.</p>
+    <p>Close it once the teams are settled and everything goes back to being an admin's, with members asking instead. Open it again between seasons.</p>`],
+  claim: ['Saying Which Player You Are', `<p>Tap your own name on the Players tab and say <strong>That's Me</strong>. From then on the app knows which player you are: it is your name a rename request is about, and your answer when you say whether you can make a night.</p>
+    <p><strong>One account is one player, and one player is one account.</strong> Nobody else can be down as you, and you cannot be two people. While Team Setup is open you take the name directly; once it has closed, it is a request an admin applies.</p>
+    <p>An admin can always say who is who, from <strong>Who They Are</strong> on this card — for somebody who picked the wrong name, or never got round to picking one.</p>`],
 };
 const helpDialog = $('helpDialog');
 document.addEventListener('click', (e) => {
@@ -5935,7 +6028,7 @@ $('main').addEventListener('click', (e) => {
 /* Registered together at the foot, as in every sibling. */
 ['leagueDialog', 'addDialog', 'playerDialog', 'teamDialog', 'seasonDialog', 'scheduleDialog', 'addMatchDialog',
  'matchDialog', 'sideDialog', 'bracketDialog', 'dataDialog', 'clearDialog', 'shareDialog', 'helpDialog',
- 'searchDialog'].forEach((id) => closeOnBackdropClick($(id)));
+ 'searchDialog', 'assignDialog'].forEach((id) => closeOnBackdropClick($(id)));
 
 /* ═══════════════════════════════ The demo ═══════════════════════════════════
    THE SAMPLE DATA IS THE DEMO, and a feature is not finished until it reaches
@@ -6350,17 +6443,21 @@ function renderMembers() {
   const wrap = $('membersWrap');
   if (!wrap || membersFor !== state.league.id) { if (wrap) wrap.innerHTML = '<p class="hint">Loading members…</p>'; return; }
   const owner = isOwner();
+  const admin = canEdit();
   const me = cloudUser ? cloudUser.uid : null;
   const sorted = members.slice().sort((a, b) => (a.role === b.role ? 0 : a.role === 'admin' ? -1 : 1) || a.name.localeCompare(b.name));
   wrap.innerHTML = sorted.length ? '<div class="plist">' + sorted.map((m) => {
     const isMe = m.uid === me;
-    const player = m.playerId ? playerById(m.playerId) : null;
+    /* `claim` and not `playerId`: an account whose link the roster does not
+       confirm shows no player at all, which is what makes a squat visible. */
+    const player = m.claim ? playerById(m.claim) : null;
     /* The owner's own member record says 'admin' — that is how they were
        written — so the league document's owner field is what decides. */
     const roleWord = m.uid === ownerUid() ? 'owner' : m.role;
     return '<div class="prow static"><span class="pname">' + esc(m.name || 'A member') + (isMe ? ' <span class="pill">you</span>' : '')
       + ' <span class="pill' + (roleWord === 'owner' ? ' ok' : '') + '">' + esc(roleWord) + '</span>'
       + (player ? ' <span class="hint">plays as ' + esc(player.name) + '</span>' : '') + '</span>'
+      + (admin ? '<span class="row no-print" style="gap:6px"><button type="button" class="btn-small" data-assign="' + esc(m.uid) + '">Who They Are…</button></span>' : '')
       + (owner && !isMe ? '<span class="row no-print" style="gap:6px">'
           + (m.role === 'admin' ? '<button type="button" class="btn-small" data-role="viewer" data-uid="' + esc(m.uid) + '">Make viewer</button>'
                                 : '<button type="button" class="btn-small" data-role="admin" data-uid="' + esc(m.uid) + '">Make admin</button>')
@@ -6368,13 +6465,18 @@ function renderMembers() {
           + '<button type="button" class="icon-btn danger" data-remove="' + esc(m.uid) + '" aria-label="Remove ' + esc(m.name) + '"><span aria-hidden="true">×</span></button></span>' : '')
       + '</div>';
   }).join('') + '</div>' : '<p class="hint">Nobody has joined yet.</p>';
-  /* "That's me": which roster player this account is. */
+  /* "That's me": which roster player this account is. The list is what is
+     STILL FREE plus your own — this select is where the whole problem lived,
+     built from every player with nothing checking whether one was taken.
+     It is only a control while Team Setup is open; once it has closed,
+     claiming is a request like every other change, and #mineWrap carries it. */
   const sel = $('meLink');
   const mine = me ? members.find((m) => m.uid === me) : null;
-  sel.innerHTML = '<option value="">Not on the roster</option>' + state.players.slice().sort((a, b) => a.name.localeCompare(b.name))
+  const free = state.players.filter((p) => !memberForPlayer(members, p.id) || (mine && mine.claim === p.id));
+  sel.innerHTML = '<option value="">Not on the roster</option>' + free.slice().sort((a, b) => a.name.localeCompare(b.name))
     .map((p) => '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>').join('');
-  sel.value = mine && mine.playerId && playerById(mine.playerId) ? mine.playerId : '';
-  $('meLinkWrap').hidden = !mine;
+  sel.value = mine && mine.claim && playerById(mine.claim) ? mine.claim : '';
+  $('meLinkWrap').hidden = !mine || !(setupOpen() || canEdit());
   renderMine();
 }
 
@@ -6386,15 +6488,19 @@ function renderMine() {
   if (!wrap) return;
   const me = cloudUser ? cloudUser.uid : null;
   const mine = me ? members.find((m) => m.uid === me) : null;
-  const p = mine && mine.playerId ? playerById(mine.playerId) : null;
-  wrap.hidden = !p || canEdit() || viewOnly;
+  const p = mine && mine.claim ? playerById(mine.claim) : null;
+  /* An account with a CLAIM REQUEST pending has no player yet and still needs
+     this block, to see what it asked for and to take it back. */
+  const pendingClaim = !!(myRequest && myRequest.claim);
+  wrap.hidden = (!p && !pendingClaim) || canEdit() || viewOnly;
   if (wrap.hidden) return;
-  const t = p.teamId ? teamById(p.teamId) : null;
+  const t = p && p.teamId ? teamById(p.teamId) : null;
   const pend = myRequest && requestVerdict(state, members, myRequest, roster) !== 'orphan' ? myRequest : null;
   $('mineForm').hidden = !!pend;
   $('minePending').hidden = !pend;
   if (pend) {
     const lines = [];
+    if (pend.claim) { const c = playerById(pend.claim); lines.push('to be ' + (c ? c.name : 'a player on the roster')); }
     if (pend.name) lines.push('your name → ' + pend.name);
     if (pend.teamName) lines.push('your team’s name → ' + pend.teamName);
     $('minePending').innerHTML = '<div class="plist"><div class="prow static"><span class="pname">Requested'
@@ -6403,14 +6509,78 @@ function renderMine() {
       + '<span class="row no-print"><button type="button" class="btn-small" id="mineWithdraw">Withdraw</button></span></div></div>';
     return;
   }
+  /* Nothing to rename until they ARE somebody: an account still waiting on a
+     claim sees the pending line above and no boxes at all. */
+  $('mineForm').hidden = !p;
+  if (!p) return;
   $('mq_name').value = p.name;
   $('mq_teamWrap').hidden = !isTeams() || !t;
   if (t) $('mq_team').value = t.name;
   $('mineWarn').textContent = '';
 }
 
+/* ── Team Setup ────────────────────────────────────────────────────────── */
+function renderSetupCard() {
+  const card = $('setupCard');
+  if (!card) return;
+  card.hidden = !state || viewOnly || !isCloudLeague();
+  if (card.hidden) return;
+  const on = setupOpen(), admin = canEdit();
+  $('setupState').textContent = on ? 'open' : 'closed';
+  $('setupState').className = 'pill' + (on ? ' ok' : '');
+  $('lr_setup').checked = on;
+  $('setupToggleWrap').hidden = !admin;
+  $('setupNote').textContent = admin
+    ? (on ? 'Members can make a team, rename one, and put themselves in or take themselves out. Nothing else in the league can be changed by them. Close it once the teams are settled.'
+          : 'An admin runs the teams. Open this between seasons if you want members to sort them out themselves.')
+    : (on ? 'You can sort the teams out yourself while this is open: make a team, rename one, and put yourself in or take yourself out. Everything else is an admin’s.'
+          : 'An admin runs the teams. You can ask for a change below.');
+}
+
+$('lr_setup').addEventListener('change', async () => {
+  const want = $('lr_setup').checked;
+  if (!window.lnCloud || !canEdit()) { $('lr_setup').checked = setupOpen(); return; }
+  /* Opening is silent; CLOSING confirms, because it takes something away. */
+  if (!want && !confirm('Close Team Setup?\n\nMembers will no longer be able to make a team or move themselves. They can still ask, and you apply it.')) {
+    $('lr_setup').checked = true;
+    return;
+  }
+  if (await window.lnCloud.setSetup(want)) toast(want ? 'Members can pick their own teams' : 'Team Setup closed');
+  else $('lr_setup').checked = setupOpen();
+});
+
+/* ── Who an account is ─────────────────────────────────────────────────── */
+let assignCtx = null;
+function openAssign(uid) {
+  const m = members.find((x) => x.uid === uid);
+  if (!m || !state) return;
+  assignCtx = uid;
+  $('assignWho').textContent = 'Which player ' + m.name + ' is on the roster.';
+  const sel = $('as_player');
+  sel.innerHTML = '<option value="">Nobody</option>' + state.players.slice().sort((a, b) => a.name.localeCompare(b.name))
+    .map((p) => {
+      const holder = memberForPlayer(members, p.id);
+      /* A held player is SHOWN and disabled rather than dropped: "Alex has
+         that one" is the answer somebody opening this window wants. */
+      const taken = holder && holder.uid !== uid;
+      return '<option value="' + esc(p.id) + '"' + (taken ? ' disabled' : '') + '>' + esc(p.name)
+        + (taken ? ' — ' + esc(holder.name) + ' has this one' : '') + '</option>';
+    }).join('');
+  sel.value = m.claim || '';
+  openModal($('assignDialog'));
+}
+$('as_player').addEventListener('change', async () => {
+  if (!window.lnCloud || !assignCtx) return;
+  const m = members.find((x) => x.uid === assignCtx);
+  if (await window.lnCloud.assign(assignCtx, $('as_player').value || null)) {
+    toast($('as_player').value ? (m ? m.name : 'They') + ' is on the roster now' : 'Taken off the roster');
+  }
+});
+$('assignDone').addEventListener('click', () => $('assignDialog').close());
+
 /* ── The queue ─────────────────────────────────────────────────────────── */
 const REQ_REASON = {
+  taken: 'somebody else is already down as that player',
   already: 'already says that',
   gone: 'that player or team has gone',
   'not-theirs': 'not theirs to change any more',
@@ -6429,6 +6599,7 @@ function renderRequests() {
     const p = r.playerId ? playerById(r.playerId) : null;
     const t = r.teamId ? teamById(r.teamId) : null;
     const asks = [];
+    if (r.claim) { const c = playerById(r.claim); asks.push(['roster', 'to be ' + (c ? c.name : '—')]); }
     if (r.name) asks.push(['name', (p ? p.name : '—') + ' → ' + r.name]);
     if (r.teamName) asks.push(['team', (t ? t.name : '—') + ' → ' + r.teamName]);
     return '<div class="prow static"><span class="pname">' + esc(mb ? mb.name : 'A member')
@@ -6467,9 +6638,13 @@ function renderRequestBadge(n) {
    would take, so it merges like one and a second tap changes nothing. The
    verdict is re-read here and not trusted from the row, because the league
    can have moved under an open page. */
-function applyRequest(uid) {
+async function applyRequest(uid) {
   const r = requests.find((x) => x.uid === uid);
   if (!r || !canEdit() || requestVerdict(state, members, r, roster) !== 'apply') return false;
+  /* A claim is not a league edit at all: it is the roster, and the roster's
+     rule reads the CLAIMANT's member document — so assign() writes that
+     first, then the row. Written the other way round it is simply refused. */
+  if (r.claim) return await window.lnCloud.assign(r.uid, r.claim);
   const p = playerById(r.playerId);
   if (r.name && p && p.name !== r.name) { p.name = r.name; touch(p); }
   if (r.teamName && r.teamId) {
@@ -6485,7 +6660,7 @@ $('requestsWrap').addEventListener('click', async (e) => {
   const ap = e.target.closest('[data-apply]');
   if (ap) {
     const uid = ap.dataset.apply;
-    if (applyRequest(uid)) { await window.lnCloud.clearRequest(uid); toast('Applied'); }
+    if (await applyRequest(uid)) { await window.lnCloud.clearRequest(uid); toast('Applied'); }
     return;
   }
   const dis = e.target.closest('[data-dismiss]');
@@ -6528,7 +6703,13 @@ function ownerUid() {
   return isOwner() && cloudUser ? cloudUser.uid : null;
 }
 $('membersWrap').addEventListener('click', async (e) => {
-  if (!isOwner() || !window.lnCloud) return;
+  if (!window.lnCloud) return;
+  /* Who an account IS is an admin's to set; who may RUN the league stays the
+     owner's. So the guard moved onto each branch rather than sitting over
+     all of them. */
+  const asg = e.target.closest('[data-assign]');
+  if (asg) { if (canEdit()) openAssign(asg.dataset.assign); return; }
+  if (!isOwner()) return;
   const role = e.target.closest('[data-role]');
   if (role) {
     const m = members.find((x) => x.uid === role.dataset.uid);
@@ -6553,7 +6734,9 @@ $('membersWrap').addEventListener('click', async (e) => {
 });
 $('meLink').addEventListener('change', async () => {
   if (!window.lnCloud) return;
-  if (await window.lnCloud.linkPlayer($('meLink').value || null)) toast($('meLink').value ? 'Linked — that’s you on the roster' : 'Unlinked');
+  if (await window.lnCloud.claimPlayer($('meLink').value || null)) {
+    toast($('meLink').value ? 'You are down as that player' : 'Taken off the roster');
+  } else $('meLink').value = myClaim() || '';
 });
 $('shareLeagueBtn').addEventListener('click', async () => {
   if (!window.lnCloud || !state) return;
