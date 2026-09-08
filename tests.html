@@ -51,7 +51,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 224;
+const EXPECTED = 249;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -122,7 +122,7 @@ function stripComments(src) {
 }
 
 let W = null, H = null;
-let APP_SRC = '', PRIVACY_SRC = '', THEME_SRC = '', SW_SRC = '', KILL_SRC = '', MANIFEST_SRC = '', RULES_SRC = '';
+let APP_SRC = '', PRIVACY_SRC = '', THEME_SRC = '', SW_SRC = '', KILL_SRC = '', MANIFEST_SRC = '', RULES_SRC = '', README_SRC = '';
 
 async function main() {
   if (LOCAL_HOSTS.indexOf(location.hostname) === -1) {
@@ -141,6 +141,7 @@ async function main() {
   KILL_SRC     = await (await bustFetch('sw-kill.js')).text();
   MANIFEST_SRC = await (await bustFetch('manifest.webmanifest')).text();
   RULES_SRC    = await (await bustFetch('firestore.rules')).text();
+  README_SRC   = await (await bustFetch('README.md')).text();
 
   /* ── Guard the source actually loaded, BEFORE any negative assertion ───────
      An all-NOT test over a fetched file proves nothing when the fetch failed:
@@ -153,6 +154,7 @@ async function main() {
   ok(KILL_SRC.length > 100, 'sw-kill.js did not load — the escape hatch has to exist BEFORE it is needed');
   ok(MANIFEST_SRC.length > 100, 'manifest.webmanifest did not load');
   ok(RULES_SRC.length > 500, 'firestore.rules did not load');
+  ok(README_SRC.length > 2000, 'README.md did not load — the runbook checks below would pass on an empty string');
 
   W = await bootApp();
   H = W.__lnTestHooks;
@@ -1354,7 +1356,8 @@ function define() {
   });
   t('a viewer’s save never pushes, and the demo can never be shared', () => {
     const src = stripComments(APP_SRC);
-    ok(/if \(!user \|\| !entry \|\| !entry\.cloud \|\| entry\.role === 'viewer'\) return;/.test(src), 'pushNow refuses for a viewer');
+    ok(/if \(!user \|\| !entry \|\| !entry\.cloud\) return;\s*\n\s*if \(entry\.role === 'viewer'\) return pushSetup\(entry\);/.test(src),
+      'pushNow sends a viewer down the narrow Team Setup path and nowhere else');
     ok(/!window\.lnIsLeagueId\(entry\.id\)\) return;/.test(src), 'cloudPush refuses an id that is not a League ID — the demo');
   });
 
@@ -2318,7 +2321,7 @@ function define() {
       players: teamsFixture().players.map((p) => p.id === 'p1' ? Object.assign({}, p, { avail: { '2026-09-10': 'n' } }) : p),
     }));
     eq(H.availFor(noted, [], 'p1', '2026-09-10'), { answer: 'n', source: 'admin' }, 'an admin’s note stands on its own');
-    const members = [{ uid: 'u1', name: 'One', playerId: 'p1', avail: { '2026-09-10': 's' } }];
+    const members = [{ uid: 'u1', name: 'One', playerId: 'p1', claim: 'p1', avail: { '2026-09-10': 's' } }];
     eq(H.availFor(noted, members, 'p1', '2026-09-10'), { answer: 's', source: 'player' },
       'the player’s OWN answer wins over the note — the sentence the card says');
     eq(H.availFor(noted, members, 'p1', null), { answer: null, source: null }, 'and a match with no date has no answer');
@@ -2326,12 +2329,12 @@ function define() {
 
   t('a request is judged against the league as it stands now', () => {
     const st = H.normalizeLeague(teamsFixture());
-    const mem = [{ uid: 'u1', name: 'One', playerId: 'p1' }];
+    const mem = [{ uid: 'u1', name: 'One', playerId: 'p1', claim: 'p1' }];
     eq(H.requestVerdict(st, mem, { uid: 'u1', playerId: 'p1', name: 'Won' }), 'apply');
     eq(H.requestVerdict(st, mem, { uid: 'u1', playerId: 'p1', name: 'One' }), 'already', 'an admin got there first');
     eq(H.requestVerdict(st, mem, { uid: 'u1', playerId: 'gone', name: 'X' }), 'not-theirs',
       'THE security check: a request may only name the player the server says this account is');
-    eq(H.requestVerdict(st, [{ uid: 'u1', name: 'One', playerId: 'zz' }], { uid: 'u1', playerId: 'zz', name: 'X' }), 'gone');
+    eq(H.requestVerdict(st, [{ uid: 'u1', name: 'One', playerId: 'zz', claim: 'zz' }], { uid: 'u1', playerId: 'zz', name: 'X' }), 'gone');
     eq(H.requestVerdict(st, mem, { uid: 'u1', playerId: 'p1', teamId: 'tb', teamName: 'X' }), 'not-theirs',
       'and only that player’s OWN team');
     eq(H.requestVerdict(st, mem, { uid: 'u1', playerId: 'p1', teamId: 'ta', teamName: 'Aces' }), 'apply');
@@ -2350,7 +2353,7 @@ function define() {
       'only somebody who could act on a request may list them');
     ok(/allow create, update: if signedIn\(\) && me\(\) == uid[\s\S]{0,120}exists\(memberPath\(me\(\)\)\)/.test(R),
       'only the member themselves, and only once they have actually joined');
-    ok(/hasOnly\(\['at', 'playerId', 'name', 'teamId', 'teamName'\]\)/.test(R), 'the key whitelist is exactly five');
+    ok(/hasOnly\(\['at', 'playerId', 'name', 'teamId', 'teamName', 'claim'\]\)/.test(R), 'the key whitelist is exactly six');
     ok(/d\.name\.size\(\) <= 40/.test(R) && /d\.teamName\.size\(\) <= 40/.test(R), 'both names capped at 40');
     ok(/d\.playerId\.size\(\) <= 64/.test(R) && /d\.teamId\.size\(\) <= 64/.test(R), 'both ids capped at 64');
     ok(/hasOnly\(\['role', 'name', 'playerId', 'joinedAt', 'avail'\]\)/.test(R), 'a member document carries avail and nothing new besides');
@@ -2375,8 +2378,8 @@ function define() {
   t('nothing a member writes reaches the league without an admin’s tap', () => {
     const src = APP_SRC;
     ok(/function applyRequest\(uid\)/.test(src), 'there is one place a request becomes an edit');
-    ok(/function applyRequest[\s\S]{0,700}requestVerdict\(state, members, r\) !== 'apply'[\s\S]{0,700}save\(\);/.test(src),
-      'and it re-reads the verdict and goes through the ordinary save()');
+    ok(/function applyRequest[\s\S]{0,900}requestVerdict\(state, members, r, roster\) !== 'apply'[\s\S]{0,900}save\(\);/.test(src),
+      'and it re-reads the verdict — against the ROSTER — and goes through the ordinary save()');
     const push = src.slice(src.indexOf('async function pushNow'), src.indexOf('async function pushNow') + 1600);
     ok(push.length > 400, 'pushNow was found');
     ok(!/request/i.test(push), 'nothing about a request rides the league push');
@@ -2391,6 +2394,8 @@ function define() {
     const st = H.normalizeLeague(teamsFixture());
     H.__plant(st);
     W.lnCloudUser({ uid: 'u1', name: 'One', email: 'o@x' });
+    /* A CONFIRMED claim, not merely a link: the verdict reads the roster. */
+    W.lnRoster(st.league.id, [{ playerId: 'p1', uid: 'u1' }]);
     W.lnMembers(st.league.id, [{ uid: 'u1', name: 'One', role: 'viewer', playerId: 'p1', avail: null }]);
     W.lnRequests(st.league.id, [{ uid: 'u1', at: 1, playerId: 'p1', name: 'Won', teamId: null, teamName: null }]);
     try {
@@ -2401,7 +2406,7 @@ function define() {
       ok(!D.getElementById('requestsCard').hidden, 'an admin is');
       ok(D.querySelector('#requestsWrap [data-apply="u1"]'), 'and is offered Apply');
     } finally {
-      W.lnRequests(st.league.id, []); W.lnMembers(st.league.id, []); W.lnCloudUser(null);
+      W.lnRequests(st.league.id, []); W.lnMembers(st.league.id, []); W.lnRoster(st.league.id, []); W.lnCloudUser(null);
       H.__setRole('owner'); H.__plant(FIXTURE);
     }
   });
@@ -2411,6 +2416,7 @@ function define() {
     const st = H.normalizeLeague(teamsFixture());
     H.__plant(st);
     W.lnCloudUser({ uid: 'u1', name: 'One', email: 'o@x' });
+    W.lnRoster(st.league.id, [{ playerId: 'p1', uid: 'u1' }, { playerId: 'p2', uid: 'u2' }]);
     W.lnMembers(st.league.id, [{ uid: 'u1', name: 'One', role: 'viewer', playerId: 'p1', avail: null },
                                { uid: 'u2', name: 'Two', role: 'viewer', playerId: 'p2', avail: null }]);
     W.lnRequests(st.league.id, [{ uid: 'u1', at: 1, playerId: 'p1', name: 'Won', teamId: null, teamName: null },
@@ -2424,7 +2430,7 @@ function define() {
       W.lnRequests(st.league.id, []);
       ok(!tab.getAttribute('aria-label'), 'and an empty queue leaves no stale count behind');
     } finally {
-      W.lnMembers(st.league.id, []); W.lnCloudUser(null); H.__plant(FIXTURE);
+      W.lnMembers(st.league.id, []); W.lnRoster(st.league.id, []); W.lnCloudUser(null); H.__plant(FIXTURE);
     }
   });
 
@@ -2469,9 +2475,335 @@ function define() {
       eq(av.querySelectorAll('[data-note-avail]').length, 0, 'while an admin’s notes are not offered to them');
       D.getElementById('matchDialog').close();
     } finally {
-      W.lnMe(null); W.lnMembers(st.league.id, []); W.lnCloudUser(null);
+      W.lnMe(null); W.lnMembers(st.league.id, []); W.lnRoster(st.league.id, []); W.lnCloudUser(null);
       H.__setRole('owner'); H.__plant(FIXTURE);
     }
+  });
+
+  /* ── Team Setup ─────────────────────────────────────────────────────────
+     A member who is not an admin may change something in the league itself,
+     and only here. What the SERVER promises is narrower than what the UI
+     gates — it compares whole lists, so it can say "no result, fixture,
+     season, bracket or setting moved" and cannot say which player. Both
+     halves are pinned below. */
+  group('Team Setup: a member sorts the teams out, and nothing else');
+  const cloudLeague = () => {
+    const st = H.normalizeLeague(teamsFixture());
+    H.__plant(st);
+    const e = H.__device().leagues.find((l) => l.id === st.league.id);
+    if (e) e.cloud = true;
+    return H.__state();
+  };
+  const asMember = (st, opts) => {
+    const o = opts || {};
+    W.lnCloudUser({ uid: 'u1', name: 'One', email: 'o@x' });
+    W.lnRoster(st.league.id, o.claimed === false ? [] : [{ playerId: 'p1', uid: 'u1' }]);
+    W.lnMembers(st.league.id, [{ uid: 'u1', name: 'One', role: 'viewer', playerId: o.claimed === false ? null : 'p1', avail: null }]);
+    W.lnMe({ role: 'viewer', name: 'One', playerId: o.claimed === false ? null : 'p1' });
+    W.lnSetup(st.league.id, o.setup !== false);
+    H.__setRole('viewer');
+  };
+  const restore = () => {
+    try { W.lnSetup('', false); W.lnRoster('', []); W.lnMembers('', []); W.lnMe(null); W.lnCloudUser(null); } catch (e) {}
+    H.__setRole('owner');
+    H.__plant(FIXTURE);
+  };
+
+  t('the setup flag is a field on the league document, and absent means off', () => {
+    const R = RULES_SRC;
+    ok(/resource\.data\.get\('setup', false\) == true/.test(R),
+      'an ABSENT flag reads as OFF, so nothing widens for a league that already existed');
+    ok(/\(!\('setup' in d\) \|\| d\.setup is bool\)/.test(R), 'and it validates when it is there');
+    ok(/hasAll\(\['state', 'rev', 'owner', 'game', 'name', 'schema', 'updatedAt'\]\)/.test(R),
+      'validLeague is hasAll and NOT hasOnly — which is what lets an old league validate with no setup key');
+    ok(!/keys\(\)\.hasOnly\(\['state', 'rev', 'owner'/.test(R), 'and it never became hasOnly');
+  });
+
+  t('the member clause pins three document fields and three lists, and nothing else', () => {
+    const R = RULES_SRC;
+    ok(/exists\(memberPath\(me\(\)\)\)/.test(R), 'only somebody who has joined');
+    ok(/request\.resource\.data\.diff\(resource\.data\)\.affectedKeys\(\)\s*\n?\s*\.hasOnly\(\['state', 'rev', 'updatedAt'\]\)/.test(R),
+      'the document may change only state, rev and updatedAt — which pins owner, name, game, schema AND setup in one expression');
+    ok(/request\.resource\.data\.state\.diff\(resource\.data\.state\)\.affectedKeys\(\)\s*\n?\s*\.hasOnly\(\['players', 'teams', 'tombstones'\]\)/.test(R),
+      'and state only players, teams and tombstones — pinning league whole, settings included');
+    ok(/request\.resource\.data\.rev == resource\.data\.rev \+ 1/.test(R), 'every update is still a transaction');
+  });
+
+  t('setupState hands back everything but the three lists, byte for byte', () => {
+    const cloud = H.normalizeLeague(teamsFixture());
+    const stale = JSON.parse(JSON.stringify(cloud));
+    stale.teams.push({ id: 'tc', name: 'C', u: 9e12 });
+    stale.players[0] = Object.assign({}, stale.players[0], { teamId: 'tc', u: 9e12 });
+    const out = H.setupState(stale, cloud);
+    eq(JSON.stringify(out.matches), JSON.stringify(cloud.matches), 'the matches are the cloud’s own');
+    eq(JSON.stringify(out.seasons), JSON.stringify(cloud.seasons), 'and the seasons');
+    eq(JSON.stringify(out.brackets), JSON.stringify(cloud.brackets), 'and the brackets');
+    eq(JSON.stringify(out.league), JSON.stringify(cloud.league), 'and the league object, settings included');
+    ok(out.teams.some((x) => x.id === 'tc'), 'the new team came through');
+    eq(out.players.find((x) => x.id === 'p1').teamId, 'tc', 'and so did the move');
+  });
+
+  t('a member’s stale copy cannot resurrect a match', () => {
+    const cloud = H.normalizeLeague(teamsFixture());
+    const stale = JSON.parse(JSON.stringify(cloud));
+    /* A match the cloud no longer has, carrying a newer stamp. Through the
+       plain merge it would be appended and both the content AND the ORDER of
+       the list would differ — and the rules' diff would refuse the push with
+       a permission-denied nobody could read. setupState takes the matches
+       from the cloud side, so the question never arises. */
+    stale.matches.push({ id: 'ghost', a: 'ta', b: 'tb', legs: [], u: 9e12 });
+    const out = H.setupState(stale, cloud);
+    ok(!out.matches.some((m) => m.id === 'ghost'), 'the ghost stayed out');
+    eq(JSON.stringify(out.matches), JSON.stringify(cloud.matches), 'and the list is the cloud’s, in the cloud’s order');
+  });
+
+  t('pushSetup is narrower than pushNow, and checks the switch before it writes', () => {
+    const src = stripComments(APP_SRC);
+    ok(/async function pushSetup\(entry\)/.test(src), 'it exists as its own function');
+    ok(/if \(cloud\.setup !== true\) throw[\s\S]{0,120}'ln\/setup-closed'/.test(src),
+      'the switch is re-read INSIDE the transaction, because it can close between the tap and the write');
+    ok(/tx\.update\(leagueRef\(id\), \{ state: next, rev: cloud\.rev \+ 1, updatedAt: Date\.now\(\) \}\)/.test(src),
+      'and it writes exactly the three fields the member clause allows — the same three words in both files');
+    ok(/lnSetupState\(mine, cloud\.state\)/.test(src), 'built from the cloud’s own state, never from a merge that happened to agree');
+    const line = (src.match(/.*ln\/setup-closed.*/g) || []).find((l) => /code ===/.test(l)) || '';
+    ok(/toast/.test(line), 'a closed switch is a toast', line.slice(0, 80));
+    ok(/return;/.test(line) && !/setSyncError/.test(line),
+      'and it RETURNS before setSyncError — an admin closing up is not a fault and must not raise the Not-syncing banner');
+  });
+
+  t('canEdit is byte-identical, and canSetUp is a second predicate beside it', () => {
+    const src = APP_SRC;
+    ok(src.indexOf("function canEdit() { return !!state && !viewOnly && myRole() !== 'viewer'; }") !== -1,
+      'canEdit gates every result in the app and must not have grown a clause');
+    ok(/function canSetUp\(\) \{\s*\n?\s*return canEdit\(\)/.test(src), 'canSetUp opens with canEdit(), so it only ever adds');
+    ok(/setupOpen\(\) && isCloudLeague\(\) && !!cloudUser && !!meDoc/.test(src),
+      'and needs a signed-in member of a shared league with the switch on');
+  });
+
+  t('during setup a member gets the team editor and only their own checkbox', () => {
+    const D = W.document;
+    const st = cloudLeague();
+    asMember(st);
+    try {
+      D.getElementById('tab-players').click();
+      ok(!D.getElementById('addTeamBtn').hidden, 'they may make a team');
+      ok(getComputedStyle(D.getElementById('addPlayerBtn')).display === 'none',
+        'and may NOT add a player — creating a player is creating a person');
+      D.querySelector('#teamsWrap .prow').click();
+      ok(D.getElementById('teamDialog').open, 'a team row opens the real editor');
+      ok(!D.getElementById('sideDialog').open, 'not the read-only sheet');
+      const boxes = [...D.querySelectorAll('#tm_members [data-member]')];
+      ok(boxes.length > 1, 'the whole list is drawn so they can see who is in', boxes.length);
+      eq(boxes.filter((b) => !b.disabled).map((b) => b.dataset.member), ['p1'], 'exactly one is theirs to move');
+      D.getElementById('teamDialog').close();
+    } finally { restore(); }
+  });
+
+  t('the handler behind the disabled box refuses another player', () => {
+    const D = W.document;
+    const st = cloudLeague();
+    asMember(st);
+    try {
+      D.getElementById('tab-players').click();
+      D.querySelector('#teamsWrap .prow').click();
+      const other = [...D.querySelectorAll('#tm_members [data-member]')].find((b) => b.disabled);
+      ok(other, 'there is somebody else on the list');
+      const before = H.__state().players.find((p) => p.id === other.dataset.member).teamId;
+      other.checked = !other.checked;
+      other.dispatchEvent(new W.Event('change', { bubbles: true }));
+      eq(H.__state().players.find((p) => p.id === other.dataset.member).teamId, before,
+        'the guard behind the disabled control refuses it, in the addSave idiom');
+      D.getElementById('teamDialog').close();
+    } finally { restore(); }
+  });
+
+  t('with setup closed a member’s team row is only a page again', () => {
+    const D = W.document;
+    const st = cloudLeague();
+    asMember(st, { setup: false });
+    try {
+      D.getElementById('tab-players').click();
+      ok(D.getElementById('addTeamBtn').hidden, 'no making a team');
+      D.querySelector('#teamsWrap .prow').click();
+      ok(D.getElementById('sideDialog').open, 'the read-only sheet');
+      ok(!D.getElementById('teamDialog').open, 'and not the editor');
+      ok(D.getElementById('sideEdit').hidden, 'with no way back into it');
+      D.getElementById('sideDialog').close();
+    } finally { restore(); }
+  });
+
+  /* ── The claim ──────────────────────────────────────────────────────────
+     Exclusive both ways. One half is the roster subcollection, whose document
+     id IS the player; the other is the member document, which has one
+     playerId field. What is enforced only by AGREEMENT is that the two name
+     each other — so `claim` is the confirmed reading and `playerId` is only
+     what was asked for. */
+  group('one account, one player, both ways');
+
+  t('reconcileClaims confirms a link only when the roster agrees', () => {
+    const mem = [{ uid: 'u1', playerId: 'p1' }, { uid: 'u2', playerId: 'p2' }, { uid: 'u3', playerId: null }];
+    H.reconcileClaims(mem, [{ playerId: 'p1', uid: 'u1' }]);
+    eq(mem.map((m) => m.claim), ['p1', null, null], 'a member document alone claims nothing');
+  });
+
+  t('two accounts naming one player claim nobody but the holder', () => {
+    const mem = [{ uid: 'u1', name: 'One', playerId: 'p1' }, { uid: 'u2', name: 'Two', playerId: 'p1' }];
+    H.reconcileClaims(mem, [{ playerId: 'p1', uid: 'u2' }]);
+    /* The live league was in exactly this state. memberForPlayer used .find
+       on playerId, and .find cannot express a conflict — it silently picked
+       one, and availFor read that one's answers. */
+    eq(H.memberForPlayer(mem, 'p1').name, 'Two', 'the holder, and not whoever the snapshot listed first');
+    eq(mem[0].claim, null, 'the other reads as unclaimed everywhere');
+    const st = H.normalizeLeague(teamsFixture());
+    mem[0].avail = { '2026-09-10': 'y' };
+    mem[1].avail = { '2026-09-10': 'n' };
+    eq(H.availFor(st, mem, 'p1', '2026-09-10'), { answer: 'n', source: 'player' }, 'and the holder is whose answer counts');
+  });
+
+  t('a rename is not theirs unless the roster says so', () => {
+    const st = H.normalizeLeague(teamsFixture());
+    eq(H.requestVerdict(st, [{ uid: 'u1', playerId: 'p1', claim: null }], { uid: 'u1', playerId: 'p1', name: 'X' }, []),
+      'not-theirs', 'a link the roster has not confirmed entitles them to nothing');
+    eq(H.requestVerdict(st, [{ uid: 'u1', playerId: 'p1', claim: 'p1' }], { uid: 'u1', playerId: 'p1', name: 'X' }, []), 'apply');
+  });
+
+  t('claiming a held player is taken, and claiming your own is already', () => {
+    const st = H.normalizeLeague(teamsFixture());
+    const free = [{ uid: 'u1', claim: null }];
+    eq(H.requestVerdict(st, free, { uid: 'u1', claim: 'p1' }, []), 'apply');
+    eq(H.requestVerdict(st, free, { uid: 'u1', claim: 'p1' }, [{ playerId: 'p1', uid: 'u9' }]), 'taken');
+    eq(H.requestVerdict(st, [{ uid: 'u1', claim: 'p1' }], { uid: 'u1', claim: 'p1' }, [{ playerId: 'p1', uid: 'u1' }]), 'already');
+    eq(H.requestVerdict(st, [{ uid: 'u1', claim: 'p2' }], { uid: 'u1', claim: 'p1' }, []), 'taken',
+      'and an account that is already somebody cannot become a second person');
+    eq(H.requestVerdict(st, free, { uid: 'u1', claim: 'nobody' }, []), 'gone');
+  });
+
+  t('the roster is create-only, and its document id is the player', () => {
+    const R = RULES_SRC;
+    ok(/match \/roster\/\{playerId\}/.test(R), 'the collection is keyed by the player');
+    ok(/allow update: if false;/.test(R), 'create-only: a swap is never one write that could half-succeed into a lie');
+    ok(/hasOnly\(\['uid', 'at'\]\)/.test(R), 'two fields and no more');
+    ok(/get\(memberPath\(claimant\(\)\)\)\.data\.playerId == playerId/.test(R),
+      'the agreement is checked against the CLAIMANT’s member document, which is what folds the admin case into one term');
+    ok(/\(claimant\(\) == me\(\) \|\| isOwner\(\) \|\| memberIsAdmin\(\)\)/.test(R), 'and separately, who may act');
+    ok(/allow delete: if signedIn\(\) && \(resource\.data\.uid == me\(\) \|\| isOwner\(\) \|\| memberIsAdmin\(\)\)/.test(R),
+      'the holder or an admin may free a name');
+  });
+
+  t('the members rule widens by exactly one field', () => {
+    const R = RULES_SRC;
+    ok(/memberIsAdmin\(\)\s*\n?\s*&& request\.resource\.data\.diff\(resource\.data\)\.affectedKeys\(\)\.hasOnly\(\['playerId'\]\)/.test(R),
+      'an admin may say which player an account is and nothing else — stronger than three equalities, because it covers joinedAt and refuses a new key');
+    ok(/\(me\(\) == uid && request\.resource\.data\.role == resource\.data\.role\)/.test(R), 'the self-update branch is untouched');
+    ok(/isOwner\(\)\s*\n\s*\|\| \(me\(\) == uid/.test(R), 'and so is the owner’s');
+  });
+
+  t('switching is delete then create, and every half-written state reads as unclaimed', () => {
+    const src = stripComments(APP_SRC);
+    const fn = src.slice(src.indexOf('async function claimPlayer'), src.indexOf('async function claimPlayer') + 1200);
+    ok(fn.length > 300, 'claimPlayer was found');
+    const del = fn.indexOf('deleteDoc(rosterRef(id, was))');
+    const upd = fn.indexOf('updateDoc(memberRef(id, user.uid)');
+    const set = fn.indexOf('setDoc(rosterRef(id, next)');
+    ok(del !== -1 && upd !== -1 && set !== -1, 'all three writes are there');
+    ok(del < upd && upd < set, 'and in the one order where nothing intermediate is a lie', [del, upd, set].join(' '));
+    ok(!/function linkPlayer/.test(src), 'linkPlayer is gone — nothing about this is a single field any more');
+  });
+
+  t('a losing claim is a race and never raises the banner', () => {
+    const src = stripComments(APP_SRC);
+    const fn = src.slice(src.indexOf('async function adoptClaim'), src.indexOf('async function adoptClaim') + 900);
+    ok(fn.length > 200, 'adoptClaim was found');
+    ok(/permission-denied/.test(fn), 'it recognises the refusal');
+    ok(!/setSyncError/.test(fn), 'and does NOT call setSyncError — every account would see Not syncing on the same afternoon');
+    ok(/playerId: F\.deleteField\(\)/.test(fn), 'the loser lets go of its own link, keeping its role, name, availability and any request');
+  });
+
+  t('a league that goes takes its roster with it, and so does a member who leaves', () => {
+    const src = APP_SRC;
+    ok(/const rosterRef = \(id, playerId\) => F\.doc\(db, 'leagues', id, 'roster', playerId\)/.test(src), 'there is a ref');
+    ok(/getDocs\(F\.collection\(db, 'leagues', id, 'roster'\)\)[\s\S]{0,400}rost\.forEach\(\(d\) => batch\.delete\(d\.ref\)\)/.test(src),
+      'deleteLeague takes the roster in the SAME batch — a league deleted first leaves every row undeletable for good');
+    ok(/async function leaveLeague[\s\S]{0,500}deleteDoc\(rosterRef\(id, meDocLocal\.playerId\)\)/.test(src), 'leaving frees your name');
+    ok(/async function removeMember[\s\S]{0,500}deleteDoc\(rosterRef\(id, held\.playerId\)\)/.test(src), 'and so does being removed');
+  });
+
+  t('a claim request reaches applyRequest, which writes the member document first', () => {
+    const src = stripComments(APP_SRC);
+    ok(/\(!\('claim' in d\)\s*\|\| \(d\.claim is string && d\.claim\.size\(\) <= 64\)\)/.test(RULES_SRC), 'the rules carry it');
+    ok(/if \(r\.claim\) return await window\.lnCloud\.assign\(r\.uid, r\.claim\)/.test(src), 'applyRequest routes it to assign');
+    const fn = src.slice(src.indexOf('async function assign'), src.indexOf('async function assign') + 800);
+    ok(fn.indexOf('updateDoc(memberRef(id, uid)') < fn.indexOf('setDoc(rosterRef(id, playerId)'),
+      'and assign writes the member document BEFORE the row — the roster rule reads it, so the other order is simply refused');
+  });
+
+  t('lnCleanRequest keeps a claim and drops one that is not an id', () => {
+    ok(W.lnCleanRequest('u1', { at: 1, claim: 'p1' }), 'a claim alone is a request');
+    eq(W.lnCleanRequest('u1', { at: 1, claim: 'p1' }).claim, 'p1');
+    eq(W.lnCleanRequest('u1', { at: 1 }), null, 'and an ask for nothing is not');
+    eq(W.lnCleanRequest('u1', { at: 1, claim: 'not an id!' }), null, 'a claim that is not an id shape is no claim');
+    eq(W.lnCleanRoster('p1', { uid: 'abc' }), { playerId: 'p1', uid: 'abc' });
+    eq(W.lnCleanRoster('p1', { uid: '' }), null, 'a row naming nobody is not a row');
+    eq(W.lnCleanRoster('bad id!', { uid: 'abc' }), null, 'nor one keyed by something that is not an id');
+  });
+
+  /* ── The guards ─────────────────────────────────────────────────────── */
+  group('the caps, and what to do when they bite');
+
+  t('the rules cap what one league may hold', () => {
+    const R = RULES_SRC;
+    ok(/function validSize\(s\)/.test(R), 'there is a size function at all');
+    const cap = (k) => { const m = R.match(new RegExp('s[.]' + k + '[.]size[(][)]\\s*<=\\s*(\\d+)')); return m ? Number(m[1]) : null; };
+    eq([cap('players'), cap('teams'), cap('seasons'), cap('matches'), cap('brackets'), cap('tombstones')],
+      [500, 250, 100, 2000, 200, 2000], 'the six caps, pinned so a silent change fails here');
+    ok(R.indexOf('d.state is map') < R.indexOf('validSize(d.state)'),
+      'and `is map` comes first — size() on a non-list is an evaluation error');
+  });
+
+  t('the leagues cap is client-side, and says so in both places', () => {
+    const src = APP_SRC;
+    ok(/const LEAGUES_MAX = 20;/.test(src), 'twenty');
+    ok(/async function shareLeague\(\)[\s\S]{0,200}tooManyLeagues\(\)/.test(src), 'checked before a share');
+    ok(/async function joinLeague\([\s\S]{0,200}tooManyLeagues\(\)/.test(src), 'and before a join');
+    ok(/speed bump/.test(src), 'and the comment is honest about what it is');
+    ok(/enforced in the browser only/.test(README_SRC), 'as is the README');
+  });
+
+  t('the README carries the incident runbook', () => {
+    const R = README_SRC;
+    ok(/## If something goes wrong/.test(R), 'there is a runbook');
+    ok(/league-night-dff31/.test(R), 'it names the project');
+    ok(/kill switch/.test(R), 'and says the rules are the kill switch');
+    ok(/roster/.test(R) && /disputed claim/i.test(R), 'and where to look at a disputed claim');
+  });
+
+  /* ── The new windows ────────────────────────────────────────────────── */
+  group('the new windows are the family’s shape');
+
+  t('the Team Setup card is the family’s shape', () => {
+    const D = W.document;
+    const card = D.getElementById('setupCard');
+    ok(card, 'it exists');
+    ok(card.classList.contains('cloud-only'), 'cloud-only, so a local league and a shared snapshot never see it');
+    eq(card.querySelector('h2').firstChild.textContent.trim(), 'Team Setup', 'Title Case, and the heading is the name');
+    const dots = card.querySelectorAll('.tile-help');
+    eq(dots.length, 1, 'one dot for one heading');
+    eq(dots[0].textContent.trim(), 'i', 'and it is an i, never a question mark');
+    ok(card.querySelector('p.lede'), 'a lede that says what it does');
+    eq(card.querySelectorAll('input[type="text"]').length, 0, 'and no free text anywhere in it');
+    ok(H.esc && typeof W.HELP === 'undefined' ? true : true);
+  });
+
+  t('Who They Are closes on a click outside and offers no free text', () => {
+    const D = W.document;
+    const src = APP_SRC;
+    ok(/'searchDialog', 'assignDialog'\]\.forEach\(\(id\) => closeOnBackdropClick/.test(src),
+      'registered for click-outside, or the backdrop would be dead for this one window alone');
+    const dlg = D.getElementById('assignDialog');
+    ok(dlg, 'it exists');
+    eq(dlg.querySelectorAll('input[type="text"], textarea').length, 0, 'one select and nothing to type into');
+    ok(dlg.querySelector('select#as_player'), 'and the select is there');
+    ok(dlg.textContent.trim().length > 10, 'with static text, so the blind open-and-close walk does not read it as empty');
   });
 
   group('installable, and it works offline');

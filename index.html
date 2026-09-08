@@ -6457,12 +6457,18 @@ function renderMembers() {
     return '<div class="prow static"><span class="pname">' + esc(m.name || 'A member') + (isMe ? ' <span class="pill">you</span>' : '')
       + ' <span class="pill' + (roleWord === 'owner' ? ' ok' : '') + '">' + esc(roleWord) + '</span>'
       + (player ? ' <span class="hint">plays as ' + esc(player.name) + '</span>' : '') + '</span>'
-      + (admin ? '<span class="row no-print" style="gap:6px"><button type="button" class="btn-small" data-assign="' + esc(m.uid) + '">Who They Are…</button></span>' : '')
-      + (owner && !isMe ? '<span class="row no-print" style="gap:6px">'
-          + (m.role === 'admin' ? '<button type="button" class="btn-small" data-role="viewer" data-uid="' + esc(m.uid) + '">Make viewer</button>'
-                                : '<button type="button" class="btn-small" data-role="admin" data-uid="' + esc(m.uid) + '">Make admin</button>')
-          + '<button type="button" class="btn-small" data-owner="' + esc(m.uid) + '">Make owner</button>'
-          + '<button type="button" class="icon-btn danger" data-remove="' + esc(m.uid) + '" aria-label="Remove ' + esc(m.name) + '"><span aria-hidden="true">×</span></button></span>' : '')
+      /* ONE actions group, or a row carrying both sets has the first floating
+         in the middle where .prow puts its second column. Who an account IS
+         is an admin's; who may RUN the league is still the owner's. */
+      + (admin || (owner && !isMe) ? '<span class="row no-print" style="gap:6px">'
+          + (admin ? '<button type="button" class="btn-small" data-assign="' + esc(m.uid) + '">Who They Are…</button>' : '')
+          + (owner && !isMe
+            ? (m.role === 'admin' ? '<button type="button" class="btn-small" data-role="viewer" data-uid="' + esc(m.uid) + '">Make viewer</button>'
+                                  : '<button type="button" class="btn-small" data-role="admin" data-uid="' + esc(m.uid) + '">Make admin</button>')
+              + '<button type="button" class="btn-small" data-owner="' + esc(m.uid) + '">Make owner</button>'
+              + '<button type="button" class="icon-btn danger" data-remove="' + esc(m.uid) + '" aria-label="Remove ' + esc(m.name) + '"><span aria-hidden="true">×</span></button>'
+            : '')
+          + '</span>' : '')
       + '</div>';
   }).join('') + '</div>' : '<p class="hint">Nobody has joined yet.</p>';
   /* "That's me": which roster player this account is. The list is what is
