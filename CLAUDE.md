@@ -31,6 +31,45 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
   copy wins" dialog: `mergeLeague(mine, theirs)` is pure, per-entity newest-`u` wins,
   deletions are tombstones, and the rules refuse any update whose `rev` is not exactly one
   ahead. `nextU()` is monotonic so a phone with a slow clock cannot lose an edit.
+- **A member who is not an admin ASKS; an admin's tap is the only bridge into the league**
+  (2026-09-08). `state` is one opaque map to the rules — they can say "may write all of it" or
+  "none of it" and nothing between — so a member writes what they want into
+  `leagues/{id}/requests/{uid}`, and `applyRequest` turns it into an ordinary `save()`. Four
+  decisions inside that a reader will want to undo: the queue is its **own subcollection and
+  not fields on `members/{uid}`**, because dismissal is an admin's act and putting it in the
+  members rule is one predicate away from an admin writing another member's `role` (and it
+  would broadcast down the whole-collection members listener every viewer runs); `allow list`
+  IS granted there where it is `false` on `leagues`, because **a League ID is a capability and
+  a uid is not** — `/members` already hands out every uid; `requestVerdict` re-derives what a
+  member is entitled to change **from the league and the members snapshot**, never from the
+  request, which is the check the rules cannot make; and the request goes in **`deleteLeague`'s
+  one batch** with the members, or a deleted league leaves every request undeletable forever.
+- **A lineup that was never recorded is not an empty one** (2026-09-08). `m.lineup` is written
+  only when somebody set it: an absent key means nobody has said and the team's own actives are
+  the guess, a recorded `[]` means somebody said and said nobody. Every reader tests
+  `Array.isArray`, never `.length` and never the parent's truthiness. Two more that look like
+  tidy-ups and are not: **`LINEUP_MAX` is a constant 8 and never the live `settings.teamSize`**,
+  because lowering a setting must not drop names off a night already thrown (the picker enforces
+  `teamSize`; the boundary does not), and **an id naming no player SURVIVES `normalizeLeague`**,
+  because `mergeLeague` normalizes each side alone and stripping it would lose a new player
+  whenever the other copy's match carried the higher `u` — unknown ids are dropped where they
+  are drawn, exactly as `leg.by` already does.
+- **A sub is a name on a card who is not on that team, and there is no other record of one.**
+  Nothing downstream reads a lineup: `standings`, `matchScore` and `dartsPlayerStats` all key
+  off the leg, so a sub is credited because `leg.by` names them and all the card does is let
+  them be ticked there at all. Which is why **`newLeg` pre-fills `by` only from a side with ONE
+  name down** — a squad makes `by[side].length !== 1`, and `dartsPlayerStats` then credits legs
+  played and won and silently drops every average, 180 and checkout for that team's season.
+- **A player's own answer is the one shown; a note an admin made stands only until the player
+  answers for themselves.** That sentence is on the card, and `availFor` is it in code. Two
+  sinks on purpose: `members/{uid}.avail` for an account (self-written, no admin needed — the
+  existing self-update rule already allows it) and `player.avail` in the league for the many
+  players who will never sign in. It returns `null` and never `'n'`, and **availability gates
+  nothing** — it sorts and annotates the list of people who could stand in, so a stale note
+  costs a hint and never a result.
+- **The availability toggles are the one block in the app a viewer may use.** They must never
+  carry `.no-edit`, which `html[data-readonly] .no-edit` hides: what a player says about their
+  own night is theirs to say and never enters the league.
 - **The engines are pure and game-agnostic.** `roundRobin`, `standings`/`rankSides`,
   `buildSingle`/`buildDouble`/`resolve*`, and the x01 scorer know nothing about darts beyond
   what `GAMES.darts` tells them. A new game is one entry in `GAMES` and nothing else.

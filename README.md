@@ -20,6 +20,14 @@ league's ID can follow it, and anyone with the admin key can run it.
 - **Players and teams.** Add, rename, retire; a per-player handicap comes off the start of every
   singles leg they throw — a team match starts every leg from the full score. Teams hold up to
   eight players.
+- **Subs, and who can make the night.** Every match has a card: who is actually throwing for
+  each team tonight. Until somebody sets it the app assumes the team's own players. Anyone on a
+  card who is not on that team is a sub — the app keeps no other record of one, and needs none:
+  a sub's legs count for the team they stood in for *and* for their own record, because every
+  figure is worked out from who threw the leg. Players say for themselves whether they can make
+  a night — playing, can't make it, or happy to stand in for another team — and an admin can
+  note it for anyone who does not use the app. A player's own answer is the one shown. It sorts
+  the list of people who could fill a gap; it never decides who plays.
 - **Seasons and fixtures.** Start a season and generate a round robin — byes for an odd count, an
   optional double round, one round a week or any spacing — or add matches one at a time.
 - **Scoring.** Tap a match, add a leg, tap who won it. The match ends itself when the format says
@@ -67,6 +75,12 @@ can **Share** it from the League tab, and from then on:
 - **Every change is a transaction.** Two admins scoring two matches at once both land; the
   same match scored on two phones resolves to the later tap. Offline, a change is saved on the
   phone and goes up on its own when the network is back.
+- **A member can ask for their own name, and their team's.** The league is one record and only
+  its admins write it, so what a member types is kept beside the league and changes nothing
+  until an admin taps **Apply**. The League tab carries a count of what is waiting, and each row
+  shows the name as it stands against the one asked for — a request overtaken by an admin, or
+  from somebody no longer on that player, offers only *Dismiss*. Saying whether you can make a
+  night needs no approval: that answer is kept with your account rather than in the league.
 - **Removing a member is honest about what it does:** they come off the list, and anyone who
   still has the ID can rejoin as a viewer. A league that must be closed to someone is a new
   league with a new ID.
