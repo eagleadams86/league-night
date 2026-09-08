@@ -1,7 +1,7 @@
 # League Night — rules for Claude sessions
 
-A league tracker for darts and, later, other pub and club games (cornhole, shuffleboard,
-bowling, golf). Players or teams, a season schedule, standings, live leg scoring and
+A league tracker for darts and table shuffleboard, and later other pub and club games
+(cornhole, bowling, golf). Players or teams, a season schedule, standings, live scoring and
 knock-out tournaments — shared with everyone in the league. Deployed via GitHub Pages:
 https://eagleadams86.github.io/league-night/
 
@@ -145,7 +145,60 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
   own night is theirs to say and never enters the league.
 - **The engines are pure and game-agnostic.** `roundRobin`, `standings`/`rankSides`,
   `buildSingle`/`buildDouble`/`resolve*`, and the x01 scorer know nothing about darts beyond
-  what `GAMES.darts` tells them. A new game is one entry in `GAMES` and nothing else.
+  what `GAMES.darts` tells them. **Shuffleboard proved it** (2026-09-08): not one line of the
+  schedule, the standings, the tiebreaks, the brackets, the merge or the sharing changed.
+- **What a SECOND game actually cost, and what it did not** (2026-09-08). The engine was free.
+  Everything that had to change was a place the app said "leg" or "darts" out loud, and each one
+  is now a key on the game rather than a word in the markup — `unit`, `formatLabel`, `doubleOut`,
+  `detail`, `handicap.pill`, `handicap.note`. Read that list before adding cornhole: the contract
+  is eleven keys and the tests pin that every game supplies all of them.
+  - **`handicap.pill` exists because the standings table used to sniff the LABEL.** It drew a
+    minus when `label.split(' ')[0]` was "start". A second game whose label was not would have
+    been drawn wrong with nothing on screen to see. A game says how its own figure reads.
+    `handicap.note` is the same fix for the table key's sentence.
+  - **`formatLabel` is not `capUnit(unit.one)`.** At shuffleboard the unit is "game", and the box
+    beside the format box is already labelled *Game* (it holds "Shuffleboard"). Two fields called
+    Game is the bug you only see on screen; a game names its own field.
+  - **`FRAME_MAX` is declared ABOVE the registry** because the registry's own literal reads it.
+    A `const` is in its temporal dead zone until its line RUNS, so the first draft threw on page
+    load with the whole suite green behind it — the September boot-time TDZ wearing a new coat.
+    Every value a top-level literal reads is declared before that literal.
+  - **A HELP entry may be a FUNCTION, and every body is still a LITERAL.** The function CHOOSES
+    between two written-out texts; it never builds one. `helpBody` takes `innerHTML`, and no test
+    can tell "the unit word from the registry" from "whatever arrived over Firestore" — so two
+    games are two paragraphs, written twice, and the suite still refuses `esc(`, `state.` or `$(`
+    anywhere in the table.
+  - **Nothing in the pure engine may call a rendering helper.** `frameScore`'s error text was
+    written through `plural()`, which is a `const` arrow a thousand lines further down the file.
+    It happened to work and was one call site away from the TDZ above.
+- **Table shuffleboard, and what a frame is** (2026-09-08). A `leg` at shuffleboard is one GAME,
+  a race to 15 or 21, and `leg.start` — the number darts counts DOWN from — is the target it
+  counts UP to. That is why `start` needed no second field and why a handicap is still one
+  subtraction: a head start of 4 in a game to 15 is a target of 11.
+  - **`leg.frames` is the record, and `{ s, t, h }` is one frame**: the side that scored it,
+    what it was worth, and how many HANGERS were among those points. Exactly one side scores a
+    frame. **`{ s: null, t: 0 }` is a frame nobody scored** — every weight off the end — and it
+    has to be recordable or the frame count and the hammer both drift from the night played.
+  - **Hangers are counted WITH the frame, never typed after it.** A hanger is four of those
+    points, so `h * 4 > t` is two figures that disagree and `frameScore` refuses it; the sheet's
+    stepper cannot go past what the total will hold, and lowering the total brings it down.
+  - **The winner is the first side to REACH OR PASS its target**, and the frame that gets them
+    there can carry them past it — the score stands as it fell. `frameScore` will not add a frame
+    to a game that is over, and `frameState` ignores one that arrived anyway.
+  - **The hammer starts where the scorer put it (`leg.first`) and alternates every frame.** It is
+    not "whoever scored last": that is a house rule, and a wrong claim about it is worse than no
+    claim. The sheet offers the choice for frame one only, exactly as darts offers who throws first.
+  - **`legIsLive(leg)` is the game-agnostic "was this scored live"**, and every reader uses it.
+    `leg.visits` on its own was the test in three places. `openLive` plants ONLY its own game's
+    empty record — a darts leg that grew a `frames: []` would read as scored live and lose its
+    Details boxes to a record nothing writes to.
+  - **`compactSeason` trims both records** and the suite pins that no figure moves at either game
+    — points, hangers and the best frame survive a shuffleboard trim the way `scored` survives a
+    darts one.
+  - **The blank frame is a WORD in the *Scored by* row, not a glyph on the keypad.** It began as
+    `⊘` with an aria-label, which is unexplained to everyone who can see. Three answers to one
+    question belong together, and the keypad's last row is `⌫` and a double-width `0` so no cell
+    is dead space.
 - **Bracket matches are ordinary matches** carrying `bracketId` and `slot`, resolved into a
   tree at render time, so two boards scoring two bracket games at once never collide.
 - **The phone gets a bottom tab bar** (under 760px) — the first in the family. The bar is a
@@ -173,6 +226,16 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
   not free (held by something outside these repos); 8024 is the first past the family band.
 
 ## Status
+
+**Shuffleboard (2026-09-08)** is the second entry in `GAMES` and the third demo league
+(`LN-DEMOBORD`, singles, head starts, the last round scored frame by frame). SCHEMA went to 5 for
+`leg.frames`. The pure `frameState`/`frameScore`/`frameUndo`/`frameLegStats` fold sits beside the
+x01 one and is pinned the same way; `EXPECTED` is 280.
+
+**Two tests fail in the desktop app's Browser pane and pass in CI** — *on a phone the bar is
+really there* (`sheetW` 360 of 375) and *the controls are ONE line* (`headerH` 125 of ≤100). They
+fail identically on `main`, so a run that shows only those two is a clean run. Check a baseline
+before believing a phone-geometry failure here.
 
 Phases 1, 2, 3 and 5 are built (2026-09-07): the scaffold, the pure engine (`roundRobin`,
 `standings`/`rankSides`, the bracket resolvers, the x01 fold and checkout table, `mergeLeague`),

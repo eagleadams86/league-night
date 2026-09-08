@@ -51,7 +51,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 257;
+const EXPECTED = 280;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -1568,8 +1568,8 @@ function define() {
   });
 
   group('the live scorer');
-  t('a new leg remembers who throws first and the double-out rule, and SCHEMA is 4', () => {
-    eq(H.SCHEMA, 4);
+  t('a new leg remembers who throws first and the double-out rule, and SCHEMA is 5', () => {
+    eq(H.SCHEMA, 5);
     const out = H.normalizeLeague({ league: { id: 'L' }, matches: [{ id: 'm', a: 'x', b: 'y', legs: [{ first: 'b', dOut: false }, {}] }] });
     eq(out.matches[0].legs.map((l) => [l.first, l.dOut]), [['b', false], ['a', true]]);
   });
@@ -1621,6 +1621,303 @@ function define() {
       ok(!D.querySelector('#legsWrap [data-live]'), 'no live button for a viewer');
       D.getElementById('matchDialog').close();
     } finally { H.__setRole('owner'); H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+
+  group('shuffleboard: a second game, and what the engine did not have to learn');
+  /* A shuffleboard league of two players, one of them on a head start, with a
+     match still to play. Its id carries no LN- code shape, like the demo's, so
+     nothing here can be mistaken for a cloud league. */
+  const SBFX = {
+    league: { id: 'LN-SBFIX', name: 'Board Fixture', game: 'shuffleboard', createdAt: '2026-01-01',
+      settings: { format: 'singles', teamSize: 2, legFormat: '15', dOut: true,
+                  matchFormat: { mode: 'bestOf', n: 3 }, points: { win: 2, draw: 1, loss: 0 },
+                  tiebreak: ['pts', 'legDiff', 'legsFor', 'h2h', 'name'] } },
+    players: [{ id: 'sb-ann', name: 'Ann', teamId: null, hcp: null, active: true },
+              { id: 'sb-bo', name: 'Bo', teamId: null, hcp: 4, active: true }],
+    teams: [], seasons: [{ id: 'sb-s1', name: 'Board Season', startsOn: '2026-01-05', status: 'active' }],
+    matches: [{ id: 'sb-m1', seasonId: 'sb-s1', bracketId: null, slot: null, round: 1, date: '2026-01-05',
+                venue: '', a: 'sb-ann', b: 'sb-bo', status: 'scheduled', score: { a: 0, b: 0 }, legs: [] }],
+    brackets: [], tombstones: [],
+  };
+  /* A game of shuffleboard, ready for frames. */
+  const sbLeg = (ta, tb, first) => ({ w: null, by: { a: ['sb-ann'], b: ['sb-bo'] },
+    start: { a: ta, b: tb }, first: first || 'a', frames: [] });
+  const play = (leg, list) => list.reduce((cur, f) => {
+    const next = H.frameScore(cur, f[0], f[1], f[2] || 0);
+    ok(!next.error, 'frame ' + JSON.stringify(f) + ': ' + next.error);
+    return next.error ? cur : next;
+  }, leg);
+
+  t('every game supplies the whole contract, and a handicap that can be DRAWN', () => {
+    Object.keys(H.GAMES).forEach((g) => {
+      H.GAME_CONTRACT.forEach((k) => ok(k in H.GAMES[g], g + ' lacks ' + k));
+      const hcp = H.GAMES[g].handicap;
+      ['label', 'min', 'max'].forEach((k) => ok(hcp[k] != null, g + ' handicap lacks ' + k));
+      ok(typeof hcp.apply === 'function' && typeof hcp.pill === 'function', g + ' handicap must apply AND draw itself');
+      ok(typeof hcp.note === 'string' && hcp.note.length > 10, g + ' handicap says nothing in the table key');
+      ok(H.GAMES[g].formatLabel !== 'Game', g + ' would label its format box the same as the game box');
+      ok(typeof H.GAMES[g].playerStats === 'function', g + ' has no stats fold');
+    });
+    ok(Object.keys(H.GAMES).length >= 2, 'there is more than one game');
+  });
+  t('a handicap says how it is drawn instead of being guessed at from its label', () => {
+    /* The standings table used to read the FIRST WORD of the label: "Start
+       deduction" began with "start", so it drew a minus. A second game whose
+       label did not would have been drawn wrong with nothing to see. */
+    eq(H.GAMES.darts.handicap.pill(60), '\u221260');
+    eq(H.GAMES.shuffleboard.handicap.pill(4), '+4');
+    eq(H.GAMES.darts.handicap.apply(501, 40), 461, 'darts takes it off the start');
+    eq(H.GAMES.shuffleboard.handicap.apply(15, 4), 11, 'shuffleboard takes it off the target');
+    ok(!/handicap\.label\.split/.test(stripComments(APP_SRC)), 'and nothing sniffs a label any more');
+  });
+  t('a frame scores for ONE side, and the total counts up to the target', () => {
+    const leg = play(sbLeg(15, 15), [['a', 3], ['b', 2], ['a', 1]]);
+    const st = H.frameState(leg);
+    eq([st.pts.a, st.pts.b], [4, 2]);
+    eq([st.fw.a, st.fw.b], [2, 1], 'frames won');
+    eq(st.winner, null); eq(st.frames, 3);
+  });
+  t('a frame nobody scored is recordable, and still moves the hammer on', () => {
+    const one = H.frameScore(sbLeg(15, 15, 'a'), null, 0, 0);
+    eq(one.frames, [{ s: null, t: 0 }], 'nobody, nothing');
+    eq(H.frameState(one).hammer, 'b', 'and the hammer has changed hands');
+    eq(H.frameState(one).pts, { a: 0, b: 0 });
+  });
+  t('the hammer starts where the scorer put it and alternates every frame', () => {
+    let leg = sbLeg(15, 15, 'b');
+    eq(H.frameState(leg).hammer, 'b', 'frame one is the only one anybody chooses');
+    leg = play(leg, [['a', 2]]);
+    eq(H.frameState(leg).hammer, 'a');
+    leg = play(leg, [['a', 2]]);
+    eq(H.frameState(leg).hammer, 'b', 'and back — it alternates, it does not follow the scorer');
+  });
+  t('the game is won by REACHING or passing the target, and nothing is added after', () => {
+    const leg = play(sbLeg(6, 15), [['a', 3], ['a', 4]]);
+    const st = H.frameState(leg);
+    eq([st.winner, st.pts.a], ['a', 7], '3 + 4 carries Ann past 6, and the score stands as it fell');
+    const after = H.frameScore(leg, 'b', 3, 0);
+    eq(after.error, 'The game is over.');
+    eq(H.frameState(leg).hammer, null, 'and nobody has the hammer in a game that is over');
+  });
+  t('a target of null wins nothing, so a game with no start can never end', () => {
+    const leg = play({ w: null, by: { a: [], b: [] }, start: { a: null, b: null }, first: 'a', frames: [] },
+                     [['a', 9], ['a', 9], ['a', 9]]);
+    eq(H.frameState(leg).winner, null);
+    eq(H.frameState(leg).pts.a, 27);
+  });
+  t('a frame is refused when it is not a frame, and says why in a sentence', () => {
+    const leg = sbLeg(15, 15);
+    ok(/between 1 and 16/.test(H.frameScore(leg, 'a', 17, 0).error), 'four weights, the best of them a hanger');
+    ok(/between 1 and 16/.test(H.frameScore(leg, 'a', 0, 0).error), 'a side that scored is a side that scored');
+    ok(/between 1 and 16/.test(H.frameScore(leg, 'a', 'x', 0).error), 'and a total that is not a number is not a total');
+    ok(/at most four hangers/.test(H.frameScore(leg, 'a', 8, 5).error));
+    ok(/cannot fit in a frame of 3/.test(H.frameScore(leg, 'a', 3, 1).error),
+       'a hanger is 4 points, so it cannot be inside a 3');
+    ok(!H.frameScore(leg, 'a', 8, 2).error, 'but two hangers fit exactly inside an 8');
+  });
+  t('undo takes back the last frame, whoever scored it', () => {
+    const leg = play(sbLeg(15, 15), [['a', 3], ['b', 2, 0]]);
+    const back = H.frameUndo(leg);
+    eq(back.frames.length, 1); eq(H.frameState(back).pts, { a: 3, b: 0 });
+    eq(H.frameUndo(H.frameUndo(back)).frames, [], 'and undoing an empty game is not an error');
+  });
+  t('a side\u2019s figures for a game: points, frames, hangers and the best of them', () => {
+    const leg = play(sbLeg(15, 15), [['a', 3], ['b', 2], ['a', 8, 2], ['a', 4, 1]]);
+    const s = H.frameLegStats(leg, 'a');
+    eq([s.points, s.fw, s.hang, s.high], [15, 3, 3, 8]);
+    eq(s.won, true, '15 reaches 15');
+    const b = H.frameLegStats(leg, 'b');
+    eq([b.points, b.fw, b.hang], [2, 1, 0]);
+    eq(H.frameLegStats(sbLeg(15, 15), 'a').high, null,
+       'and a side that won no frame has NO best frame, which is not a best frame of 0');
+  });
+
+  t('the record survives the allowlist, and a hostile one does not', () => {
+    const out = H.normalizeLeague({ league: { id: 'L', game: 'shuffleboard' },
+      matches: [{ id: 'm', a: 'p', b: 'q', legs: [{ w: 'a', by: { a: ['p'], b: ['q'] }, start: { a: 15, b: 15 },
+        frames: [{ s: 'a', t: 4, h: 1 }, { s: 'z', t: 9, h: 2 }, { s: 'b', t: 99, h: 9 }, { s: 'b', t: 3, h: 1 }, 'nope'] }] }] });
+    eq(out.matches[0].legs[0].frames,
+       [{ s: 'a', t: 4, h: 1 }, { s: null, t: 0 }, { s: 'b', t: 16, h: 4 }, { s: 'b', t: 3 }],
+       'a side that is neither a nor b is nobody and scores nothing; a total is clamped to a frame; '
+       + 'a hanger that cannot fit inside its own total is dropped rather than kept to disagree with it; '
+       + 'and 99 points with 9 hangers comes back as the frame both of them clamp to, 16 with 4 — '
+       + 'each field is pinned to its own range, and here the pair still agrees');
+  });
+  t('a leg carries whichever record its game keeps, and never both', () => {
+    const keys = (leg) => Object.keys(H.normalizeLeague({ league: { id: 'L' },
+      matches: [{ id: 'm', a: 'p', b: 'q', legs: [leg] }] }).matches[0].legs[0]).sort();
+    eq(keys({ w: 'a' }), ['by', 'dOut', 'first', 'start', 'w'], 'a leg nobody scored live carries neither');
+    ok(keys({ w: 'a', frames: [{ s: 'a', t: 3 }] }).includes('frames'));
+    ok(!keys({ w: 'a', frames: [] }).includes('frames'), 'an EMPTY record is no record — a key is written only when it has a value');
+    ok(!keys({ w: 'a', visits: { a: [], b: [] } }).includes('frames'));
+  });
+  t('the typed figures of a shuffleboard game are its own, and are capped', () => {
+    const out = H.normalizeLeague({ league: { id: 'L', game: 'shuffleboard' },
+      matches: [{ id: 'm', a: 'p', b: 'q', legs: [{ w: 'a', a: { points: 900, hang: 3, high: 99, darts: 60, t180: 2 } }] }] });
+    eq(out.matches[0].legs[0].a, { points: 99, hang: 3, high: 16 },
+       'a darts figure is not a field of this game, so it does not survive');
+  });
+  t('a settings box only offers the formats its game has', () => {
+    const out = H.normalizeLeague({ league: { id: 'L', game: 'shuffleboard', settings: { legFormat: '501' } } });
+    eq(out.league.settings.legFormat, '15', '501 is not a shuffleboard game');
+    eq(H.normalizeLeague({ league: { id: 'L', game: 'shuffleboard', settings: { legFormat: '21' } } }).league.settings.legFormat, '21');
+    eq(H.normalizeLeague({ league: { id: 'L', game: 'noSuchGame' } }).league.game, 'darts', 'and an unknown game falls back');
+  });
+
+  t('a player\u2019s season: credited from games one person played alone', () => {
+    const solo = play(sbLeg(15, 15), [['a', 8, 2], ['a', 7]]);
+    solo.w = 'a';
+    const pair = Object.assign({}, play(sbLeg(15, 15), [['b', 15, 1]]),
+                               { w: 'b', by: { a: ['sb-ann', 'sb-bo'], b: ['x'] } });
+    const st = H.shuffleboardPlayerStats([solo, pair], 'sb-ann');
+    eq([st.legs, st.won], [2, 1], 'both games count as played, and one as won');
+    eq([st.points, st.hang, st.high], [15, 2, 8], 'but only the solo one adds a figure');
+    eq(st.ppg, 15, 'points per game divides by the games that HAVE a score, not by games played');
+    eq(st.bestLeg, null, 'and "best leg" is a count of darts, which this game has not got');
+  });
+  t('a typed game and a scored one are read the same way', () => {
+    const typed = { w: 'a', by: { a: ['sb-ann'], b: ['sb-bo'] }, start: { a: 15, b: 15 },
+                    a: { points: 15, hang: 1, high: 5 }, b: { points: 9 } };
+    const s = H.sbSideStats(typed, 'a');
+    eq([s.points, s.hang, s.high, s.won], [15, 1, 5, true]);
+    eq(H.sbSideStats(typed, 'b').hang, null, 'an empty box is not a zero: nobody said');
+    eq(H.shuffleboardPlayerStats([typed], 'sb-ann').ppg, 15);
+  });
+
+  t('Trim Closed Seasons moves no figure at a game of shuffleboard either', () => {
+    const st = H.normalizeLeague(Object.assign({}, SBFX, {
+      seasons: [{ id: 'sb-s1', name: 'Board Season', startsOn: '2026-01-05', status: 'done' }],
+      matches: [Object.assign({}, SBFX.matches[0], { status: 'played', legs: [
+        Object.assign(play(sbLeg(15, 15), [['a', 8, 2], ['b', 3], ['a', 7, 1]]), { w: 'a' })] })] }));
+    const before = H.shuffleboardPlayerStats(H.legsIn(st, 'sb-s1'), 'sb-ann');
+    ok(st.matches[0].legs[0].frames.length === 3 && H.legIsLive(st.matches[0].legs[0]), 'it starts frame by frame');
+    const out = H.compactSeason(st, 'sb-s1');
+    eq(out.trimmed, 1);
+    ok(!out.matches[0].legs[0].frames, 'and the record is gone');
+    ok(!H.legIsLive(out.matches[0].legs[0]));
+    const after = H.shuffleboardPlayerStats(H.legsIn(out, 'sb-s1'), 'sb-ann');
+    eq([after.points, after.hang, after.high, after.ppg, after.won],
+       [before.points, before.hang, before.high, before.ppg, before.won],
+       'every figure the button promised would not move');
+    eq(out.matches[0].legs[0].by, st.matches[0].legs[0].by, 'and who played stays');
+  });
+
+  t('the League Rules card says the game\u2019s own word, and drops a rule the game has not got', () => {
+    const D = W.document;
+    try {
+      H.__plant(SBFX);
+      W.setTab('league');
+      eq(D.getElementById('lr_game').value, 'Shuffleboard');
+      eq(D.getElementById('lr_legFormatLabel').textContent, 'Each game',
+         'and NOT "Game" — the box beside it already says which game this league plays');
+      eq(D.getElementById('lr_nLabel').textContent, '\u2026how many games');
+      eq([...D.getElementById('lr_legFormat').options].map((o) => o.textContent), ['First to 15', 'First to 21']);
+      ok(/A fixed number of games/.test(D.getElementById('lr_mode').textContent));
+      eq(D.getElementById('lr_dOutRow').hidden, true, 'double-out is a DARTS rule');
+      ok(/Game and match rules/.test(D.getElementById('rulesNote').textContent) || !D.getElementById('rulesNote').textContent,
+         'and the note says game, not leg');
+      H.__plant(FIXTURE); W.setTab('league');
+      eq(D.getElementById('lr_legFormatLabel').textContent, 'Leg');
+      eq(D.getElementById('lr_dOutRow').hidden, false, 'and darts gets it back');
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+  t('the standings key explains the head start it is showing', () => {
+    const D = W.document;
+    try {
+      H.__plant(SBFX);
+      W.setTab('standings');
+      const note = D.getElementById('standingsNote').textContent;
+      ok(/head start, taken off the target of every game they play/.test(note), JSON.stringify(note));
+      ok(/games for and against/.test(note), 'and the column letters use the game\u2019s word');
+      ok([...D.querySelectorAll('#standingsTable .pill')].some((p) => p.textContent === '+4'),
+         'the pill reads +4, because a head start is not a deduction');
+      eq([...D.querySelectorAll('#standingsTable thead th')].slice(-3).map((th) => th.textContent),
+         ['Points/game', 'Hangers', 'Best frame']);
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+  t('the sheet scores a game frame by frame, counts the hangers with it, and ends the game', () => {
+    const D = W.document;
+    try {
+      H.__plant(SBFX);
+      D.getElementById('tab-matches').click();
+      D.querySelector('.mrow[data-match="sb-m1"]').click();
+      D.getElementById('addLegBtn').click();
+      const m = () => H.__state().matches.find((x) => x.id === 'sb-m1');
+      const leg = () => m().legs[0];
+      eq(leg().start, { a: 15, b: 11 }, 'Bo plays to 11 with a head start of 4');
+      const live = D.querySelector('#legsWrap [data-live]');
+      ok(live, 'an open game offers Score live');
+      live.click();
+      ok(D.getElementById('liveDialog').open, 'the sheet opens');
+      ok(D.getElementById('lvPad').hidden && !D.getElementById('lvSbPad').hidden, 'and it is the frames pad, not the darts one');
+      eq([...D.getElementById('lvScoredRow').children].length, 4, 'a label and THREE answers: both sides and nobody');
+      const key = (k) => D.querySelector('#lvSbPad [data-key="' + k + '"]').click();
+      key('q4');
+      eq(D.getElementById('lvEntry').textContent, '4', 'a quick key fills the box rather than committing — the side is the other half');
+      D.getElementById('lvHangUp').click();
+      eq(D.getElementById('lvHangN').textContent, '1');
+      ok(D.getElementById('lvHangUp').disabled, 'and a second hanger will not fit in a 4');
+      D.getElementById('lvScoredA').click();
+      eq(leg().frames, [{ s: 'a', t: 4, h: 1 }], 'the frame is saved as it lands');
+      eq(D.getElementById('lvHangN').textContent, '0', 'and the stepper is back to nothing for the next one');
+      key('7');
+      D.getElementById('lvScoredNone').click();
+      eq(leg().frames.length, 2, 'a frame nobody scored is a frame');
+      eq(D.getElementById('lvEntry').textContent, '0', 'and the box is clear again');
+      eq(leg().frames[1], { s: null, t: 0 }, 'and it is nobody and nothing, whatever was in the box');
+      key('3'); D.getElementById('lvScoredB').click();
+      key('9'); D.getElementById('lvHangUp').click();
+      key('back');
+      eq(D.getElementById('lvHangN').textContent, '0',
+         'taking a digit away takes a hanger that no longer fits with it');
+      key('8'); D.getElementById('lvScoredA').click();
+      eq(H.frameState(leg()).pts, { a: 12, b: 3 });
+      eq(leg().w, null, '12 is not 15');
+      key('3'); D.getElementById('lvScoredA').click();
+      eq([leg().w, m().status], ['a', 'scheduled'], 'Ann takes the game; one of three is not the match');
+      D.getElementById('lvUndo').click();
+      eq(leg().w, null, 'undo reopens it');
+      D.getElementById('liveDialog').close();
+      D.getElementById('matchDialog').close();
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+  t('a darts league never sees the frames pad, and a shuffleboard one never sees the darts one', () => {
+    const D = W.document;
+    try {
+      H.__plant(FIXTURE);
+      D.getElementById('tab-matches').click();
+      D.querySelector('.mrow[data-match="fx-m4"]').click();
+      D.getElementById('addLegBtn').click();
+      D.querySelector('#legsWrap [data-live]').click();
+      ok(!D.getElementById('lvPad').hidden && D.getElementById('lvSbPad').hidden);
+      ok(D.getElementById('lvHangRow').hidden && D.getElementById('lvScoredRow').hidden);
+      ok(!H.__state().matches.find((x) => x.id === 'fx-m4').legs[0].frames,
+         'and opening the darts sheet plants no frames record, which would read as scored live');
+      D.getElementById('liveDialog').close();
+      D.getElementById('matchDialog').close();
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+  t('the shuffleboard demo: a season under way, head starts, live games and a knockout', () => {
+    const d = H.buildDemoShuffle();
+    eq(d.league.id, H.DEMO_BOARD_ID);
+    eq(d.league.game, 'shuffleboard');
+    ok(!H.LEAGUE_ID_RE.test(d.league.id), 'and its id is not a League ID, so it can never reach the cloud');
+    ok(d.players.some((p) => p.hcp != null), 'a head start');
+    ok(d.matches.some((m) => m.legs.some((l) => l.frames && l.frames.length)), 'games scored frame by frame');
+    ok(d.matches.some((m) => m.legs.some((l) => l.a && l.a.points != null && !l.frames)), 'and games with typed figures');
+    ok(d.matches.some((m) => m.status === 'scheduled' && !m.legs.length), 'fixtures still to play');
+    ok(d.matches.some((m) => m.legs.some((l) => (l.frames || []).some((f) => f.h))), 'a hanger');
+    ok(d.matches.some((m) => m.legs.some((l) => (l.frames || []).some((f) => f.s === null))), 'and a frame nobody scored');
+    ok(d.brackets.length === 1 && d.brackets[0].entrants.length >= 4, 'a knockout seeded from the table');
+    eq(JSON.stringify(d), JSON.stringify(H.buildDemoShuffle()), 'and it is the same every time');
+  });
+  t('every game a demo is built on is a game the registry has', () => {
+    [H.buildDemoSingles(), H.buildDemoTeams(), H.buildDemoShuffle()].forEach((d) => {
+      ok(H.GAMES[d.league.game], d.league.game);
+      ok(H.isDemoId(d.league.id), d.league.id);
+      [].concat(d.players, d.seasons, d.matches, d.brackets).forEach((e) => ok(/^demo-/.test(e.id), e.id));
+    });
+    eq(new Set([H.DEMO_ID, H.DEMO_TEAMS_ID, H.DEMO_BOARD_ID]).size, 3, 'and three different leagues');
   });
 
   group('the chrome is the family’s');
@@ -1797,7 +2094,9 @@ function define() {
     eq(dots.filter((d) => !/aria-label="/.test(d)).length, 0, 'each says what it explains');
     const used = [...new Set([...bare.matchAll(/data-help="(\w+)"/g)].map((m) => m[1]))];
     const src = stripComments(APP_SRC);
-    const keys = [...(src.match(/const HELP = \{[\s\S]*?\n\};/) || [''])[0].matchAll(/^  (\w+): \[/gm)].map((m) => m[1]);
+    /* `key: [` or `key: () =>` — a topic whose answer is the GAME's is a
+       function choosing between two written-out bodies. */
+    const keys = [...(src.match(/const HELP = \{[\s\S]*?\n\};/) || [''])[0].matchAll(/^  (\w+): (?:\[|\(\) =>)/gm)].map((m) => m[1]);
     eq(used.filter((k) => !keys.includes(k)).join(', '), '');
     eq(keys.filter((k) => !used.includes(k)).join(', '), '');
   });
@@ -1805,7 +2104,7 @@ function define() {
     const src = stripComments(APP_SRC);
     const at = src.indexOf('const HELP = {');
     const table = src.slice(at, src.indexOf('\n};', at));
-    const entries = table.split(/\n  (?=\w+: \[)/).slice(1);
+    const entries = table.split(/\n  (?=\w+: (?:\[|\(\) =>))/).slice(1);
     ok(entries.length >= 6);
     for (const e of entries) {
       const key = e.split(':')[0].trim();
@@ -2287,13 +2586,13 @@ function define() {
     D.getElementById('tab-standings').click();
     const note = D.getElementById('standingsNote').textContent;
     ok(/P played, W won/.test(note), 'the column letters');
-    ok(/minus figure beside a name is that player’s start deduction/.test(note),
+    ok(/figure beside a name is that player’s start deduction, taken off the start of every leg they throw/.test(note),
        'and the handicap pill, which reads as a bare −20 in this table', JSON.stringify(note));
     try {
       const fx = JSON.parse(JSON.stringify(FIXTURE));
       fx.players.forEach((p) => { p.hcp = null; });
       H.__plant(fx);
-      ok(!/minus figure/.test(D.getElementById('standingsNote').textContent), 'and is silent when nobody has one');
+      ok(!/figure beside a name/.test(D.getElementById('standingsNote').textContent), 'and is silent when nobody has one');
     } finally { H.__plant(FIXTURE); W.setTab('standings'); }
   });
 
