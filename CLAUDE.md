@@ -143,6 +143,50 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
 - **The availability toggles are the one block in the app a viewer may use.** They must never
   carry `.no-edit`, which `html[data-readonly] .no-edit` hides: what a player says about their
   own night is theirs to say and never enters the league.
+- **The same players, in another league** (2026-09-08). One league is one game, so the same
+  friends at two games are two leagues, and *Create a League* copies a roster across. `copyPlan`
+  decides and `copyPlayers` builds — **and the split is load-bearing**: the live note in the
+  window runs `copyPlan` on every tick, so the sentence on screen IS the plan the button
+  executes and cannot promise eight players while seven arrive. Both expect NORMALIZED states,
+  which is what keeps the planner cheap enough to run per keystroke.
+  - **THE COPIED PLAYERS GET NEW IDS, and the reason is duplicate ids inside ONE league** — not
+    tombstones, which `touch()` handles on its own. Copy A into B, then A into C and B into C,
+    and C holds two players carrying one id: `playerById` returns whichever `.find` hits first,
+    and `leagues/{id}/roster/{playerId}` — whose document id IS the player id and which is the
+    whole one-account-one-player index — is then one row for two people. Do not "simplify" this
+    by keeping the source id; a shared id would also be a cross-league identity nothing
+    maintains, and it buys nothing, because a claim is per-league by construction.
+  - **There is deliberately no `fromId` provenance field.** A stored field with no reader is a
+    claim the boundary has to defend for ever. Hence also **no SCHEMA bump**: the feature stores
+    nothing new.
+  - **A copied player is written out FIELD BY FIELD, never `Object.assign({}, p)`.** A spread
+    carries `avail` and every field a later allowlist adds. `avail` is ABSENT rather than null —
+    its keys are the source league's match nights, they annotate nothing in the new league, and
+    they would spend its `AVAIL_MAX` budget before anybody answered for a night it plays.
+  - **`hcp` travels only between two leagues playing the same game.** `int()` clamps rather than
+    refuses, so a darts 60 carried across would land as a shuffleboard head start of **10** — the
+    maximum, a real advantage nobody was given, and indistinguishable afterwards from a setting.
+    The suite's test is named for it.
+  - **`copyPlayers` does NOT normalize on the way out.** `saveLocal` stringifies `state` exactly
+    as it is, so the output has to be boundary-clean already — and a defensive normalize would
+    turn the test that proves it into a test of nothing.
+  - **The window offers a league this account only FOLLOWS, and never the demo.** Copying names
+    out of a league writes nothing to it, so this path calls neither `canEdit()` nor `canSetUp()`
+    and must not; the demo's people are invented and `loadDemo` rebuilds them. A device holding
+    only the demo shows no fieldset at all.
+  - **Nobody is pre-selected, even with one league to pick.** Enter in the name box fires Create,
+    so a pre-selected source with everyone ticked would make one keystroke create a league with
+    twenty people in it.
+  - **`lg_copyWrap` ships `hidden` in the MARKUP**, not only from `openCreate` — the smoke walk
+    `showModal()`s every dialog without calling it, and would draw an empty `<select>`.
+  - **`.picklist` is `overflow: hidden auto`, never `overflow-y: auto` alone**: setting one axis
+    to auto computes the OTHER to auto too, and the browser reserved a 15px horizontal gutter
+    under a grid that never needs one — a painted bar with nothing to scroll to.
+  - **A UI test must plant the source in `localStorage` itself.** `__plant` writes neither the
+    device record nor storage, and `loadLeague` reads storage. `withSource` in the suite removes
+    every key that was not there on the way in and restores `ln-device` to the exact string it
+    held — without that, a fixture league turns up in the real header picker on localhost, and
+    the suite's own "writes nothing to storage" line had to be qualified to stay true.
 - **The engines are pure and game-agnostic.** `roundRobin`, `standings`/`rankSides`,
   `buildSingle`/`buildDouble`/`resolve*`, and the x01 scorer know nothing about darts beyond
   what `GAMES.darts` tells them. **Shuffleboard proved it** (2026-09-08): not one line of the
@@ -227,10 +271,15 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
 
 ## Status
 
+**The roster copy (2026-09-08)** rides in the Create a League window: `copyPlan`/`copyPlayers`
+beside `setupState`, `PLAYERS_MAX`/`TEAMS_MAX` mirroring `firestore.rules`, and a suite group
+*bringing the same players into another league*. No SCHEMA bump — it stores nothing new.
+`EXPECTED` is 310.
+
 **Shuffleboard (2026-09-08)** is the second entry in `GAMES` and the third demo league
 (`LN-DEMOBORD`, singles, head starts, the last round scored frame by frame). SCHEMA went to 5 for
 `leg.frames`. The pure `frameState`/`frameScore`/`frameUndo`/`frameLegStats` fold sits beside the
-x01 one and is pinned the same way; `EXPECTED` is 280.
+x01 one and is pinned the same way.
 
 **Two tests fail in the desktop app's Browser pane and pass in CI** — *on a phone the bar is
 really there* (`sheetW` 360 of 375) and *the controls are ONE line* (`headerH` 125 of ≤100). They

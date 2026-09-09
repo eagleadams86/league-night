@@ -21,6 +21,17 @@ league's ID can follow it, and anyone with the admin key can run it.
   fixed after that. Everything below works the same either way — the schedule, the standings, the
   tournaments, the sharing — because the engine only ever sees "sides" and asks the game what a
   result holds. At darts the unit is a **leg**; at shuffleboard it is a **game** to 15 or 21.
+- **The same friends, a different game.** Because one league is one game, playing both means two
+  leagues — so *Create a League* offers **The Same Players**: pick one of your leagues, tick who
+  should come, and they are on the roster before you have added a single fixture. Names always
+  travel, and the **teams** they are in when both leagues are played in teams. A **handicap only
+  travels between two leagues playing the same game** — a darts deduction is points off a 501
+  start and a shuffleboard head start is points off the target, so across games everybody arrives
+  without one. Anyone retired in the old league arrives playing in the new one, and a line under
+  the list says exactly what is about to happen before you press Create.
+  It is a **copy and not a link**: everyone arrives as a new player in the new league, so renaming
+  somebody here does not rename them there, and a name an account has claimed in one league is
+  not claimed in the other.
 - **Leagues.** Create one (singles or teams), or load the three demo leagues to see everything
   working. A device can hold several; switch between them in the header.
 - **Players and teams.** Add, rename, retire; a per-player handicap applies to every singles leg

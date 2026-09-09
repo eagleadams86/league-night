@@ -1331,6 +1331,16 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
   .bcell.stale { border-color: var(--warn); }
   .entrants { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 2px var(--sp-4); }
   .entrants .checkline { margin-bottom: 2px; }
+  /* A tick-list inside a window whose whole point is ONE button gets its own
+     scroller, so a twenty-player roster cannot push Create below the fold.
+     The dialog itself already scrolls; this is the .searchresults pattern, the
+     app's one other nested scroller, and a deliberate divergence from the
+     tournament window, where the entrants ARE what you came to read. */
+  /* `hidden auto` and NOT `overflow-y: auto` on its own: setting one axis to
+     auto computes the OTHER to auto as well, and the browser then reserved a
+     15px horizontal gutter under a grid that never needs one — a painted bar
+     under the list with nothing to scroll to. */
+  .picklist { max-height: 40vh; overflow: hidden auto; overscroll-behavior: contain; }
 
   /* Every match, tournament and season is scored in a dialog, so nothing
      rebuilds under a box being typed in. Wider than the family's 560px
@@ -1802,6 +1812,20 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
     <div class="field"><label for="lg_format">Played as</label>
       <select id="lg_format"><option value="singles">Singles</option><option value="teams">Teams (doubles)</option></select></div>
   </div>
+  <!-- ── The same friends, a different game ────────────────────────────────
+       A league's game is fixed when it is made, so playing darts AND
+       shuffleboard with the same people is two leagues. This is what stops
+       that meaning typing everyone in twice. The whole block is hidden when
+       there is no other league on this device — the first league has nothing
+       to copy from, and a control that explains why it can do nothing is
+       worse than one that is not there. -->
+  <fieldset class="formpanel" id="lg_copyWrap" hidden>
+    <legend>The Same Players
+      <button class="tile-help" type="button" data-help="copyPlayers" aria-label="What comes across when you copy players">i</button></legend>
+    <div class="field"><label for="lg_from">Copy them from</label><select id="lg_from"></select></div>
+    <div id="lg_players" class="entrants picklist"></div>
+    <p class="hint" id="lg_copyNote" role="status"></p>
+  </fieldset>
   <p>You will be its owner. The rules — legs, points, tiebreaks — can be changed on the League tab
     until the first match is recorded.</p>
   <p class="warn-line" id="leagueWarn" role="status"></p>
@@ -2343,6 +2367,13 @@ function maxU(st) {
    green tests behind it, exactly as the boot-time TDZ did in September. Every
    value a top-level literal reads is declared before that literal. */
 const FRAME_MAX = 16;
+/* The most players and teams one league may hold. These are the FIRESTORE
+   rules' numbers (`validSize`, firestore.rules), written here so a bulk add
+   can stop and say so: past them the rules refuse the whole document and the
+   only thing a reader sees is the Not Syncing banner and a permission-denied
+   nobody can act on. Nothing in the app can reach them one Add at a time. */
+const PLAYERS_MAX = 500;
+const TEAMS_MAX = 250;
 
 /* ── The game registry ─────────────────────────────────────────────────────
    One entry per game. The engine reads ONLY the keys named in GAME_CONTRACT
@@ -2819,6 +2850,146 @@ function setupState(mine, theirs) {
     tombstones: mergeTombstones(own, base.tombstones),
   }));
 }
+/* ── Taking the same players into another league ───────────────────────────
+   A league's GAME is fixed when it is made, so the same friends playing darts
+   and shuffleboard are two leagues — and this is what stops that meaning
+   typing everyone in twice. Pure, like every fold above it: two league states
+   in, a NEW destination state out, neither argument touched.
+
+   TWO functions, and the split is load-bearing. `copyPlan` decides WHO and
+   WHAT and allocates nothing — it hands back references to the source's own
+   objects — so the live note in the create window can run it on every tick.
+   `copyPlayers` mints and assembles. ONE decision site, so the note cannot
+   promise eight players and the league arrive with seven: the sentence on
+   screen is the plan the button executes. (bracketNote and bracketSave
+   computing from the same `chosen` is the same shape.) Both expect NORMALIZED
+   states, which is what keeps the planner cheap enough to run per keystroke.
+
+   THE COPIED PLAYERS GET NEW IDS. That is the design decision here, and the
+   reason is duplicate ids inside ONE league — not tombstones, which `touch()`
+   already handles on its own:
+
+     - Copy A into B, then later A into C and B into C, and C holds two
+       players carrying one id. `playerById` returns whichever `.find` hits
+       first, and `leagues/{id}/roster/{playerId}` — whose document id IS the
+       player id, and which is the entire one-account-one-player index — is
+       then one row for two people. That is the exact failure the roster
+       design exists to prevent, arriving by the front door.
+     - A shared id would also be a cross-league identity that NOTHING
+       maintains: rename somebody in one league and the two records diverge
+       while their equal ids go on claiming to be one person. Nothing in the
+       app reads a player id outside its own league, so the identity would buy
+       nothing — a claim is per-league by construction, under `leagues/{id}`.
+
+   So this is a COPY AND NOT A LINK, and the help window says so in as many
+   words. Copy the same league twice and you have two sets of people. There is
+   deliberately no `fromId` field recording where somebody came from: a stored
+   field with no reader is a claim the boundary has to defend for ever. */
+function copyPlan(src, dst, ids) {
+  if (!src || !dst) return { take: [], skip: [], teams: [], reuse: new Map(),
+                             sameGame: false, bothTeams: false, capped: false, retired: 0 };
+  const want = new Set((Array.isArray(ids) ? ids : []).map((x) => String(x)));
+  const sameGame = src.league.game === dst.league.game;
+  /* A team is a shape BOTH leagues have to have: a singles league has nowhere
+     to put anybody, and a team league copied into a singles one leaves its
+     teams behind. Decided here rather than left to normalizeLeague, which
+     would null a dangling teamId as a side effect — the same outcome for a
+     reason nobody reading this could see. */
+  const bothTeams = src.league.settings.format === 'teams'
+                 && dst.league.settings.format === 'teams';
+  /* A name already there is the same person, and the same refusal the Add a
+     Player window makes. The set GROWS as people are accepted, so two source
+     players called Ben — which a merge or a restored backup can produce even
+     though the Add window blocks it — land once. */
+  const taken = new Set(dst.players.map((p) => p.name.toLowerCase()));
+  const take = [], skip = [];
+  let capped = false, retired = 0;
+  /* Walked in the SOURCE's order and not the order the boxes were ticked, so
+     the same selection always produces the same league. */
+  src.players.forEach((p) => {
+    if (!want.has(p.id)) return;
+    /* normalizeLeague can hand back name: '' — a record, not a person. */
+    if (!p.name) return;
+    const key = p.name.toLowerCase();
+    if (taken.has(key)) { skip.push(p); return; }
+    if (dst.players.length + take.length >= PLAYERS_MAX) { capped = true; return; }
+    taken.add(key);
+    if (!p.active) retired += 1;
+    take.push(p);
+  });
+  /* Only the teams somebody brought is actually in — a source's empty team is
+     not a person and has no business arriving. A destination team of the same
+     NAME is reused rather than duplicated: that never fires from the create
+     window, whose league is empty, and it is what makes a second copy into a
+     league that already has The Ringers not produce a second one. A team past
+     the cap is dropped and its players still come, unteamed — a person
+     matters more than their team. */
+  const teams = [], reuse = new Map();
+  if (bothTeams) {
+    const wanted = [];
+    take.forEach((p) => { if (p.teamId && wanted.indexOf(p.teamId) === -1) wanted.push(p.teamId); });
+    const here = new Map(dst.teams.filter((t) => t.name).map((t) => [t.name.toLowerCase(), t.id]));
+    src.teams.forEach((t) => {
+      if (wanted.indexOf(t.id) === -1) return;
+      const mine = t.name ? here.get(t.name.toLowerCase()) : null;
+      if (mine) { reuse.set(t.id, mine); return; }
+      if (dst.teams.length + teams.length >= TEAMS_MAX) { capped = true; return; }
+      teams.push(t);
+    });
+  }
+  return { take: take, skip: skip, teams: teams, reuse: reuse, sameGame: sameGame,
+           bothTeams: bothTeams, capped: capped, retired: retired };
+}
+/* Returns `{ state, players, teams, skipped, capped }` — the counts, so the
+   caller can say what happened in one sentence rather than a list. */
+function copyPlayers(src, dst, ids) {
+  const from = normalizeLeague(src);
+  const into = normalizeLeague(dst);
+  const plan = copyPlan(from, into, ids);
+  /* Teams first, so the id map is complete before any player reads it. */
+  const idFor = new Map(plan.reuse);
+  const teams = plan.teams.map((t) => {
+    const id = uid();
+    idFor.set(t.id, id);
+    return touch({ id: id, name: t.name });
+  });
+  /* Written out FIELD BY FIELD, never Object.assign({}, p): a spread carries
+     `avail` and every field a later allowlist adds. `avail` is absent rather
+     than null — its keys are the SOURCE league's match nights, they annotate
+     nothing here, and they would spend this league's AVAIL_MAX budget before
+     anybody had answered for a night it actually plays. */
+  const players = plan.take.map((p) => touch({
+    id: uid(),
+    name: p.name,
+    /* Through the SAME map the teams were minted into — the family's rule that
+       an id is a key prefix and a move rewrites from the moved-ids list, never
+       by keeping the old id and hoping a boundary sorts it out. A team that
+       did not travel leaves its player unteamed. */
+    teamId: (plan.bothTeams && p.teamId && idFor.get(p.teamId)) || null,
+    /* A handicap is a number in its GAME's own units: points off a 501 start
+       at darts, points off the target at shuffleboard. Carrying 120 across
+       would land as a head start of 10 — int() clamps rather than refuses —
+       and 10 is a real advantage nobody ever gave them. */
+    hcp: plan.sameGame ? p.hcp : null,
+    /* Retired is a fact about the league they stopped playing in. Somebody
+       ticked on purpose is here to play. */
+    active: true,
+  }));
+  /* NOT re-normalized on the way out. saveLocal stringifies `state` exactly as
+     it is, so this has to be boundary-clean already — and a defensive
+     normalize here would turn the test that proves it into a test of nothing. */
+  return {
+    state: Object.assign({}, into, {
+      players: into.players.concat(players),
+      teams: into.teams.concat(teams),
+    }),
+    players: players.length,
+    teams: teams.length,
+    skipped: plan.skip.length,
+    capped: plan.capped,
+  };
+}
+
 /* ── Trimming a closed season ──────────────────────────────────────────────
    A league is one cloud document with a 1 MiB cap, and a season scored live
    carries every visit of every leg, or every frame of every game. Once a
@@ -5935,24 +6106,142 @@ $('forgetBtn').addEventListener('click', () => {
 });
 
 /* ── The welcome card's three doors ───────────────────────────────────── */
+/* The league the create window is copying from — read ONCE when it is picked
+   and held only while the window is open, because copyNote() runs on every
+   tick and a JSON.parse plus a whole normalizeLeague per checkbox is not a
+   thing to do. loadLeague() reads this browser's saved copy and normalizes
+   it, and it does NOT switch leagues: that is what lets this window read a
+   league nobody is looking at. It is a SNAPSHOT taken when the source was
+   picked; what was on screen is what gets copied. */
+let copySrc = null;
 function openCreate() {
   $('lg_name').value = '';
   $('lg_game').innerHTML = Object.keys(GAMES).map((g) => '<option value="' + esc(g) + '">' + esc(GAMES[g].name) + '</option>').join('');
   $('lg_format').value = 'singles';
   $('leagueWarn').textContent = '';
+  /* Every league this device holds, in the header picker's own order, and one
+     this account only FOLLOWS: copying names out of a league writes nothing to
+     it, so there is nothing to gate — this path calls neither canEdit() nor
+     canSetUp() and must not. The friend who was added as a viewer of the darts
+     league is exactly who starts the shuffleboard one.
+
+     The DEMO leagues are left out. Their people are invented, loadDemo rebuilds
+     them, and everyone active would arrive pre-ticked. A device holding only
+     the demo shows no fieldset at all, which is the right answer: that reader
+     has nobody of their own recorded yet. */
+  copySrc = null;
+  const from = device.leagues.filter((l) => !isDemoId(l.id));
+  $('lg_from').innerHTML = '<option value="">Nobody — start with an empty roster</option>'
+    + from.map((l) => '<option value="' + esc(l.id) + '">' + esc(l.name)
+        + ' · ' + esc((GAMES[l.game] || GAMES.darts).name) + '</option>').join('');
+  /* Nobody is pre-selected even when there is only one league to pick. Enter
+     in the name box fires Create, so a pre-selected source with everyone
+     ticked would make one keystroke create a league with twenty people in it. */
+  $('lg_from').value = '';
+  $('lg_copyWrap').hidden = !from.length;
+  renderCopyList();
   openModal($('leagueDialog'));
   $('lg_name').focus();
 }
+/* Everyone in the source league: the ACTIVE ones first and ticked, then the
+   retired, listed and UNTICKED, with the pill the Players tab gives them. They
+   retired in the league they came from, so arriving as playing is a choice
+   rather than a default — but they have to be tickable, or "a retired player
+   arrives playing" is a rule about nothing. One flat list and not a
+   disclosure: that is one collapsed layer too many inside a window that
+   already has two selects. */
+function renderCopyList() {
+  const wrap = $('lg_players');
+  if (!copySrc) { wrap.innerHTML = ''; wrap.hidden = true; copyNote(); return; }
+  const byName = (a, b) => a.name.localeCompare(b.name);
+  const people = copySrc.players.filter((p) => p.active).sort(byName)
+    .concat(copySrc.players.filter((p) => !p.active).sort(byName));
+  wrap.innerHTML = people.map((p) => '<label class="checkline"><input type="checkbox" data-copy="'
+    + esc(p.id) + '"' + (p.active ? ' checked' : '') + '><span>' + esc(p.name)
+    + (p.active ? '' : ' <span class="pill">retired</span>') + '</span></label>').join('');
+  wrap.hidden = !people.length;
+  copyNote();
+}
+/* What will actually travel, in one sentence, straight from copyPlan — so the
+   count here is the count the button delivers, dedupes and caps included.
+   FOUR things decide it and two of them are not in this fieldset: the Game box
+   and the Played As box both change the answer, which is the half a reviewer
+   forgets to listen to. Every clause is guarded on the thing it describes
+   existing: telling a reader their handicaps are safe, or lost, in a league
+   where nobody has one is a sentence about nothing that reads like a warning.
+   textContent and never innerHTML — a league name and a player name are
+   written by whoever wrote them, and one of them may be another account. */
+function copyNote() {
+  const note = $('lg_copyNote');
+  if (!copySrc) { note.textContent = ''; note.hidden = true; return; }
+  note.hidden = false;
+  if (!copySrc.players.length) { note.textContent = 'That league has nobody on its roster yet.'; return; }
+  const ids = [...$('lg_players').querySelectorAll('input:checked')].map((i) => i.dataset.copy);
+  /* A provisional destination, because the league does not exist yet. */
+  const game = $('lg_game').value;
+  const dst = blankLeague({ game: game });
+  dst.league.settings.format = $('lg_format').value === 'teams' ? 'teams' : 'singles';
+  const plan = copyPlan(copySrc, dst, ids);
+  if (!plan.take.length) { note.textContent = 'Nobody ticked — the league starts with an empty roster.'; return; }
+  let msg = plural(plan.take.length, 'player');
+  if (plan.teams.length) msg += ' and ' + plural(plan.teams.length, 'team');
+  msg += ' will come over.';
+  if (plan.take.some((p) => p.hcp != null)) {
+    msg += plan.sameGame ? ' Handicaps come with them.'
+      : ' Handicaps stay behind — a ' + (GAMES[copySrc.league.game] || GAMES.darts).handicap.label.toLowerCase()
+        + ' is not a ' + (GAMES[game] || GAMES.darts).handicap.label.toLowerCase() + '.';
+  }
+  if (!plan.bothTeams && plan.take.some((p) => p.teamId)) msg += ' Teams stay behind — this league is singles.';
+  if (plan.retired) msg += ' Anyone retired arrives playing.';
+  if (plan.skip.length) msg += ' Two people with the same name only come over once.';
+  if (plan.capped) msg += ' Only the first ' + PLAYERS_MAX + ' will fit.';
+  note.textContent = msg;
+}
+$('lg_from').addEventListener('change', () => {
+  const id = $('lg_from').value;
+  copySrc = id ? loadLeague(id) : null;
+  /* A device record naming a league whose saved copy has gone: say so, rather
+     than leave the picker on a name with an empty list under it. */
+  if (id && !copySrc) { $('lg_from').value = ''; toast('That league is no longer on this device.'); }
+  renderCopyList();
+});
+/* The tick-list is DELEGATED, as the entrants list is, so a re-render never
+   has to re-wire it — and lg_game and lg_format are on here because they
+   decide what travels. */
+['lg_players', 'lg_game', 'lg_format'].forEach((id) => $(id).addEventListener('change', copyNote));
 $('leagueSave').addEventListener('click', () => {
   const name = $('lg_name').value.trim().slice(0, NAME_MAX);
   if (!name) { $('leagueWarn').textContent = 'Give the league a name.'; $('lg_name').focus(); return; }
-  const st = blankLeague({ name: name, game: $('lg_game').value });
+  /* `let`, because copyPlayers returns a NEW state rather than mutating this
+     one. And the copy happens after the format is set and the league stamped:
+     copyPlayers derives everything it does from the destination's own game and
+     format, so the destination has to be finished first. */
+  let st = blankLeague({ name: name, game: $('lg_game').value });
   st.league.settings.format = $('lg_format').value === 'teams' ? 'teams' : 'singles';
   touch(st.league);
+  /* The players ride in the SAME save() adoptLeague makes — one write, one
+     push, and a league that has never existed without its people. The ticks
+     are harvested from what is on screen, against the snapshot in copySrc,
+     never a fresh read: an id naming nobody is simply not in the plan. */
+  let note = ' — add the players next';
+  const ids = copySrc ? [...$('lg_players').querySelectorAll('input:checked')].map((i) => i.dataset.copy) : [];
+  if (ids.length) {
+    const r = copyPlayers(copySrc, st, ids);
+    if (r.players) {
+      st = r.state;
+      /* The existing clause is ADVICE, and it stops being true the moment
+         people arrive — so it is replaced rather than stacked. One toast, one
+         em-dash clause, and it is the true one. */
+      note = ' — ' + plural(r.players, 'player')
+        + (r.teams ? ' and ' + plural(r.teams, 'team') : '') + ' brought over';
+      if (r.skipped) note += ', ' + r.skipped + ' left as a duplicate';
+      if (r.capped) note += ' — the rest would not fit';
+    }
+  }
   $('leagueDialog').close();
   adoptLeague(st, 'owner', false);
   setTab('players');
-  toast(name + ' created — add the players next');
+  toast(name + ' created' + note);
 });
 $('leagueCancel').addEventListener('click', () => $('leagueDialog').close());
 /* Signing in is the whole action: onSignedIn() fetches the account's leagues
@@ -6014,6 +6303,9 @@ const HELP = {
     <p>Team matches play every game to the full target.</p>`]
     : ['Handicaps', `<p>A player's handicap is taken off their <strong>starting score</strong>: with a deduction of 40, a 501 leg starts them on 461. It applies to every leg they throw in a singles match, and the leg remembers the start it gave them, so an average is worked out from the darts actually thrown.</p>
     <p>Team matches start every leg from the full score.</p>`]),
+  copyPlayers: ['What Comes Across', `<p>A league is its own record — its own players, its own seasons, its own results. Copying brings the <strong>names</strong> over, and the <strong>teams</strong> they are in when both leagues are played in teams. Nothing else: the new league starts with no seasons, no fixtures and no results of its own.</p>
+    <p><strong>A handicap only comes across between two leagues playing the same game.</strong> A darts handicap is points off a 501 start; a shuffleboard one is points off the target a game is played to. The same number means a different thing in each, so across two games everybody arrives without one and you give them out again here.</p>
+    <p>Everyone arrives as a <strong>new player in this league</strong>. It is a copy and not a link: renaming somebody here does not rename them there, a result here is not a result there, and a name an account has claimed in one league is not claimed in the other.</p>`],
   tournament: ['How a Bracket Works', `<p>Entrants are <strong>seeded</strong> — from the standings, at random, or in roster order — and paired so the top seed meets the bottom seed first. When the count is not a power of two, the <strong>byes go to the top seeds</strong>, who skip the first round.</p>
     <p>In a <strong>double-elimination</strong> bracket a first loss drops a side into the losers' bracket and a second puts them out. The two survivors meet in the grand final; if the one from the losers' bracket wins it, both have lost once, so a second final decides it.</p>
     <p>Tap a match with both sides known to score it. Changing an earlier result after later matches were played marks those results as no longer fitting, rather than quietly moving sides around.</p>`],
@@ -8025,6 +8317,7 @@ window.__lnTestHooks = {
   sbSideStats: sbSideStats, legIsLive: legIsLive, FRAME_MAX: FRAME_MAX,
   shuffleboardPlayerStats: shuffleboardPlayerStats,
   compactSeason: compactSeason, TRIM_AT: TRIM_AT,
+  copyPlan: copyPlan, copyPlayers: copyPlayers, PLAYERS_MAX: PLAYERS_MAX, TEAMS_MAX: TEAMS_MAX,
   buildSharePayload: buildSharePayload, encodeShare: encodeShare, decodeShare: decodeShare,
   csvMatches: csvMatches, csvCell: csvCell, toCsv: toCsv, toTsv: toTsv, FORMULA_LEAD: FORMULA_LEAD, PLAIN_NUMBER: PLAIN_NUMBER,
   tableToRows: tableToRows, cellText: cellText, raisesKeyboard: raisesKeyboard, esc: esc, todayISO: todayISO,
