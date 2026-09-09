@@ -36,8 +36,9 @@
 <div class="wrap">
   <h1>League Night — Tests</h1>
   <p class="sub">Loads the real index.html in a hidden iframe and calls its functions directly
-    — no copies, no build step, so a test cannot drift from the code it tests. Read-only:
-    nothing here writes to storage.</p>
+    — no copies, no build step, so a test cannot drift from the code it tests. Read-only,
+    with one exception that puts itself back: the source-picker tests plant a second league
+    in storage, because loadLeague reads it, and restore every key they found on the way in.</p>
   <div id="summary">Loading…</div>
   <table><tbody id="out"></tbody></table>
 </div>
@@ -51,7 +52,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 280;
+const EXPECTED = 310;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -2293,6 +2294,338 @@ function define() {
     ok(coarse, 'the block exists');
     ok(/\.side-btn \{ min-height: 56px; \}/.test(coarse));
     ok(/inputmode="numeric"/.test(APP_SRC), 'and a number is typed on a number pad');
+  });
+
+  group('bringing the same players into another league');
+  /* A source league with everything that has to be decided about: two teams, a
+     player on neither, handicaps on some, a retired one, and an `avail` note. */
+  const cpLeague = (o) => H.normalizeLeague({
+    league: { id: o.id, name: o.name || 'Source', game: o.game || 'darts',
+              settings: { format: o.format || 'singles' } },
+    players: o.players || [], teams: o.teams || [],
+  });
+  const CPSRC = () => cpLeague({ id: 'LN-CPSRC', name: 'Tuesday Darts', game: 'darts', format: 'teams',
+    teams: [{ id: 'ct1', name: 'The Anchor' }, { id: 'ct2', name: 'The Crown' }],
+    players: [
+      { id: 'cp1', name: 'Ada',  teamId: 'ct1', hcp: 60, active: true, avail: { '2026-01-05': 'y' } },
+      { id: 'cp2', name: 'Ben',  teamId: 'ct1', hcp: null, active: true },
+      { id: 'cp3', name: 'Cleo', teamId: 'ct2', hcp: 40, active: true },
+      { id: 'cp4', name: 'Eve',  teamId: null,  hcp: 20, active: true },
+      { id: 'cp5', name: 'Zed',  teamId: null,  hcp: null, active: false },
+    ] });
+  const CPALL = ['cp1', 'cp2', 'cp3', 'cp4', 'cp5'];
+  const CPDST = (game, format) => cpLeague({ id: 'LN-CPDST', name: 'New', game: game || 'darts', format: format || 'teams' });
+
+  t('neither league is touched, and the result is a new object', () => {
+    const src = CPSRC(), dst = CPDST('darts', 'teams');
+    const before = [JSON.stringify(src), JSON.stringify(dst)];
+    const out = H.copyPlayers(src, dst, CPALL);
+    eq([JSON.stringify(src), JSON.stringify(dst)], before, 'a pure fold, like every other one');
+    ok(out.state !== dst && out.state.players !== dst.players && out.state.teams !== dst.teams);
+    eq(dst.players.length, 0, 'and the destination handed in is still empty');
+  });
+  t('every copied id is NEW, well shaped and unique', () => {
+    const out = H.copyPlayers(CPSRC(), CPDST('darts', 'teams'), CPALL);
+    const ids = out.state.players.map((p) => p.id).concat(out.state.teams.map((t) => t.id));
+    ok(ids.every((id) => H.ID_RE.test(id)), 'the family shape');
+    eq(new Set(ids).size, ids.length, 'and no two the same');
+    eq(ids.filter((id) => ['cp1', 'cp2', 'cp3', 'cp4', 'cp5', 'ct1', 'ct2'].indexOf(id) !== -1), [],
+       'not one source id survives — a shared id would be one roster row for two people');
+  });
+  t('a team is rewritten through the SAME map, so two team-mates land on ONE new team', () => {
+    const out = H.copyPlayers(CPSRC(), CPDST('darts', 'teams'), CPALL);
+    const byName = (nm) => out.state.players.find((p) => p.name === nm);
+    const teamOf = (nm) => out.state.teams.find((t) => t.id === byName(nm).teamId);
+    eq(out.state.teams.length, 2);
+    ok(teamOf('Ada') && teamOf('Ada') === teamOf('Ben'), 'Ada and Ben share their new team');
+    ok(teamOf('Cleo') !== teamOf('Ada'), 'and Cleo is on the other one');
+    eq([teamOf('Ada').name, teamOf('Cleo').name], ['The Anchor', 'The Crown'], 'by name, still');
+    eq(byName('Eve').teamId, null, 'somebody on no team stays on none');
+    eq(out.state.teams.map((t) => t.id).filter((id) => id === 'ct1' || id === 'ct2'), [], 'with new ids');
+  });
+  t('teams travel only when BOTH leagues play in teams', () => {
+    const singles = H.copyPlayers(CPSRC(), CPDST('darts', 'singles'), CPALL);
+    eq(singles.teams, 0, 'a team league into a singles one leaves its teams');
+    eq(singles.state.players.filter((p) => p.teamId !== null), [], 'and nobody arrives half-teamed');
+    const fromSingles = H.copyPlayers(cpLeague({ id: 'LN-CPS2', format: 'singles',
+      players: [{ id: 'x1', name: 'Ada' }] }), CPDST('darts', 'teams'), ['x1']);
+    eq(fromSingles.teams, 0, 'and a singles league has none to give');
+  });
+  t('a handicap comes across between two leagues playing the same game', () => {
+    const out = H.copyPlayers(CPSRC(), CPDST('darts', 'teams'), CPALL);
+    eq(out.state.players.filter((p) => p.hcp != null).map((p) => p.name + ':' + p.hcp),
+       ['Ada:60', 'Cleo:40', 'Eve:20']);
+  });
+  t('a darts 60 does not become a shuffleboard 10', () => {
+    /* THE test of this feature. int() clamps rather than refuses, so carrying
+       the number across would land a start deduction of 60 as a head start of
+       10 — the shuffleboard maximum, a real advantage nobody was given, and
+       indistinguishable afterwards from a deliberate setting. */
+    const out = H.copyPlayers(CPSRC(), CPDST('shuffleboard', 'teams'), CPALL);
+    eq(out.state.players.filter((p) => p.hcp !== null), [], 'every handicap arrives empty');
+    eq(H.GAMES.shuffleboard.handicap.max, 10, 'which is the number it would have been clamped to');
+  });
+  t('`avail` never travels, and nothing arrives undefined', () => {
+    const src = CPSRC();
+    ok(src.players[0].avail, 'the source really does carry one');
+    const out = H.copyPlayers(src, CPDST('darts', 'teams'), CPALL);
+    eq(out.state.players.filter((p) => 'avail' in p), [], 'absent, not null: its dates are the OTHER league\u2019s nights');
+    /* Firestore refuses a whole document over one undefined, so a copied
+       entity may not carry one anywhere. */
+    const bad = [];
+    out.state.players.concat(out.state.teams).forEach((e) => Object.keys(e).forEach((k) => { if (e[k] === undefined) bad.push(k); }));
+    eq(bad, []);
+  });
+  t('somebody retired there arrives playing here', () => {
+    const out = H.copyPlayers(CPSRC(), CPDST('darts', 'teams'), CPALL);
+    const zed = out.state.players.find((p) => p.name === 'Zed');
+    ok(zed && zed.active === true, 'retired is a fact about the league they stopped playing in');
+  });
+  t('a copied player and team carry exactly the allowlisted fields', () => {
+    const out = H.copyPlayers(CPSRC(), CPDST('darts', 'teams'), CPALL);
+    eq(Object.keys(out.state.players[0]).sort(), ['active', 'hcp', 'id', 'name', 'teamId', 'u']);
+    eq(Object.keys(out.state.teams[0]).sort(), ['id', 'name', 'u']);
+  });
+  t('the result is boundary-clean already, so normalizeLeague changes nothing', () => {
+    /* copyPlayers deliberately does NOT normalize on the way out — saveLocal
+       stringifies `state` exactly as it is. This is the test that would be a
+       test of nothing if it did. */
+    const out = H.copyPlayers(CPSRC(), CPDST('darts', 'teams'), CPALL);
+    const again = H.normalizeLeague(out.state);
+    eq(JSON.stringify(again.players), JSON.stringify(out.state.players));
+    eq(JSON.stringify(again.teams), JSON.stringify(out.state.teams));
+  });
+  t('a name already there is skipped, whatever its case', () => {
+    const dst = cpLeague({ id: 'LN-CPDST', format: 'teams', players: [{ id: 'hz', name: 'ADA' }] });
+    const out = H.copyPlayers(CPSRC(), dst, ['cp1', 'cp2']);
+    eq([out.players, out.skipped], [1, 1], 'Ben comes, Ada does not');
+    eq(out.state.players.map((p) => p.name), ['ADA', 'Ben']);
+  });
+  t('two source players of one name come over once', () => {
+    /* The Add window refuses a duplicate, but a merge or a restored backup can
+       produce one — and if the count did not know, the note would say two and
+       the league would hold one. */
+    const src = cpLeague({ id: 'LN-CPSRC', players: [{ id: 'a', name: 'Ben' }, { id: 'b', name: 'ben' }] });
+    const out = H.copyPlayers(src, CPDST('darts', 'singles'), ['a', 'b']);
+    eq([out.players, out.skipped], [1, 1]);
+  });
+  t('a name nobody typed is not a person', () => {
+    const src = cpLeague({ id: 'LN-CPSRC', players: [{ id: 'a', name: '' }, { id: 'b', name: 'Ben' }] });
+    eq(H.copyPlayers(src, CPDST('darts', 'singles'), ['a', 'b']).players, 1);
+  });
+  t('an unticked player stays, and an id naming nobody is ignored', () => {
+    const out = H.copyPlayers(CPSRC(), CPDST('darts', 'teams'), ['cp2', 'no-such-player']);
+    eq(out.state.players.map((p) => p.name), ['Ben']);
+    eq(H.copyPlayers(CPSRC(), CPDST(), []).players, 0, 'and nothing ticked copies nothing');
+  });
+  t('the caps stop the copy and say so, rather than letting the rules refuse it', () => {
+    const many = [];
+    for (let i = 0; i < 12; i++) many.push({ id: 'm' + i, name: 'P' + i });
+    const src = cpLeague({ id: 'LN-CPSRC', players: many });
+    const full = [];
+    for (let i = 0; i < H.PLAYERS_MAX - 5; i++) full.push({ id: 'f' + i, name: 'F' + i });
+    const dst = cpLeague({ id: 'LN-CPDST', players: full });
+    const out = H.copyPlayers(src, dst, many.map((p) => p.id));
+    eq([out.players, out.capped], [5, true], 'five fit, and it is reported');
+    eq(out.state.players.length, H.PLAYERS_MAX);
+  });
+  t('the caps here are the numbers the rules enforce', () => {
+    /* Two files hold one number. The rules' failure mode is a bare
+       permission-denied behind the Not Syncing banner, which is why the app
+       stops first — and why these must not drift apart. */
+    eq(H.PLAYERS_MAX, 500); eq(H.TEAMS_MAX, 250);
+    ok(/players.*size\(\)\s*<=\s*500/.test(RULES_SRC), 'firestore.rules caps players at 500');
+    ok(/teams.*size\(\)\s*<=\s*250/.test(RULES_SRC), 'and teams at 250');
+  });
+  t('every copied entity is stamped now, so no tombstone can swallow it', () => {
+    const dst = CPDST('darts', 'teams');
+    dst.tombstones = [{ id: 'whatever', kind: 'player', at: Date.now() + 5000 }];
+    const out = H.copyPlayers(CPSRC(), dst, CPALL);
+    ok(out.state.players.every((p) => p.u > 0) && out.state.teams.every((t) => t.u > 0));
+    ok(out.state.players.every((p) => p.u > H.maxU(CPDST('darts', 'teams'))), 'past anything the destination held');
+    eq(H.normalizeLeague(out.state).players.length, CPALL.length, 'and applyTombstones keeps every one');
+  });
+  t('the planner allocates nothing, which is what lets the note run on every tick', () => {
+    const src = CPSRC(), dst = CPDST('darts', 'teams');
+    const plan = H.copyPlan(src, dst, CPALL);
+    ok(plan.take[0] === src.players[0], 'it hands back the source\u2019s own objects, by identity');
+    eq([plan.sameGame, plan.bothTeams], [true, true]);
+    eq(H.copyPlan(null, dst, CPALL).take, [], 'and no source is an empty plan, not a throw');
+  });
+  t('a team of the same name is reused rather than made twice', () => {
+    /* Never reachable from the create window, whose league is empty. It is
+       what makes this function safe to call into one that is not. */
+    const dst = cpLeague({ id: 'LN-CPDST', format: 'teams', teams: [{ id: 'here', name: 'the anchor' }] });
+    const out = H.copyPlayers(CPSRC(), dst, ['cp1', 'cp3']);
+    eq(out.teams, 1, 'only The Crown is new');
+    eq(out.state.teams.length, 2);
+    eq(out.state.players.find((p) => p.name === 'Ada').teamId, 'here', 'and Ada joins the one already here');
+  });
+
+  /* ── The create-league window ─────────────────────────────────────────────
+     A source has to be BOTH on the device record and in storage, because
+     __plant writes neither the one nor the other: loadLeague reads
+     localStorage. So these plant it themselves and put everything back — every
+     key that was not there on the way in is removed, and the device record is
+     restored to the exact string it held, or a fixture league turns up in the
+     real header picker on localhost. */
+  const withSource = (src, fn) => {
+    const D = H.__device();
+    const before = D.leagues.slice();
+    const keys = Object.keys(W.localStorage);
+    const dev = W.localStorage.getItem(H.DEVICE_KEY);
+    W.localStorage.setItem(H.LEAGUE_KEY(src.league.id), JSON.stringify(src));
+    D.leagues.push({ id: src.league.id, name: src.league.name, game: src.league.game, role: 'owner', cloud: false });
+    try { return fn(src); } finally {
+      W.document.getElementById('leagueDialog').close();
+      Object.keys(W.localStorage).forEach((k) => { if (keys.indexOf(k) === -1) W.localStorage.removeItem(k); });
+      if (dev === null) W.localStorage.removeItem(H.DEVICE_KEY); else W.localStorage.setItem(H.DEVICE_KEY, dev);
+      D.leagues.length = 0; before.forEach((l) => D.leagues.push(l));
+      H.__plant(FIXTURE); W.setTab('standings');
+    }
+  };
+  const pick = (id) => { const el = W.document.getElementById('lg_from'); el.value = id; el.dispatchEvent(new W.Event('change', { bubbles: true })); };
+  const flip = (id, v) => { const el = W.document.getElementById(id); el.value = v; el.dispatchEvent(new W.Event('change', { bubbles: true })); };
+
+  t('with nothing of your own to copy from, the block is not on the page', () => {
+    const D = H.__device();
+    const before = D.leagues.slice();
+    try {
+      D.leagues.length = 0;
+      D.leagues.push({ id: H.DEMO_ID, name: 'Tuesday Singles (demo)', game: 'darts', role: 'owner', cloud: false });
+      W.openCreate();
+      ok(W.document.getElementById('lg_copyWrap').hidden,
+         'a device holding only the demo has nobody of its own — and an explained-away empty state is worse than none');
+    } finally { W.document.getElementById('leagueDialog').close(); D.leagues.length = 0; before.forEach((l) => D.leagues.push(l)); }
+  });
+  t('the picker offers your leagues with their game, and never the demo', () => {
+    withSource(CPSRC(), () => {
+      const D = H.__device();
+      D.leagues.push({ id: H.DEMO_ID, name: 'Tuesday Singles (demo)', game: 'darts', role: 'owner', cloud: false });
+      W.openCreate();
+      const opts = [...W.document.getElementById('lg_from').options];
+      ok(!W.document.getElementById('lg_copyWrap').hidden);
+      eq(opts[0].value, '', 'nobody is picked to begin with \u2014 Enter in the name box creates the league');
+      ok(opts.some((o) => o.value === 'LN-CPSRC' && /Tuesday Darts/.test(o.textContent) && /Darts/.test(o.textContent)),
+         'the game is shown, because it decides whether handicaps travel');
+      eq(opts.filter((o) => o.value === H.DEMO_ID), [], 'the demo is not a source of real people');
+    });
+  });
+  t('a league you only follow IS offered, because copying out of it writes nothing to it', () => {
+    withSource(CPSRC(), () => {
+      const D = H.__device();
+      D.leagues[D.leagues.length - 1].role = 'viewer';
+      W.openCreate();
+      ok([...W.document.getElementById('lg_from').options].some((o) => o.value === 'LN-CPSRC'),
+         'this path calls neither canEdit() nor canSetUp(), and must not');
+    });
+  });
+  t('the active players are ticked and the retired are offered unticked', () => {
+    withSource(CPSRC(), () => {
+      W.openCreate();
+      pick('LN-CPSRC');
+      const rows = [...W.document.querySelectorAll('#lg_players .checkline')];
+      eq(rows.length, 5);
+      eq(rows.map((l) => l.textContent.trim().replace(/\s+/g, ' ')),
+         ['Ada', 'Ben', 'Cleo', 'Eve', 'Zed retired'], 'active first by name, then the retired');
+      eq(rows.map((l) => l.querySelector('input').checked), [true, true, true, true, false]);
+    });
+  });
+  t('the note is the plan the button will run, and the GAME box changes it', () => {
+    withSource(CPSRC(), () => {
+      W.openCreate();
+      flip('lg_format', 'teams');
+      pick('LN-CPSRC');
+      const note = () => W.document.getElementById('lg_copyNote').textContent;
+      ok(/4 players and 2 teams will come over\./.test(note()), note());
+      ok(/Handicaps come with them\./.test(note()), 'darts into darts');
+      flip('lg_game', 'shuffleboard');
+      ok(/Handicaps stay behind — a start deduction is not a head start\./.test(note()),
+         'and the Game box is not in this fieldset, which is the listener a reviewer forgets');
+      ok(!/come with them/.test(note()));
+    });
+  });
+  t('and the PLAYED AS box changes it, with the source left alone', () => {
+    withSource(CPSRC(), () => {
+      W.openCreate();
+      flip('lg_format', 'teams');
+      pick('LN-CPSRC');
+      const note = () => W.document.getElementById('lg_copyNote').textContent;
+      ok(!/Teams stay behind/.test(note()));
+      flip('lg_format', 'singles');
+      ok(/2 teams/.test(note()) === false && /Teams stay behind — this league is singles\./.test(note()), note());
+      flip('lg_format', 'teams');
+      ok(/4 players and 2 teams/.test(note()), 'and back');
+    });
+  });
+  t('the note is silent about a handicap nobody has, and says what a tick did', () => {
+    withSource(cpLeague({ id: 'LN-CPSRC', name: 'Plain', players: [{ id: 'q1', name: 'Ada' }, { id: 'q2', name: 'Zed', active: false }] }), () => {
+      W.openCreate();
+      pick('LN-CPSRC');
+      const note = () => W.document.getElementById('lg_copyNote').textContent;
+      ok(!/[Hh]andicap/.test(note()), 'a sentence about nothing reads like a warning: ' + note());
+      const zed = [...W.document.querySelectorAll('#lg_players input')].find((i) => !i.checked);
+      zed.checked = true; zed.dispatchEvent(new W.Event('change', { bubbles: true }));
+      ok(/Anyone retired arrives playing\./.test(note()), note());
+      [...W.document.querySelectorAll('#lg_players input')].forEach((i) => { i.checked = false; });
+      W.document.getElementById('lg_players').dispatchEvent(new W.Event('change', { bubbles: true }));
+      ok(/Nobody ticked/.test(note()), note());
+    });
+  });
+  t('a name another member typed cannot get out of the tick-list', () => {
+    const hostile = '<img src=x onerror=window.__cpPwned=1>';
+    withSource(cpLeague({ id: 'LN-CPSRC', name: hostile, players: [{ id: 'h1', name: hostile }] }), () => {
+      W.openCreate();
+      pick('LN-CPSRC');
+      ok(!W.__cpPwned, 'nothing ran');
+      eq(W.document.querySelectorAll('#lg_players img[src="x"]').length, 0, 'and no element was made of it');
+      ok(W.document.querySelector('#lg_players .checkline span').textContent.indexOf('<img') === 0, 'the text is shown');
+    });
+  });
+  t('opening the window again forgets the last one', () => {
+    withSource(CPSRC(), () => {
+      W.openCreate();
+      pick('LN-CPSRC');
+      ok(W.document.querySelectorAll('#lg_players input:checked').length > 0);
+      W.document.getElementById('leagueDialog').close();
+      W.openCreate();
+      eq(W.document.getElementById('lg_from').value, '');
+      eq(W.document.querySelectorAll('#lg_players .checkline').length, 0);
+      eq(W.document.getElementById('lg_copyNote').textContent, '');
+    });
+  });
+  t('the help dot opens over the window it was pressed in', () => {
+    withSource(CPSRC(), () => {
+      W.openCreate();
+      W.document.querySelector('#lg_copyWrap .tile-help').click();
+      const help = W.document.getElementById('helpDialog');
+      ok(help.open, 'two stacked modals, which is the one new interaction here');
+      ok(/copy/i.test(W.document.getElementById('helpBody').textContent), 'and it answers for its legend');
+      help.close();
+      ok(W.document.getElementById('leagueDialog').open, 'and the create window is still behind it');
+    });
+  });
+  t('creating a league with the players in it', () => {
+    withSource(CPSRC(), () => {
+      W.openCreate();
+      W.document.getElementById('lg_name').value = 'Sunday Boards';
+      flip('lg_game', 'shuffleboard');
+      flip('lg_format', 'singles');
+      pick('LN-CPSRC');
+      W.document.getElementById('leagueSave').click();
+      const st = H.__state();
+      eq(st.league.name, 'Sunday Boards');
+      eq([st.league.game, st.league.settings.format], ['shuffleboard', 'singles']);
+      eq(st.players.map((p) => p.name), ['Ada', 'Ben', 'Cleo', 'Eve'], 'the four ticked, the retired one left');
+      eq(st.players.filter((p) => p.hcp !== null), [], 'without handicaps, across two games');
+      eq(st.players.filter((p) => p.teamId !== null), [], 'and without teams, into a singles league');
+      eq(st.players.filter((p) => ['cp1', 'cp2', 'cp3', 'cp4'].indexOf(p.id) !== -1), [], 'every id new');
+      ok(/Sunday Boards created — 4 players brought over/.test(W.document.getElementById('toast').textContent),
+         W.document.getElementById('toast').textContent);
+      eq(W.document.documentElement.getAttribute('data-tab'), 'players', 'and it lands on the list of them');
+      const src = H.normalizeLeague(JSON.parse(W.localStorage.getItem(H.LEAGUE_KEY('LN-CPSRC'))));
+      eq(src.players.length, 5, 'with the league it came from untouched');
+    });
   });
 
   group('the welcome card, the picker and Find');
