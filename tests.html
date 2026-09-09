@@ -52,7 +52,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 310;
+const EXPECTED = 340;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -1569,8 +1569,8 @@ function define() {
   });
 
   group('the live scorer');
-  t('a new leg remembers who throws first and the double-out rule, and SCHEMA is 5', () => {
-    eq(H.SCHEMA, 5);
+  t('a new leg remembers who throws first and the double-out rule, and SCHEMA is 6', () => {
+    eq(H.SCHEMA, 6);
     const out = H.normalizeLeague({ league: { id: 'L' }, matches: [{ id: 'm', a: 'x', b: 'y', legs: [{ first: 'b', dOut: false }, {}] }] });
     eq(out.matches[0].legs.map((l) => [l.first, l.dOut]), [['b', false], ['a', true]]);
   });
@@ -1913,12 +1913,424 @@ function define() {
     eq(JSON.stringify(d), JSON.stringify(H.buildDemoShuffle()), 'and it is the same every time');
   });
   t('every game a demo is built on is a game the registry has', () => {
-    [H.buildDemoSingles(), H.buildDemoTeams(), H.buildDemoShuffle()].forEach((d) => {
+    [H.buildDemoSingles(), H.buildDemoTeams(), H.buildDemoShuffle(), H.buildDemoPool()].forEach((d) => {
       ok(H.GAMES[d.league.game], d.league.game);
       ok(H.isDemoId(d.league.id), d.league.id);
       [].concat(d.players, d.seasons, d.matches, d.brackets).forEach((e) => ok(/^demo-/.test(e.id), e.id));
     });
-    eq(new Set([H.DEMO_ID, H.DEMO_TEAMS_ID, H.DEMO_BOARD_ID]).size, 3, 'and three different leagues');
+    eq(new Set([H.DEMO_ID, H.DEMO_TEAMS_ID, H.DEMO_BOARD_ID, H.DEMO_POOL_ID]).size, 4, 'and four different leagues');
+  });
+
+  group('8-ball: the third game, and the first head start the engine had to learn');
+  /* A pool league of two players, one of them on a wire, with a match still to
+     play. Its id carries no LN- code shape, like the demo's and the board
+     fixture's, so nothing here can be mistaken for a cloud league. */
+  const PLFX = {
+    league: { id: 'LN-PLFIX', name: 'Pool Fixture', game: 'pool', createdAt: '2026-01-01',
+      settings: { format: 'singles', teamSize: 2, legFormat: '8ball', dOut: true,
+                  matchFormat: { mode: 'bestOf', n: 3 }, points: { win: 2, draw: 1, loss: 0 },
+                  tiebreak: ['pts', 'legDiff', 'legsFor', 'h2h', 'name'] } },
+    players: [{ id: 'pl-ann', name: 'Ann', teamId: null, hcp: null, active: true },
+              { id: 'pl-bo', name: 'Bo', teamId: null, hcp: 2, active: true }],
+    teams: [], seasons: [{ id: 'pl-s1', name: 'Pool Season', startsOn: '2026-01-05', status: 'active' }],
+    matches: [{ id: 'pl-m1', seasonId: 'pl-s1', bracketId: null, slot: null, round: 1, date: '2026-01-05',
+                venue: '', a: 'pl-ann', b: 'pl-bo', status: 'scheduled', score: { a: 0, b: 0 }, legs: [] }],
+    brackets: [], tombstones: [],
+  };
+  /* A rack, ready for visits. */
+  const plLeg = (first, ga, gb) => ({ w: null, by: { a: ['pl-ann'], b: ['pl-bo'] },
+    start: { a: ga === undefined ? 7 : ga, b: gb === undefined ? 7 : gb },
+    first: first || 'a', turns: [] });
+  const rack = (leg, list) => list.reduce((cur, v) => {
+    const next = H.poolShot(cur, v[0], v[1] || null);
+    ok(!next.error, 'visit ' + JSON.stringify(v) + ': ' + next.error);
+    return next.error ? cur : next;
+  }, leg);
+
+  t('every game says WHERE its head start applies, and it is one of exactly two places', () => {
+    /* Without this a fourth game that declared no scope would inherit whichever
+       branch the `else` happened to be — which is how openLive() came to plant
+       a darts record on every game that was not shuffleboard. */
+    Object.keys(H.GAMES).forEach((g) => {
+      const sc = H.GAMES[g].handicap.scope;
+      ok(sc === 'leg' || sc === 'match', g + ' declares no handicap scope: ' + sc);
+    });
+    eq([H.GAMES.darts.handicap.scope, H.GAMES.shuffleboard.handicap.scope, H.GAMES.pool.handicap.scope],
+       ['leg', 'leg', 'match']);
+    eq(H.GAMES.pool.handicap.apply(0, 2), 2, 'a match-scope apply answers the racks a side starts on');
+    eq(H.GAMES.pool.handicap.pill(2), '+2');
+  });
+  t('a visit pots your OWN, and the table changes hands after every one of them', () => {
+    const leg = rack(plLeg('a'), [[3], [2], [4], [1]]);
+    const st = H.poolState(leg);
+    eq([st.pot.a, st.pot.b], [7, 3], 'three and four for Ann, two and one for Bo');
+    eq([st.left.a, st.left.b], [0, 4]);
+    eq([st.visits.a, st.visits.b], [2, 2]);
+    eq(st.turns, 4);
+    eq(st.turn, 'a', 'and it is back to the side that broke');
+    eq(st.winner, null, 'clearing your group is not winning the rack');
+  });
+  t('the table alternates from whoever BROKE, and does not follow whoever potted last', () => {
+    let leg = plLeg('b');
+    eq(H.poolState(leg).turn, 'b', 'the break is the only visit anybody chooses');
+    leg = rack(leg, [[3]]);
+    eq(H.poolState(leg).turn, 'a', 'a visit ends when you miss, so the table changes hands');
+    leg = rack(leg, [[0]]);
+    eq(H.poolState(leg).turn, 'b', 'and back — potting nothing is still a visit');
+  });
+  t('you cannot pot balls you have not got, and it is refused in a sentence', () => {
+    const leg = rack(plLeg('a'), [[5], [0]]);
+    const err = H.poolShot(leg, 4, null).error;
+    ok(/2 of their own left, so 4 cannot have gone down/.test(err), err);
+    ok(/between 0 and 7/.test(H.poolShot(plLeg('a'), 9, null).error), 'and nine is not a visit at all');
+    ok(/between 0 and 7/.test(H.poolShot(plLeg('a'), 'x', null).error), 'nor is something that is not a number');
+    ok(!H.poolShot(leg, 2, null).error, 'but the two that are left go down fine');
+  });
+  t('THE 8 COMES LAST: claiming it with the group still up did not happen, and is refused', () => {
+    const leg = rack(plLeg('a'), [[3], [0]]);
+    const err = H.poolShot(leg, 0, 'won').error;
+    ok(/The 8 comes last, and this side still has 4 to clear/.test(err), err);
+    ok(/still has 1 to clear/.test(H.poolShot(leg, 3, 'won').error), 'and it counts what this visit potted too');
+    ok(!H.poolShot(leg, 0, null).error, 'the same visit without the claim is fine');
+    ok(!H.poolShot(leg, 4, 'won').error, 'and clearing the last four with it is the way a rack is won');
+  });
+  t('potting the 8 early LOSES the rack, and is not a refusal', () => {
+    /* The same distinction x01 makes between a bust and an error: a thing that
+       happens at the table is recorded, and only a thing that cannot happen is
+       refused. */
+    const early = H.poolShot(plLeg('a'), 1, 'lost');
+    ok(!early.error, 'it happened, so it is recorded');
+    eq(H.poolState(early).winner, 'b', 'and the rack goes to the other side');
+    eq(early.turns, [{ s: 'a', n: 1, end: 'lost' }],
+       'one record for both ways of losing it — the app never claims which');
+  });
+  t('a rack that is over takes nothing more', () => {
+    const leg = rack(plLeg('a'), [[7, 'won']]);
+    eq(H.poolState(leg).winner, 'a');
+    eq(H.poolShot(leg, 1, null).error, 'The rack is over.');
+    eq(H.poolState(leg).turn, null, 'and nobody is at the table in a rack that is finished');
+  });
+  t('undo takes back the last visit, whoever was at the table', () => {
+    const leg = rack(plLeg('a'), [[3], [2]]);
+    const back = H.poolUndo(leg);
+    eq(back.turns.length, 1);
+    eq(H.poolState(back).pot, { a: 3, b: 0 });
+    eq(H.poolUndo(H.poolUndo(back)).turns, [], 'and undoing an empty rack is not an error');
+  });
+  t('a side’s figures for a rack: potted, left, visits and the balls per visit', () => {
+    const leg = rack(plLeg('a'), [[3], [2], [4, 'won']]);
+    const s = H.poolLegStats(leg, 'a');
+    eq([s.pot, s.left, s.visits], [7, 0, 2]);
+    eq(s.bpv, 3.5, 'seven balls in two visits');
+    eq(s.won, true);
+    const b = H.poolLegStats(leg, 'b');
+    eq([b.pot, b.left, b.visits, b.won], [2, 5, 1, false]);
+  });
+  t('a break and run is ONE visit, by the side that broke, that ended on the 8', () => {
+    const bnr = rack(plLeg('a'), [[7, 'won']]);
+    eq([H.poolLegStats(bnr, 'a').bnr, H.poolLegStats(bnr, 'b').bnr], [1, 0]);
+    const fromTheChair = rack(plLeg('b'), [[0], [7, 'won']]);
+    eq(H.poolLegStats(fromTheChair, 'a').bnr, 0,
+       'a run-out from the other chair is a fine rack and is not a break and run');
+    const slow = rack(plLeg('a'), [[4], [0], [3, 'won']]);
+    eq(H.poolLegStats(slow, 'a').bnr, 0, 'and neither is a rack that took two visits');
+  });
+  t('a rack with no group can never be won, and has no balls per visit', () => {
+    /* The hole a trim could have fallen down: a live figure where a trimmed one
+       is null is exactly the `scored` bug. It is null on both sides here. */
+    const leg = { w: null, by: { a: [], b: [] }, start: { a: null, b: null }, first: 'a', turns: [] };
+    eq(H.poolShot(leg, 1, null).error, 'This rack has no group to clear.');
+    eq(H.poolState(leg).winner, null);
+    eq([H.poolLegStats(leg, 'a').pot, H.poolLegStats(leg, 'a').bpv], [null, null]);
+  });
+  t('the record survives the allowlist, and a hostile one does not', () => {
+    const clean = (turns) => H.normalizeLeague({ league: { id: 'L', game: 'pool' },
+      matches: [{ id: 'm', a: 'p', b: 'q', legs: [{ w: 'a', first: 'a', start: { a: 7, b: 7 },
+        turns: turns }] }] }).matches[0].legs[0].turns;
+    eq(clean([{ s: 'b', n: 3 }, { s: 'b', n: 99 }, { s: 'a', n: 4, end: 'won' }, 'nope', { s: 'a', n: 1 }]),
+       [{ s: 'a', n: 3 }, { s: 'b', n: 7 }, { s: 'a', n: 4, end: 'won' }],
+       'whose visit it was is decided by who broke and the position in the list, never read from the record; '
+       + '99 is clamped to the seven that side has; and a visit played after the 8 went down is dropped, '
+       + 'because a record that carries one disagrees with itself');
+    eq(clean([{ n: 2, end: 'won' }]), [{ s: 'a', n: 2 }],
+       'and a "won" that does not clear the group is dropped rather than kept to contradict the count beside it');
+  });
+  t('a leg carries whichever record its game keeps, and never a second', () => {
+    const keys = (leg) => Object.keys(H.normalizeLeague({ league: { id: 'L', game: 'pool' },
+      matches: [{ id: 'm', a: 'p', b: 'q', legs: [leg] }] }).matches[0].legs[0]).sort();
+    eq(keys({ w: 'a' }), ['by', 'dOut', 'first', 'start', 'w'], 'a rack nobody scored live carries none of them');
+    ok(keys({ w: 'a', start: { a: 7, b: 7 }, turns: [{ n: 3 }] }).includes('turns'));
+    ok(!keys({ w: 'a', turns: [] }).includes('turns'),
+       'an EMPTY record is no record — and this follows frames(), not visits(), which keeps one');
+    ok(!keys({ w: 'a', frames: [{ s: 'a', t: 3 }] }).includes('turns'));
+  });
+  t('the typed figures of a rack are its own, and are capped', () => {
+    const out = H.normalizeLeague({ league: { id: 'L', game: 'pool' },
+      matches: [{ id: 'm', a: 'p', b: 'q', legs: [{ w: 'a', a: { left: 99, visits: 4, bnr: 9, points: 12, t180: 2 } }] }] });
+    eq(out.matches[0].legs[0].a, { left: 7, visits: 4, bnr: 1 },
+       'a shuffleboard figure and a darts one are not fields of this game, so neither survives');
+  });
+  t('a typed rack and a scored one are read the same way', () => {
+    const typed = { w: 'a', by: { a: ['pl-ann'], b: ['pl-bo'] }, start: { a: 7, b: 7 },
+                    a: { left: 0, visits: 2, bnr: 0 }, b: { left: 5, visits: 1 } };
+    const s = H.poolSideStats(typed, 'a');
+    eq([s.pot, s.left, s.visits, s.won], [7, 0, 2, true], 'potted is the group less what was left');
+    eq(s.bpv, 3.5);
+    eq(H.poolSideStats(typed, 'b').bnr, null, 'an empty box is not a zero: nobody said');
+    eq(H.poolPlayerStats([typed], 'pl-ann').bpv, 3.5);
+  });
+
+  t('a wire is added to the racks WON, and only where racks were played', () => {
+    const m = (spot, legs) => ({ id: 'm', a: 'x', b: 'y', status: 'played', score: { a: 0, b: 0 },
+                                 spot: spot, legs: legs });
+    eq(H.matchScore(m({ a: 0, b: 2 }, [{ w: 'a' }, { w: 'b' }])), { a: 1, b: 3 });
+    eq(H.matchScore(m(null, [{ w: 'a' }, { w: 'b' }])), { a: 1, b: 1 }, 'and a match with no wire is untouched');
+    eq(H.matchScore({ id: 'm', a: 'x', b: 'y', status: 'played', spot: { a: 0, b: 2 },
+                      legs: [], score: { a: 3, b: 0 } }), { a: 3, b: 0 },
+       'a match with no racks reads its stored score, and the wire is not in it');
+  });
+  t('a forfeit ignores the wire, because a stored score is a result and not a count of racks', () => {
+    const D = W.document;
+    try {
+      H.__plant(PLFX);
+      D.getElementById('tab-matches').click();
+      D.querySelector('.mrow[data-match="pl-m1"]').click();
+      D.getElementById('addLegBtn').click();
+      ok(H.__state().matches[0].spot, 'the wire is on the match');
+      W.confirm = () => true;
+      D.getElementById('forfeitB').click();
+      const m = H.__state().matches[0];
+      eq(m.status, 'forfeit');
+      ok(!m.spot, 'and it went with the racks');
+      eq(H.matchScore(m), { a: 2, b: 0 },
+         'the full score and nothing else — a wire here would either pass "the full score" or hand Bo a forfeit he lost');
+      D.getElementById('matchDialog').close();
+    } finally { delete W.confirm; H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+  t('the wire is frozen with the first rack, and a handicap changed after it does not move it', () => {
+    const D = W.document;
+    try {
+      H.__plant(PLFX);
+      D.getElementById('tab-matches').click();
+      D.querySelector('.mrow[data-match="pl-m1"]').click();
+      D.getElementById('addLegBtn').click();
+      eq(H.__state().matches[0].spot, { a: 0, b: 2 });
+      /* The same bargain leg.start makes one level down. */
+      H.__state().players.find((p) => p.id === 'pl-bo').hcp = 3;
+      D.getElementById('addLegBtn').click();
+      eq(H.__state().matches[0].spot, { a: 0, b: 2 }, 'a match already under way keeps the wire it was given');
+      D.getElementById('matchDialog').close();
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+  t('a match with no racks has no wire, and nobody on a handicap is no wire at all', () => {
+    const D = W.document;
+    try {
+      H.__plant(PLFX);
+      D.getElementById('tab-matches').click();
+      D.querySelector('.mrow[data-match="pl-m1"]').click();
+      D.getElementById('addLegBtn').click();
+      ok(H.__state().matches[0].spot);
+      W.confirm = () => true;
+      D.querySelector('#legsWrap [data-leg-del]').click();
+      ok(!H.__state().matches[0].spot, 'back to a match nobody has started');
+      /* And with the handicap gone, the next rack freezes nothing: a nought is
+         not a head start, so it is not a key. */
+      H.__state().players.find((p) => p.id === 'pl-bo').hcp = null;
+      D.getElementById('addLegBtn').click();
+      ok(!H.__state().matches[0].spot, 'a nought wire is no wire, and is not written down');
+      D.getElementById('matchDialog').close();
+    } finally { delete W.confirm; H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+  t('a team league gets no wire, exactly as it gets no start deduction', () => {
+    const D = W.document;
+    const teamFix = JSON.parse(JSON.stringify(PLFX));
+    teamFix.league.settings.format = 'teams';
+    teamFix.teams = [{ id: 'pl-t1', name: 'Cues' }, { id: 'pl-t2', name: 'Chalk' }];
+    teamFix.players[1].teamId = 'pl-t2';
+    teamFix.matches[0].a = 'pl-t1'; teamFix.matches[0].b = 'pl-t2';
+    try {
+      H.__plant(teamFix);
+      D.getElementById('tab-matches').click();
+      D.querySelector('.mrow[data-match="pl-m1"]').click();
+      D.getElementById('addLegBtn').click();
+      ok(!H.__state().matches[0].spot, 'a squad has no single handicap to give');
+      D.getElementById('matchDialog').close();
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+  t('a FIXED number of racks still plays them all, whatever anybody was given', () => {
+    /* A head start is racks GIVEN and a fixed count is racks to PLAY. Reading
+       the score here would have ended a fixed-four match after two real ones. */
+    const fixed = { mode: 'fixed', n: 4 };
+    const m = { id: 'm', a: 'x', b: 'y', spot: { a: 0, b: 2 }, score: { a: 0, b: 0 },
+                legs: [{ w: 'a' }, { w: 'b' }] };
+    eq(H.matchDone(m, fixed), false, 'two racks of four are two racks of four');
+    m.legs.push({ w: 'a' }, { w: 'b' });
+    eq(H.matchDone(m, fixed), true);
+    eq(H.matchDone({ id: 'm', a: 'x', b: 'y', legs: [{ w: 'a' }, { w: null }, { w: 'b' }] }, fixed), false,
+       'and an undecided rack still counts for nobody, which is what it did before the wire existed');
+    eq(H.matchDone({ id: 'm', a: 'x', b: 'y', spot: { a: 0, b: 2 }, score: { a: 0, b: 0 },
+                     legs: [{ w: 'b' }] }, { mode: 'bestOf', n: 3 }), true,
+       'but a best-of DOES read the wired score — that is what a wire is for');
+  });
+  t('the wire is in the racks for, against and difference, because the card and the table agree', () => {
+    const rows = H.standings([{ id: 'm', a: 'x', b: 'y', status: 'played', date: '2026-01-05', u: 1,
+                                spot: { a: 0, b: 2 }, score: { a: 0, b: 0 },
+                                legs: [{ w: 'a' }, { w: 'b' }] }],
+                             ['x', 'y'], { points: { win: 2, draw: 1, loss: 0 } });
+    const x = rows.find((r) => r.sideId === 'x'), y = rows.find((r) => r.sideId === 'y');
+    eq([x.lf, x.la, x.ld, x.w, x.l], [1, 3, -2, 0, 1]);
+    eq([y.lf, y.la, y.ld, y.w, y.l], [3, 1, 2, 1, 0],
+       'three for and one against — the same numbers the match card shows, which is the whole point');
+  });
+
+  t('Trim Closed Seasons moves no figure at a game of 8-ball either', () => {
+    const st = H.normalizeLeague(Object.assign({}, PLFX, {
+      seasons: [{ id: 'pl-s1', name: 'Pool Season', startsOn: '2026-01-05', status: 'done' }],
+      matches: [Object.assign({}, PLFX.matches[0], { status: 'played', legs: [
+        Object.assign(rack(plLeg('a'), [[3], [2], [4, 'won']]), { w: 'a' }),
+        Object.assign(rack(plLeg('b'), [[7, 'won']]), { w: 'b' })] })] }));
+    const before = H.poolPlayerStats(H.legsIn(st, 'pl-s1'), 'pl-ann');
+    const beforeBo = H.poolPlayerStats(H.legsIn(st, 'pl-s1'), 'pl-bo');
+    ok(st.matches[0].legs[0].turns.length === 3 && H.legIsLive(st.matches[0].legs[0]), 'it starts visit by visit');
+    const out = H.compactSeason(st, 'pl-s1');
+    eq(out.trimmed, 2);
+    ok(!out.matches[0].legs[0].turns, 'and the record is gone');
+    ok(!H.legIsLive(out.matches[0].legs[0]));
+    const after = H.poolPlayerStats(H.legsIn(out, 'pl-s1'), 'pl-ann');
+    const afterBo = H.poolPlayerStats(H.legsIn(out, 'pl-s1'), 'pl-bo');
+    eq([after.pot, after.visits, after.bpv, after.bnr, after.left, after.won],
+       [before.pot, before.visits, before.bpv, before.bnr, before.left, before.won],
+       'every figure the button promised would not move');
+    eq([afterBo.bnr, afterBo.bpv, afterBo.left], [beforeBo.bnr, beforeBo.bpv, beforeBo.left],
+       'the break and run survives as a typed figure, and so does what the loser left');
+    eq(afterBo.bnr, 1, 'and it was a real one, or this test proves nothing');
+    eq(out.matches[0].legs[0].by, st.matches[0].legs[0].by, 'and who played stays');
+  });
+  t('a rack with no group has no balls per visit before OR after a trim', () => {
+    const st = H.normalizeLeague(Object.assign({}, PLFX, {
+      seasons: [{ id: 'pl-s1', name: 'Pool Season', startsOn: '2026-01-05', status: 'done' }],
+      matches: [Object.assign({}, PLFX.matches[0], { status: 'played', legs: [
+        { w: 'a', by: { a: ['pl-ann'], b: ['pl-bo'] }, start: { a: null, b: null }, first: 'a',
+          turns: [{ s: 'a', n: 0 }, { s: 'b', n: 0 }] }] })] }));
+    const before = H.poolPlayerStats(H.legsIn(st, 'pl-s1'), 'pl-ann');
+    const after = H.poolPlayerStats(H.legsIn(H.compactSeason(st, 'pl-s1'), 'pl-s1'), 'pl-ann');
+    eq([before.bpv, after.bpv], [null, null], 'null on both sides, which is what the `scored` bug was not');
+    eq([before.legs, after.legs], [1, 1]);
+  });
+
+  t('the League Rules card says rack, and drops the rule 8-ball has not got', () => {
+    const D = W.document;
+    try {
+      H.__plant(PLFX);
+      W.setTab('league');
+      eq(D.getElementById('lr_game').value, 'Pool');
+      eq(D.getElementById('lr_legFormatLabel').textContent, 'Each rack');
+      eq(D.getElementById('lr_nLabel').textContent, '…how many racks');
+      eq([...D.getElementById('lr_legFormat').options].map((o) => o.textContent), ['8-ball']);
+      eq(D.getElementById('lr_dOutRow').hidden, true, 'double-out is a DARTS rule');
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+  t('the standings key explains the wire it is showing, and the table carries 8-ball’s own columns', () => {
+    const D = W.document;
+    try {
+      H.__plant(PLFX);
+      W.setTab('standings');
+      const note = D.getElementById('standingsNote').textContent;
+      ok(/racks on the wire, added to their score in every match they play/.test(note), JSON.stringify(note));
+      ok(/counted in the racks for and against/.test(note),
+         'and it says so, because a "for" column larger than the racks played is otherwise unexplained');
+      ok(/racks for and against/.test(note), 'the column letters use the game’s word');
+      ok([...D.querySelectorAll('#standingsTable .pill')].some((p) => p.textContent === '+2'), 'the pill reads +2');
+      eq([...D.querySelectorAll('#standingsTable thead th')].slice(-3).map((th) => th.textContent),
+         ['Balls/visit', 'Break & runs', 'Left when beaten']);
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+  t('the match card says the wire out loud, beside the score it is part of', () => {
+    const D = W.document;
+    try {
+      H.__plant(PLFX);
+      D.getElementById('tab-matches').click();
+      D.querySelector('.mrow[data-match="pl-m1"]').click();
+      eq(D.getElementById('mtWire').hidden, true, 'nothing to say before a rack is added');
+      D.getElementById('addLegBtn').click();
+      eq(D.getElementById('mtWire').hidden, false);
+      const said = D.getElementById('mtWire').textContent;
+      ok(/Ann 0 . 2 Bo on the wire/.test(said), said);
+      ok(/racks given before a ball was struck/.test(said));
+      ok(D.getElementById('mtWire').compareDocumentPosition(D.getElementById('mtFormat'))
+         & Node.DOCUMENT_POSITION_FOLLOWING,
+         'and it sits between the score and the format line, not below both');
+      D.getElementById('matchDialog').close();
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+  t('the sheet scores a rack visit by visit, refuses the 8 early, and ends the rack', () => {
+    const D = W.document;
+    try {
+      H.__plant(PLFX);
+      D.getElementById('tab-matches').click();
+      D.querySelector('.mrow[data-match="pl-m1"]').click();
+      D.getElementById('addLegBtn').click();
+      D.querySelector('#legsWrap [data-live]').click();
+      const leg = () => H.__state().matches[0].legs[0];
+      eq(leg().start, { a: 7, b: 7 }, 'a wire does not touch the rack — every rack is seven and the 8');
+      ok(!D.getElementById('lvPoolPad').hidden && D.getElementById('lvPad').hidden
+         && D.getElementById('lvSbPad').hidden, 'its own pad and nobody else’s');
+      eq([...D.querySelectorAll('#lvPoolPad [data-key]')].map((b) => b.textContent),
+         ['0', '1', '2', '3', '4', '5', '6', '7'], 'nought to seven, and no backspace: a visit is one digit');
+      D.querySelector('#lvPoolPad [data-key="3"]').click();
+      D.querySelector('#lvPoolPad [data-key="5"]').click();
+      eq(D.getElementById('lvEntry').textContent, '5', 'a second key SETS rather than appending');
+      D.getElementById('lvPoolMiss').click();
+      eq(leg().turns, [{ s: 'a', n: 5 }]);
+      ok(/Bo is at the table/.test(D.getElementById('lvHint').textContent), D.getElementById('lvHint').textContent);
+      D.querySelector('#lvPoolPad [data-key="1"]').click();
+      D.getElementById('lvPoolMiss').click();
+      D.querySelector('#lvPoolPad [data-key="0"]').click();
+      D.getElementById('lvPoolWon').click();
+      eq(leg().turns.length, 2, 'the 8 with two still up is refused, and nothing is recorded');
+      D.querySelector('#lvPoolPad [data-key="2"]').click();
+      D.getElementById('lvPoolWon').click();
+      eq(leg().w, 'a', 'clearing the last two and potting the 8 takes the rack');
+      eq(H.matchScore(H.__state().matches[0]), { a: 1, b: 2 }, 'one played, two on the wire');
+      D.getElementById('lvUndo').click();
+      eq(leg().w, null, 'and undo hands the rack back');
+      D.getElementById('liveDialog').close();
+      D.getElementById('matchDialog').close();
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+  t('opening the 8-ball sheet plants no darts record and no frames one', () => {
+    const D = W.document;
+    try {
+      H.__plant(PLFX);
+      D.getElementById('tab-matches').click();
+      D.querySelector('.mrow[data-match="pl-m1"]').click();
+      D.getElementById('addLegBtn').click();
+      D.querySelector('#legsWrap [data-live]').click();
+      const leg = H.__state().matches[0].legs[0];
+      ok(!leg.visits && !leg.frames, 'the else used to be darts, and an empty visits record survives the boundary');
+      ok(Array.isArray(leg.turns), 'only its own');
+      D.getElementById('liveDialog').close();
+      D.getElementById('matchDialog').close();
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+  t('the 8-ball demo: a season under way, wires, live racks and a knockout', () => {
+    const d = H.buildDemoPool();
+    eq(d.league.id, H.DEMO_POOL_ID);
+    eq(d.league.game, 'pool');
+    ok(!H.LEAGUE_ID_RE.test(d.league.id), 'and its id is not a League ID, so it can never reach the cloud');
+    ok(d.players.some((p) => p.hcp != null), 'somebody on the wire');
+    ok(d.matches.some((m) => m.spot && (m.spot.a || m.spot.b)), 'and a match that was given one');
+    ok(d.matches.some((m) => m.legs.some((l) => l.turns && l.turns.length)), 'racks scored visit by visit');
+    ok(d.matches.some((m) => m.legs.some((l) => l.a && l.a.visits != null && !l.turns)), 'and racks with typed figures');
+    ok(d.matches.some((m) => m.legs.some((l) => (l.a && l.a.bnr) || (l.b && l.b.bnr))), 'a break and run');
+    ok(d.matches.some((m) => m.status === 'scheduled' && !m.legs.length), 'fixtures still to play');
+    ok(d.brackets.length === 1 && d.brackets[0].entrants.length >= 4, 'a knockout seeded from the table');
+    const played = d.matches.filter((m) => m.status === 'played');
+    ok(played.length > 0 && played.every((m) => { const s = H.matchScore(m); return s.a !== s.b; }),
+       'no played match came out level in a best-of league');
+    ok(played.every((m) => { const s = H.matchScore(m); return Math.max(s.a, s.b) <= 3; }),
+       'and none of them ran past the three racks its format allows — the wire is frozen BEFORE the racks are played');
+    eq(JSON.stringify(d), JSON.stringify(H.buildDemoPool()), 'and it is the same every time');
   });
 
   group('the chrome is the family’s');

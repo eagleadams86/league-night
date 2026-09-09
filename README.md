@@ -1,43 +1,49 @@
 # League Night
 
-Run a darts or table shuffleboard league from your phone — and later a cornhole, bowling or
-golf one. Players or teams, a season schedule, a standings table, live scoring and knock-out
+Run a darts, table shuffleboard or pool league from your phone — and later a cornhole, bowling
+or golf one. Players or teams, a season schedule, a standings table, live scoring and knock-out
 tournaments, shared with everyone in the league: anyone who signs in to Google and has the
 league's ID can follow it, and anyone with the admin key can run it.
 
 **Live: https://eagleadams86.github.io/league-night/**
 
-> **Status (8 September 2026): everything is built, the cloud is switched on, and there are two
+> **Status (9 September 2026): everything is built, the cloud is switched on, and there are three
 > games.** Players and teams, seasons with generated fixtures, leg-by-leg and live scoring, the
 > standings table, knock-out tournaments, invites by link, email, text and QR code, and sharing a
 > league across devices through Google sign-in — all live. **Table shuffleboard joined darts on
-> 8 September**: a league picks its game when it is created, and everything else works the same.
+> 8 September and American 8-ball on 9 September**: a league picks its game when it is created,
+> and everything else works the same.
 > The Firebase project is `league-night-dff31`; the console steps that made it are under
 > *Setting up the cloud* below.
 
 ## What it does today
 
-- **Two games.** A league is **darts** or **table shuffleboard**, chosen when it is created and
-  fixed after that. Everything below works the same either way — the schedule, the standings, the
-  tournaments, the sharing — because the engine only ever sees "sides" and asks the game what a
-  result holds. At darts the unit is a **leg**; at shuffleboard it is a **game** to 15 or 21.
+- **Three games.** A league is **darts**, **table shuffleboard** or **pool** (American 8-ball),
+  chosen when it is created and fixed after that. Everything below works the same whichever it is
+  — the schedule, the standings, the tournaments, the sharing — because the engine only ever sees
+  "sides" and asks the game what a result holds. At darts the unit is a **leg**; at shuffleboard
+  it is a **game** to 15 or 21; at pool it is a **rack**.
 - **The same friends, a different game.** Because one league is one game, playing both means two
   leagues — so *Create a League* offers **The Same Players**: pick one of your leagues, tick who
   should come, and they are on the roster before you have added a single fixture. Names always
   travel, and the **teams** they are in when both leagues are played in teams. A **handicap only
   travels between two leagues playing the same game** — a darts deduction is points off a 501
-  start and a shuffleboard head start is points off the target, so across games everybody arrives
-  without one. Anyone retired in the old league arrives playing in the new one, and a line under
+  start, a shuffleboard head start is points off the target, and a pool one is racks given at the
+  start of a match, so across games everybody arrives without one. Anyone retired in the old league arrives playing in the new one, and a line under
   the list says exactly what is about to happen before you press Create.
   It is a **copy and not a link**: everyone arrives as a new player in the new league, so renaming
   somebody here does not rename them there, and a name an account has claimed in one league is
   not claimed in the other.
-- **Leagues.** Create one (singles or teams), or load the three demo leagues to see everything
+- **Leagues.** Create one (singles or teams), or load the four demo leagues to see everything
   working. A device can hold several; switch between them in the header.
-- **Players and teams.** Add, rename, retire; a per-player handicap applies to every singles leg
-  or game they play — a team match plays from the full score. At darts it comes off the starting
-  score (a deduction of 40 makes a 501 leg a 461 one); at shuffleboard it is a **head start** off
-  the target (a head start of 4 makes a game to 15 a game to 11). Teams hold up to eight players.
+- **Players and teams.** Add, rename, retire; a per-player handicap applies to every singles
+  match they play — a team match never carries one. At darts it comes off the starting score (a
+  deduction of 40 makes a 501 leg a 461 one); at shuffleboard it is a **head start** off the
+  target (a head start of 4 makes a game to 15 a game to 11); at pool it is **racks on the wire**,
+  racks given at the start of every match, which is the only handicap that is given in the match
+  rather than in the leg. A wire is fixed when the match gets its first rack, so changing somebody's
+  handicap never rewrites a match already under way, and it counts in the score and in the racks
+  for and against. Teams hold up to eight players.
 - **Subs, and who can make the night.** Every match has a card: who is actually throwing for
   each team tonight. Until somebody sets it the app assumes the team's own players. Anyone on a
   card who is not on that team is a sub — the app keeps no other record of one, and needs none:
@@ -49,9 +55,10 @@ league's ID can follow it, and anyone with the admin key can run it.
 - **Seasons and fixtures.** Start a season and generate a round robin — byes for an odd count, an
   optional double round, one round a week or any spacing — or add matches one at a time.
 - **Scoring.** Tap a match, add a leg (or a game), tap who won it. The match ends itself when the
-  format says so (best of five, or a fixed count). Optional figures per leg: at darts, darts
-  thrown, checkout, 180s, 140+ and 100+; at shuffleboard, points scored, hangers and the best
-  frame. Forfeits, voids and reopening. Every tap is saved as it lands.
+  format says so (best of five, or a fixed count — and a fixed count plays every leg of itself
+  whatever anyone was given on the wire). Optional figures per leg: at darts, darts thrown,
+  checkout, 180s, 140+ and 100+; at shuffleboard, points scored, hangers and the best frame; at
+  pool, balls left, visits and whether it was a break and run. Forfeits, voids and reopening. Every tap is saved as it lands.
 - **Live scoring, darts.** Open a leg live and score it visit by visit on a keypad: the remaining
   scores, whose throw it is, a checkout hint from the conventional chart, bust detection
   (under, one left, or a finish no double can make), and a finish that asks how many darts it
@@ -64,11 +71,22 @@ league's ID can follow it, and anyone with the admin key can run it.
   **hammer** starts where you put it and alternates every frame, and the game ends itself the
   moment a side reaches or passes its target. Undo takes the last frame back. Points per game,
   hangers and the best frame fall out of it.
+- **Live scoring, pool.** Open a rack live and score it **visit by visit**: tap how many of your
+  own went down, then *Missed*, *Potted the 8* or *Lost the 8*. Each side's count of balls still
+  to clear runs down as the rack goes on, the table changes hands after every visit from whoever
+  broke, and the **8 comes last** — claiming it with your group still on the table is refused,
+  while potting it early loses the rack, which is a thing that happens rather than a mistake to
+  argue with. Losing the black and fouling it away are one record, because from the scorer's
+  chair they are one thing. Undo takes the last visit back. Balls per visit and break and runs
+  fall out of it.
 - **Standings.** Points for a win, draw and loss; leg (or game) difference, legs for,
   head-to-head and wins as tiebreakers in the order you choose; form and a trend line per side;
   and in a team league an individual table of every player's own legs. The last three columns are
   the game's own: **3-dart average, 180s and high out** at darts, **points per game, hangers and
-  best frame** at shuffleboard.
+  best frame** at shuffleboard, **balls per visit, break and runs and what they left when they
+  were beaten** at pool. Racks given on the wire count in the racks for and against, so the number
+  in the table and the number on the match card are the same number — the key under the table
+  says so.
 - **Tournaments.** Single or double elimination, seeded from the standings, at random or in roster
   order, byes to the top seeds, best of one to seven per match, a second final if the losers'
   champion wins the first. Each bracket match is scored the same way as a league match.
@@ -215,27 +233,28 @@ Reed–Solomon syndrome check and the structural facts every reader relies on.
 ## What is coming
 
 - **More games.** Cornhole, bowling and golf — one entry each in the game registry, the way
-  shuffleboard was added on 8 September; the league engine knows nothing about any of them.
+  shuffleboard was added on 8 September and pool on 9 September; the league engine knows nothing
+  about any of them.
 - **Cricket**, the second darts format, with a live scorer of its own beside the x01 one.
 
 ## Accessibility and Paper
 
 Every view and window was audited with axe-core under Playwright at 1280px in Midnight and at
-375px in Light, both demo leagues, plus the privacy page, with no violations at WCAG 2.2 AA or
+375px in Light, the demo leagues, plus the privacy page, with no violations at WCAG 2.2 AA or
 axe's best-practice level (7 September 2026). Beyond what a tool can see: status is never
 carried by colour alone (a form tile is a letter, a chosen side a tick, a thrower a pill),
 every dialog closes on Escape and a click outside, the tab strip takes arrow keys and hands the
 next Tab to the 📌 beside it, and the
 column letters of the table are spelled out beneath it rather than hidden in a hover title —
 and so is its one other abbreviation, the figure marking a player's handicap (a deduction at
-darts, a head start at shuffleboard, and the key says which).
+darts, a head start at shuffleboard, racks on the wire at pool, and the key says which).
 On paper every round prints open and a bracket wraps instead of clipping.
 
 A league that grows past 300 KB is offered **Trim Closed Seasons** on the League tab: every
-live-scored leg or game in a closed season keeps its figures — at darts the darts, the checkout,
-the 180s and the points scored, which is what an average is made of; at shuffleboard the points,
-the hangers and the best frame — and loses only the visit-by-visit or frame-by-frame record. No
-table changes, at either game. The cloud holds one document of at most 1 MiB per league.
+live-scored leg, game or rack in a closed season keeps its figures — at darts the darts, the
+checkout, the 180s and the points scored, which is what an average is made of; at shuffleboard the
+points, the hangers and the best frame; at pool the balls left, the visits and the break and runs —
+and loses only the record of how it was scored. No table changes, at any of the three games. The cloud holds one document of at most 1 MiB per league.
 
 ## Running it locally
 

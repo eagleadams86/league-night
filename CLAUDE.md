@@ -1,6 +1,6 @@
 # League Night — rules for Claude sessions
 
-A league tracker for darts and table shuffleboard, and later other pub and club games
+A league tracker for darts, table shuffleboard and pool, and later other pub and club games
 (cornhole, bowling, golf). Players or teams, a season schedule, standings, live scoring and
 knock-out tournaments — shared with everyone in the league. Deployed via GitHub Pages:
 https://eagleadams86.github.io/league-night/
@@ -196,6 +196,38 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
   is now a key on the game rather than a word in the markup — `unit`, `formatLabel`, `doubleOut`,
   `detail`, `handicap.pill`, `handicap.note`. Read that list before adding cornhole: the contract
   is eleven keys and the tests pin that every game supplies all of them.
+- **What the THIRD game cost, and the one thing it asked of the engine** (2026-09-09). American
+  8-ball. The registry entry, a pure fold and a pad were the shuffleboard job again and cost
+  nothing new. **What was new is `handicap.scope`**, because a pool handicap is *racks on the
+  wire* — given in the MATCH, not in the leg — and that is the first thing any game has ever
+  asked the shared engine for. It is a key inside `handicap` rather than a twelfth contract key,
+  and **every reader tests for the scope it wants (`=== 'leg'`, `=== 'match'`) and never for the
+  one it does not**: a fourth game that declared neither would otherwise inherit whichever branch
+  the `else` happened to be. A test pins that every game declares one.
+  - **`match.spot` is frozen when the match gets its first leg**, in the Add-leg handler and NOT
+    in `newLeg` (which returns a leg and must mutate nothing). Same bargain `leg.start` makes one
+    level down: a handicap edited afterwards never rewrites a match already played. The invariant
+    is one sentence — **a match has a wire exactly when it has legs** — so the wire is deleted
+    when the last leg goes and when a forfeit clears them, and a nought wire is not written at all.
+  - **`matchScore` adds the wire on the LEGS branch only.** A forfeit's stored score is a result,
+    not a count of racks; the confirm calls it "a full score and no racks", and a wire there would
+    either pass that full score or hand a wired player a forfeit they lost.
+  - **`matchDone`'s fixed branch counts legs DECIDED, not the score.** A head start is legs given
+    and a fixed count is legs to play, so reading the score ended a fixed-four match after two
+    real racks. Identical arithmetic for every wire-free match, which is every game but one.
+  - **The wire is in `lf`/`la`/`ld`, and that is deliberate**: the match card and the table must
+    show the same number for one match. Which makes it a figure that changed and must be SHOWN —
+    `#mtWire` sits *between* the score and the format line, and `HELP.standings` forked for the
+    first time because that is where a reader goes to ask why "racks for" exceeds racks played.
+    The key sentence is assembled from `handicap.note`, so the explanation went in the note and
+    NOT into a scope branch in the renderer.
+  - **`lvOnly`/`LIVE_PARTS` replaced each sheet hiding the others' rows by name.** With three
+    games that list is quadratic and a game left off one branch ships with two pads on screen and
+    every test green. Hide the lot, then each sheet shows its own.
+  - **`turns()` follows `frames()` and not `visits()`.** `visits()` returns `[]`, which is truthy,
+    so an empty darts record survives the boundary to this day and reads as scored live. It also
+    carries the running total, so no stored visit can pot balls a side has not got, a `won` that
+    does not clear the group is dropped, and nothing after the rack ended is kept.
   - **`handicap.pill` exists because the standings table used to sniff the LABEL.** It drew a
     minus when `label.split(' ')[0]` was "start". A second game whose label was not would have
     been drawn wrong with nothing on screen to see. A game says how its own figure reads.
@@ -271,10 +303,16 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
 
 ## Status
 
+**8-ball (2026-09-09)** is the third entry in `GAMES` and the fourth demo league (`LN-DEMOPOOL`,
+singles, two players on the wire, the last round scored rack by rack). SCHEMA went to **6** for
+`leg.turns` and `match.spot`. The pure `poolState`/`poolShot`/`poolUndo`/`poolLegStats` fold sits
+beside the other two and is pinned the same way; `EXPECTED` is **340**. It is the only game whose
+handicap is a match-level one — see the `handicap.scope` bullet above before touching
+`matchScore`, `matchDone` or `spotFor`.
+
 **The roster copy (2026-09-08)** rides in the Create a League window: `copyPlan`/`copyPlayers`
 beside `setupState`, `PLAYERS_MAX`/`TEAMS_MAX` mirroring `firestore.rules`, and a suite group
 *bringing the same players into another league*. No SCHEMA bump — it stores nothing new.
-`EXPECTED` is 310.
 
 **Shuffleboard (2026-09-08)** is the second entry in `GAMES` and the third demo league
 (`LN-DEMOBORD`, singles, head starts, the last round scored frame by frame). SCHEMA went to 5 for
@@ -405,7 +443,7 @@ showed it.
   score and no legs; voids keep their legs and count for nothing.
 - **`__plant` in the test hooks updates the device entry's name** — the header picker reads the
   device record, not `state`, and a test that plants a hostile league name reads the picker.
-- **The demo is two leagues** (one format each) with ids that are NOT valid League IDs (they carry
+- **The demo is four leagues** (darts singles, darts teams, shuffleboard, 8-ball) with ids that are NOT valid League IDs (they carry
   an O), so they can never be pushed to the cloud. `buildDemoSingles` trims bracket legs to the
   bracket's best of three after `demoPlay`, which played them to the league's best of five.
 - **`tests.html` reads its markup from `</head>`**, not `<body>` — a CSS comment in the head says
