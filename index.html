@@ -1377,6 +1377,9 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
   /* Shuffleboard's quick row is the four frame scores, so it fills the line at
      four columns rather than leaving two empty cells at the end of a six. */
   .lvpad .quick.q4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  /* 8-ball's pad is nought to seven and nothing else — four columns, two full
+     rows, and not one cell of dead space. */
+  .lvpad .keys.q8 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   /* A frame is at most 16, so the shuffleboard keypad needs no third key on its
      last row — the 0 fills the line rather than leaving a cell of dead space. */
   .lvpad .keys .wide2 { grid-column: span 2; }
@@ -1503,8 +1506,8 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
   <div class="card welcome" id="welcomeCard" hidden>
     <div class="empty">
       <h2>Welcome to League Night</h2>
-      <p>Runs a darts league from your phone: the players or teams, a season of fixtures, the
-        table, a leg-by-leg scorer, and knock-out tournaments. Anyone signed in to Google with
+      <p>Runs a darts, shuffleboard or pool league from your phone: the players or teams, a
+        season of fixtures, the table, a live scorer, and knock-out tournaments. Anyone signed in to Google with
         the league's ID can follow it; anyone with its admin key can run it.</p>
       <p>Nothing is uploaded unless you sign in and share a league. Until then a league lives in
         this browser only.</p>
@@ -1523,10 +1526,11 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
       <p class="cloud-only"><strong>Join a League</strong> asks for the League ID someone sent you — and the
         Admin Key, if they want you running it — and signs you in to Google, because a shared league
         is tied to real accounts.</p>
-      <p><strong>Try the Demo</strong> loads three invented leagues — a singles darts league
+      <p><strong>Try the Demo</strong> loads four invented leagues — a singles darts league
         with a season under way, handicaps, a finished knockout and a double-elimination cup in
-        progress; a doubles darts league with team matches; and a shuffleboard league scored
-        frame by frame — so every tab, and both games, have something on them.</p>
+        progress; a doubles darts league with team matches; a shuffleboard league scored
+        frame by frame; and a pool league scored rack by rack, with two players on the wire —
+        so every tab, and all three games, have something on them.</p>
       <p><strong>Restore a Backup</strong> reads a League Night export — the JSON file the Back
         Up window writes.</p>
     </div>
@@ -1953,6 +1957,11 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
 <dialog id="matchDialog" class="sheet" aria-labelledby="matchTitle">
   <h2 id="matchTitle">Match</h2>
   <div class="mtscore" id="mtScore"></div>
+  <!-- The wire sits BETWEEN the score and the format line because it explains
+       the number above it and qualifies the sentence below it. Anywhere lower
+       and a reader counting three rack rows against a 3–1 score has already
+       been told something untrue. -->
+  <p class="hint" id="mtWire" hidden></p>
   <p class="hint" id="mtFormat"></p>
   <!-- Who is actually throwing tonight, and who can make it. A name in a
        lineup who is not on that team IS the sub — there is no second list. -->
@@ -2048,6 +2057,30 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
       <button type="button" data-key="1">1</button><button type="button" data-key="2">2</button><button type="button" data-key="3">3</button>
       <button type="button" data-key="back" aria-label="Delete last digit">⌫</button><button type="button" data-key="0">0</button>
       <button type="button" class="primary" data-key="enter" aria-label="Enter this visit">✓</button>
+    </div>
+  </div>
+  <!-- ── 8-ball's row ───────────────────────────────────────────────────────
+       A visit is HOW MANY of your own group went down, and then how the visit
+       ENDED. Three worded buttons for the same reason the frames row has three
+       — the number alone does not say what happened — and none of them is
+       disabled to head off a wrong press: poolShot() answers every one of them
+       in a sentence, which is a better teacher than a dead button. -->
+  <div class="row lvscored" id="lvPoolRow" hidden>
+    <span class="hint">This visit</span>
+    <button type="button" id="lvPoolMiss">Missed</button>
+    <button type="button" class="primary" id="lvPoolWon">Potted the 8</button>
+    <button type="button" id="lvPoolLost">Lost the 8</button>
+  </div>
+  <div class="lvpad" id="lvPoolPad" hidden>
+    <!-- Eight keys that SET rather than append. A visit is one digit, so there
+         is nothing a second tap could mean, nothing to delete, and no leading
+         zero to strip — the whole class of bug the other two pads carry a ⌫
+         for does not exist here. -->
+    <div class="keys q8">
+      <button type="button" data-key="0">0</button><button type="button" data-key="1">1</button>
+      <button type="button" data-key="2">2</button><button type="button" data-key="3">3</button>
+      <button type="button" data-key="4">4</button><button type="button" data-key="5">5</button>
+      <button type="button" data-key="6">6</button><button type="button" data-key="7">7</button>
     </div>
   </div>
   <div class="lvpad" id="lvSbPad" hidden>
@@ -2367,6 +2400,11 @@ function maxU(st) {
    green tests behind it, exactly as the boot-time TDZ did in September. Every
    value a top-level literal reads is declared before that literal. */
 const FRAME_MAX = 16;
+/* How many of your own balls stand between you and the 8 at American 8-ball:
+   seven, and then the black. Declared above the registry for the same reason
+   FRAME_MAX is — the registry's own literal reads it, as a leg format's start
+   and as the cap on the Balls left box. */
+const POOL_GROUP = 7;
 /* The most players and teams one league may hold. These are the FIRESTORE
    rules' numbers (`validSize`, firestore.rules), written here so a bulk add
    can stop and say so: past them the rules refuse the whole document and the
@@ -2391,6 +2429,16 @@ const TEAMS_MAX = 250;
    'Start deduction' began with 'start', so it drew '−60'. A second game whose
    label happens not to would have been drawn wrong with nothing to see. A
    game says how its own figure reads; nothing sniffs a label.
+
+   `handicap.scope` says WHAT the number is a head start in. At darts and
+   shuffleboard it is 'leg': newLeg() bakes it into that leg's start, and the
+   match is scored as if nobody had one. At 8-ball it is 'match': a wire is
+   racks given before a ball is struck, frozen onto the match with its first
+   rack (`match.spot`) and counted in the score. Every reader tests for the
+   scope it wants rather than for the one it does not — a game that declared
+   neither would otherwise inherit whichever branch the `else` happened to be,
+   which is how openLive() used to plant a darts record on every game that was
+   not shuffleboard.
 
    `doubleOut` says whether the League Rules card offers the double-out line at
    all — the one rule on that card that is a darts rule rather than a league
@@ -2423,7 +2471,7 @@ const GAMES = {
       { key: 't180',    label: '180s',       fmt: (v) => v == null ? '—' : String(v) },
       { key: 'highOut', label: 'High out',   fmt: (v) => v == null ? '—' : String(v) },
     ],
-    handicap: { label: 'Start deduction', min: 0, max: 200,
+    handicap: { label: 'Start deduction', min: 0, max: 200, scope: 'leg',
                 apply: (start, hcp) => start - (Number(hcp) || 0),
                 pill: (hcp) => '\u2212' + hcp,
                 note: 'taken off the start of every leg they throw' },
@@ -2468,13 +2516,53 @@ const GAMES = {
     ],
     /* Capped at 10 so the shorter game cannot be handicapped below a target of
        5 — a number a single good frame reaches, which is not a game. */
-    handicap: { label: 'Head start', min: 0, max: 10,
+    handicap: { label: 'Head start', min: 0, max: 10, scope: 'leg',
                 apply: (target, hcp) => target - (Number(hcp) || 0),
                 pill: (hcp) => '+' + hcp,
                 note: 'taken off the target of every game they play' },
     liveScorer: 'frames',
     doubleOut: false,
     detail: 'points, hangers, best frames and the frame-by-frame record',
+  },
+  /* ── American 8-ball ────────────────────────────────────────────────────
+     A leg here is one RACK, and `start` is the size of a group: seven of your
+     own, and then the black. It is the third thing `start` has meant — 501
+     counts down to nothing, 15 counts up to a target, 7 is cleared — and all
+     three are the same idea, the number this side's leg is measured against.
+
+     THE HANDICAP IS THE FIRST ONE THAT IS NOT A NUMBER ON A LEG. Racks on the
+     wire are given in the MATCH, so `apply` is called with a base of nought
+     and answers "the racks this side starts on"; `newLeg` never calls it at
+     all. See spotFor() and matchScore() for what that costs, which is the only
+     thing the shared engine has ever been asked for by a game. */
+  pool: {
+    name: 'Pool',
+    unit: { one: 'rack', many: 'racks' },
+    legFormats: [{ id: '8ball', label: '8-ball', start: POOL_GROUP }],
+    formatLabel: 'Each rack',
+    legFields: [
+      { key: 'left',   label: 'Balls left',    min: 0, max: POOL_GROUP },
+      { key: 'visits', label: 'Visits',        min: 0, max: 60 },
+      /* Nought or one, and int() CLAMPS rather than refuses — a restored file
+         claiming 9 break-and-runs in one rack comes back as 1, which is a
+         claim nobody made. The same bargain `t180` makes at darts, and it is
+         made here in the open rather than pretended away: the alternative is
+         a whole rack refused over one figure a scorer mistyped. */
+      { key: 'bnr',    label: 'Break and run', min: 0, max: 1 },
+    ],
+    playerStats: poolPlayerStats,
+    leaderboardColumns: [
+      { key: 'bpv',  label: 'Balls/visit',      fmt: (v) => v == null ? '—' : v.toFixed(1) },
+      { key: 'bnr',  label: 'Break & runs',     fmt: (v) => v == null ? '—' : String(v) },
+      { key: 'left', label: 'Left when beaten', fmt: (v) => v == null ? '—' : v.toFixed(1) },
+    ],
+    handicap: { label: 'Racks on the wire', min: 0, max: 3, scope: 'match',
+                apply: (base, hcp) => base + (Number(hcp) || 0),
+                pill: (hcp) => '+' + hcp,
+                note: 'added to their score in every match they play, and counted in the racks for and against' },
+    liveScorer: 'pool',
+    doubleOut: false,
+    detail: 'balls per visit, break and runs and the visit-by-visit record',
   },
 };
 
@@ -2483,13 +2571,17 @@ const GAMES = {
    `schema`, and every boundary refuses a copy carrying a higher one — see the
    halt below. BUMP IT AND normalizeLeague TOGETHER when a stored field is
    added. */
-const SCHEMA = 5;   /* 2: a leg carries `first` and `dOut` for the live scorer (2026-09-07)
+const SCHEMA = 6;   /* 2: a leg carries `first` and `dOut` for the live scorer (2026-09-07)
                        3: a trimmed leg carries `scored` per side, so Trim Closed
                           Seasons keeps its promise that no figure moves (2026-09-07)
                        4: a match carries `lineup` and a player carries `avail`, so a
                           sub can be put on the card and a night can be missed (2026-09-08)
                        5: a leg carries `frames`, the shuffleboard scorer's record, and
-                          GAMES has a second entry (2026-09-08) */
+                          GAMES has a second entry (2026-09-08)
+                       6: a leg carries `turns`, the 8-ball scorer's record, and a match
+                          carries `spot` — the racks a side started on at a game whose
+                          handicap is a match-level one, frozen with the first rack of
+                          that match (2026-09-09) */
 const TIEBREAK_KEYS = ['pts', 'legDiff', 'legsFor', 'wins', 'h2h', 'name'];
 const NAME_MAX = 40;
 /* The most names a lineup may hold. A CONSTANT, deliberately, and not
@@ -2694,6 +2786,44 @@ function normalizeLeague(raw) {
     });
     return out.length ? out : null;
   };
+  /* The 8-ball record. A visit is one side and how many of their own went
+     down, with `end` only when the rack finished on it.
+
+     `s` is FORCED from who broke and the position in the list rather than
+     trusted. Two visits in a row claiming the same side is a record that
+     contradicts the game it says it is, and there is exactly one place that
+     decides whose visit it was — poolState(), which does the same arithmetic.
+
+     An EMPTY list is NO RECORD, and this follows frames() rather than
+     visits(): visits() returns [], which is truthy, so an empty darts record
+     survives the boundary to this day and reads as a leg somebody scored live.
+     A key is written only when it has a value. */
+  const turns = (v, first, start) => {
+    if (!Array.isArray(v)) return null;
+    const other = first === 'b' ? 'a' : 'b';
+    /* The running total is carried so no visit can pot balls the side has not
+       got left, and a 'won' that does not clear the group is dropped rather
+       than kept to disagree with the visits around it — the same bargain
+       frames() makes with a hanger that will not fit inside its own total. */
+    const pot = { a: 0, b: 0 };
+    let done = false;
+    const out = [];
+    v.filter((x) => x && typeof x === 'object').forEach((x, i) => {
+      /* Nothing after the rack ended. poolState() ignores it either way, so no
+         figure moves — but a record that carries a visit played after the 8
+         went down is a record that disagrees with itself. */
+      if (done) return;
+      const s = (i % 2 === 0) ? (first === 'b' ? 'b' : 'a') : other;
+      const grp = start && start[s] != null ? start[s] : POOL_GROUP;
+      const o = { s: s, n: int(x.n, 0, Math.max(0, Math.min(POOL_GROUP, grp - pot[s])), 0) };
+      pot[s] += o.n;
+      if (x.end === 'lost') o.end = 'lost';
+      else if (x.end === 'won' && pot[s] >= grp) o.end = 'won';
+      if (o.end) done = true;
+      out.push(o);
+    });
+    return out.length ? out : null;
+  };
   /* Player ids in a fixed order, deduped, blanks dropped. Shared by a leg's
      `by` and a match's `lineup` — they are the same list of the same people. */
   const ids = (v) => (Array.isArray(v) ? v : []).map(ref).filter((x, i, a) => x && a.indexOf(x) === i);
@@ -2734,6 +2864,8 @@ function normalizeLeague(raw) {
         }
         const fr = frames(lg.frames);
         if (fr) leg.frames = fr;
+        const tn = turns(lg.turns, leg.first, leg.start);
+        if (tn) leg.turns = tn;
         const sa = sideStats(lg.a), sb = sideStats(lg.b);
         if (sa) leg.a = sa;
         if (sb) leg.b = sb;
@@ -2756,6 +2888,19 @@ function normalizeLeague(raw) {
        have come from a corrupt or hostile copy — it goes. */
     if (m.lineup && typeof m.lineup === 'object' && out.league.settings.format === 'teams') {
       o.lineup = { a: ids(m.lineup.a).slice(0, LINEUP_MAX), b: ids(m.lineup.b).slice(0, LINEUP_MAX) };
+    }
+    /* THE RACKS EACH SIDE STARTED ON, at a game whose handicap is given in the
+       match rather than in the leg. Two guards, and both earn their place:
+       without the scope one a hostile or mis-typed copy could hand a darts
+       match a head start its game has not got, and without the legs one a
+       match with nothing played would carry a wire that spotFor() has not yet
+       frozen — the invariant everywhere else is that a match has a wire
+       exactly when it has racks. */
+    const sp = (m.spot && typeof m.spot === 'object') ? m.spot : null;
+    if (sp && G.handicap.scope === 'match' && o.legs.length) {
+      const wire = { a: int(sp.a, 0, G.handicap.max, 0), b: int(sp.b, 0, G.handicap.max, 0) };
+      /* Nought and nought is not a head start, so it is not written down. */
+      if (wire.a || wire.b) o.spot = wire;
     }
     return o;
   }).filter((m) => m.a && m.b && m.a !== m.b);
@@ -3001,7 +3146,8 @@ function copyPlayers(src, dst, ids) {
    played stays. */
 function legIsLive(leg) {
   return !!((leg.visits && (leg.visits.a.length || leg.visits.b.length))
-            || (leg.frames && leg.frames.length));
+            || (leg.frames && leg.frames.length)
+            || (leg.turns && leg.turns.length));
 }
 function compactSeason(st, seasonId) {
   const out = Object.assign({}, st);
@@ -3021,6 +3167,26 @@ function compactSeason(st, seasonId) {
              has no best frame — and an absent key is how that is said. */
           const o = { points: s.points, hang: s.hang };
           if (s.high != null) o.high = s.high;
+          next[side] = o;
+        });
+        trimmed++;
+        return next;
+      }
+      if (leg.turns && leg.turns.length) {
+        const next = Object.assign({}, leg);
+        delete next.turns;
+        ['a', 'b'].forEach((side) => {
+          const s = poolLegStats(leg, side);
+          /* Zeros written for the same reason again: a rack scored visit by
+             visit KNOWS there was no break and run. `left` is the one that may
+             be genuinely absent — a rack with no group size cannot say what
+             was left on the table — and an absent key is how that is said.
+
+             Balls potted is NOT written: it is the group less what was left,
+             and leg.start survives the trim, so writing it would be a stored
+             field with two sources that could come to disagree. */
+          const o = { visits: s.visits, bnr: s.bnr };
+          if (s.left != null) o.left = s.left;
           next[side] = o;
         });
         trimmed++;
@@ -3195,7 +3361,16 @@ function matchScore(m) {
   if (m.legs && m.legs.length) {
     let a = 0, b = 0;
     m.legs.forEach((l) => { if (l.w === 'a') a++; else if (l.w === 'b') b++; });
-    return { a: a, b: b };
+    /* THE WIRE, and on this branch only. A forfeit's stored score below is a
+       RESULT and not a count of racks: the confirm calls it "a full score and
+       no racks", and adding a head start there would either put the winner
+       past the full score or hand a wired player a forfeit they lost. Nothing
+       was played, so there is nothing for a head start to be a start in.
+
+       It also means a match carrying a wire and no racks is never over, which
+       is what stops a big wire deciding a match nobody has turned up to. */
+    const sp = m.spot || null;
+    return { a: a + (sp ? Number(sp.a) || 0 : 0), b: b + (sp ? Number(sp.b) || 0 : 0) };
   }
   return { a: Number((m.score && m.score.a) || 0), b: Number((m.score && m.score.b) || 0) };
 }
@@ -3214,7 +3389,16 @@ function legsToWin(matchFormat) {
 }
 function matchDone(m, matchFormat) {
   const s = matchScore(m);
-  if (matchFormat.mode === 'fixed') return s.a + s.b >= matchFormat.n;
+  if (matchFormat.mode === 'fixed') {
+    /* LEGS DECIDED, not the score. A head start is legs GIVEN and a fixed
+       count is a number of legs to PLAY, so a wired side would otherwise stop
+       a fixed-four match after two real racks. Identical arithmetic wherever
+       nobody has a head start, which is every game but one. A match with no
+       legs at all reads its stored score, which is what a forfeit is. */
+    const decided = (m.legs || []).reduce((n, l) => n + (l.w === 'a' || l.w === 'b' ? 1 : 0), 0);
+    return (m.legs && m.legs.length ? decided : s.a + s.b) >= matchFormat.n;
+  }
+  /* The best-of branch DOES read the wired score — that is what a wire is. */
   const need = legsToWin(matchFormat);
   return s.a >= need || s.b >= need;
 }
@@ -3768,6 +3952,128 @@ function sbSideStats(leg, side) {
            won: leg.w === side };
 }
 
+/* ── The American 8-ball scorer ────────────────────────────────────────────
+   THE STATE IS THE LIST OF VISITS and everything else is a fold over it — the
+   third of the same shape, and undo is `pop()` here too.
+
+   `{ s, n }` is one VISIT: the side at the table, and how many of THEIR OWN
+   group went down before they missed. `end` says how the rack finished and is
+   written only when it did — 'won' is the 8 potted after the group was
+   cleared, 'lost' is the 8 gone when it should not have been.
+
+   THE RECORD DOES NOT SAY WHICH WAY IT WAS LOST. Potting the black early and
+   fouling it off the table are one result — the rack goes to the other side —
+   and a scorer standing at the table is not going to be asked to classify it.
+   An app that cannot tell two things apart must not offer a box that claims it
+   can.
+
+   A rack is { start: {a, b}, first, turns: [] }. `start` is the size of a
+   group, and `first` is who BROKE; the table alternates every visit after
+   that, which is the same formula x01State and frameState both use. A visit
+   ENDS when you miss, so the alternation is the rule and not an approximation
+   of one — it does not follow whoever potted last. */
+function poolState(leg) {
+  const ts = (leg && leg.turns) || [];
+  const grp = { a: leg.start.a, b: leg.start.b };
+  const pot = { a: 0, b: 0 }, vis = { a: 0, b: 0 };
+  const first = leg.first === 'b' ? 'b' : 'a';
+  const other = first === 'a' ? 'b' : 'a';
+  const at = (i) => (i % 2 === 0) ? first : other;
+  let winner = null, n = 0;
+  ts.forEach((v) => {
+    /* A visit recorded after the rack was over is not counted, the way a frame
+       after the target is not — an older build or a hand-edited backup is read
+       the same way by everyone. */
+    if (winner) return;
+    /* Whose visit it was is DECIDED HERE and not read from the record. The
+       boundary writes the same answer (see turns() in normalizeLeague), so a
+       stored rack can never contradict the game it claims to be. */
+    const side = at(n);
+    n++;
+    vis[side]++;
+    pot[side] += Number(v.n) || 0;
+    if (v.end === 'won') winner = side;
+    else if (v.end === 'lost') winner = side === 'a' ? 'b' : 'a';
+  });
+  const left = { a: grp.a == null ? null : grp.a - pot.a, b: grp.b == null ? null : grp.b - pot.b };
+  return { pot: pot, left: left, visits: vis, group: grp,
+           winner: winner, turns: n, turn: winner ? null : at(n) };
+}
+/* Records one visit: how many of their own went down, and whether the rack
+   ended on it. Returns the new rack, or `{ error }` with a sentence a scorer
+   at the table can read. */
+function poolShot(leg, potted, end) {
+  const st = poolState(leg);
+  if (st.winner) return { error: 'The rack is over.' };
+  const side = st.turn;
+  const left = st.left[side];
+  if (left == null) return { error: 'This rack has no group to clear.' };
+  const n = Math.round(Number(potted));
+  if (!Number.isInteger(n) || n < 0 || n > POOL_GROUP) {
+    return { error: 'A visit pots between 0 and ' + POOL_GROUP + ' of your own balls.' };
+  }
+  if (left === 0 && n > 0) return { error: 'That side has cleared their group and is on the 8.' };
+  if (n > left) {
+    return { error: 'That side has ' + left + ' of their own left, so ' + n + ' cannot have gone down.' };
+  }
+  const e = end === 'won' ? 'won' : end === 'lost' ? 'lost' : null;
+  /* THE 8 COMES LAST. Claiming it with the group still on the table did not
+     happen, so it is refused. Potting it EARLY did happen, and is 'lost' — a
+     real event that loses the rack, exactly as scoring what is left with no
+     double to finish on is a BUST and not a refusal (x01Visit). The difference
+     is whether the thing being recorded is possible at the table. */
+  if (e === 'won' && n !== left) {
+    return { error: 'The 8 comes last, and this side still has ' + (left - n) + ' to clear.' };
+  }
+  const v = { s: side, n: n };
+  if (e) v.end = e;
+  return Object.assign({}, leg, { turns: (leg.turns || []).concat([v]) });
+}
+/* Takes the last visit back, whoever was at the table. */
+function poolUndo(leg) {
+  const ts = ((leg && leg.turns) || []).slice();
+  if (!ts.length) return leg;
+  ts.pop();
+  return Object.assign({}, leg, { turns: ts });
+}
+/* One side's figures for a rack scored visit by visit. `pot` and `bpv` are
+   null and never 0 for a rack with no group size: how many of "your own" went
+   down is not a thing a rack without a group can say, and answering null on
+   BOTH sides of a trim is what keeps Trim Closed Seasons honest. */
+function poolLegStats(leg, side) {
+  const st = poolState(leg);
+  const ts = (leg && leg.turns) || [];
+  const grp = st.group[side];
+  const pot = grp == null ? null : st.pot[side];
+  const vis = st.visits[side];
+  /* A break and run is ONE visit, by the side that BROKE, that ended on the 8.
+     Both halves matter: a run-out from the other chair is a fine rack and is
+     not this. */
+  const bnr = (ts.length === 1 && ts[0].end === 'won'
+               && (leg.first === 'b' ? 'b' : 'a') === side) ? 1 : 0;
+  return { pot: pot, left: st.left[side], visits: vis,
+           bpv: (pot != null && vis) ? pot / vis : null,
+           bnr: bnr, won: st.winner === side };
+}
+/* One side's figures for a rack however it was recorded: from the visits when
+   it was scored live, else from what the scorer typed. The 8-ball twin of
+   legSideStats() and sbSideStats().
+
+   Balls potted is DERIVED — the group less what was left — and both halves
+   survive a trim (`left` is a typed field, the group is leg.start), so this
+   needs no stored twin the way darts needed `scored`. */
+function poolSideStats(leg, side) {
+  if (leg.turns && leg.turns.length) return poolLegStats(leg, side);
+  const v = leg[side] || {};
+  const num = (x) => x == null ? null : x;
+  const left = num(v.left), vis = num(v.visits);
+  const grp = leg.start ? leg.start[side] : null;
+  const pot = (left != null && grp != null) ? grp - left : null;
+  return { pot: pot, left: left, visits: vis,
+           bpv: (pot != null && vis) ? pot / vis : null,
+           bnr: num(v.bnr), won: leg.w === side };
+}
+
 /* ── Player figures, the darts way ─────────────────────────────────────────
    Folds every leg a player threw in. A leg counts as played and won for
    everyone on the side; the DART figures (average, 180s, checkouts) are
@@ -3823,6 +4129,36 @@ function shuffleboardPlayerStats(legs, playerId) {
   });
   return { legs: played, won: won, points: points, ppg: counted ? points / counted : null,
            hang: hang, high: high, bestLeg: null, counted: counted };
+}
+/* Player figures, the 8-ball way. Same bargain as the two above: a rack counts
+   as played and won for everyone on the side, and the PLAYING figures come
+   only from racks one person played alone.
+
+   `left` is the average this player left on the table in racks they LOST, and
+   it is keyed on who won the rack rather than on there being something left —
+   a rack you WON can leave balls on the table, because the other side potted
+   the black early and handed it to you. "How close were you when you were
+   beaten" is only a question about racks you were beaten in. */
+function poolPlayerStats(legs, playerId) {
+  let played = 0, won = 0, pot = 0, visits = 0, bnr = 0, counted = 0, lost = 0, leftSum = 0;
+  (legs || []).forEach((leg) => {
+    const side = (leg.by.a.indexOf(playerId) !== -1) ? 'a' : (leg.by.b.indexOf(playerId) !== -1) ? 'b' : null;
+    if (!side) return;
+    played++;
+    if (leg.w === side) won++;
+    if (leg.by[side].length !== 1) return;
+    const s = poolSideStats(leg, side);
+    /* Both halves or neither: balls per visit is one figure made of two, and
+       adding a rack's potted balls without its visits would quietly lower the
+       average of every rack that was recorded properly. */
+    if (s.pot != null && s.visits != null) { pot += s.pot; visits += s.visits; counted++; }
+    if (s.bnr != null) bnr += s.bnr;
+    if (leg.w && leg.w !== side && s.left != null) { leftSum += s.left; lost++; }
+  });
+  return { legs: played, won: won, pot: pot, visits: visits,
+           bpv: visits ? pot / visits : null, bnr: bnr,
+           left: lost ? leftSum / lost : null,
+           bestLeg: null, counted: counted };
 }
 /* Every leg in a league (or a season), each carrying its match, so a player's
    figures are one pass. */
@@ -4898,6 +5234,7 @@ function renderMatches() {
 function renderPlayers() {
   const legs = legsIn(state, null);
   const hcpLabel = G().handicap.label;
+  const lead = G().leaderboardColumns[0];
   const mineId = myClaim();
   const row = (p) => {
     const st = G().playerStats(legs, p.id);
@@ -4908,8 +5245,10 @@ function renderPlayers() {
       + (p.hcp != null ? ' <span class="pill" title="' + esc(hcpLabel) + '">' + esc(hcpLabel) + ' ' + p.hcp + '</span>' : '')
       + (p.id === mineId ? ' <span class="pill ok">you</span>' : '')
       + (!p.active ? ' <span class="pill">retired</span>' : '') + '</span>'
+      /* The game's OWN headline figure, not `st.avg3` — that is a darts key, so
+         every other game showed nothing here while darts showed an average. */
       + '<span class="pstat">' + (st.legs ? plural(st.legs, G().unit.one, G().unit.many) + ' · won ' + st.won
-        + (st.avg3 != null ? ' · avg ' + st.avg3.toFixed(1) : '') : 'no ' + G().unit.many + ' yet') + '</span></button>';
+        + (st[lead.key] != null ? ' · ' + lead.label.toLowerCase() + ' ' + lead.fmt(st[lead.key]) : '') : 'no ' + G().unit.many + ' yet') + '</span></button>';
   };
   const active = state.players.filter((p) => p.active).sort((a, b) => a.name.localeCompare(b.name));
   const retired = state.players.filter((p) => !p.active).sort((a, b) => a.name.localeCompare(b.name));
@@ -5464,11 +5803,31 @@ function newLeg(m) {
   const startFor = (side) => {
     if (base == null) return null;
     if (isTeams()) return base;
+    /* Tested for the scope it WANTS and never for the one it does not: a game
+       that declared neither would otherwise inherit this branch and quietly
+       get a per-leg handicap it never asked for. At 8-ball the head start is
+       racks on the wire and lives on the match — see spotFor(). */
+    if (G().handicap.scope !== 'leg') return base;
     const p = playerById(m[side]);
     return G().handicap.apply(base, p && p.hcp != null ? p.hcp : 0);
   };
   return { w: null, by: by, start: { a: startFor('a'), b: startFor('b') },
            first: m.legs.length % 2 ? 'b' : 'a', dOut: S().dOut };
+}
+/* THE WIRE, frozen when a match gets its first leg — the same bargain
+   leg.start makes one level down, one level up. A handicap edited afterwards
+   never rewrites a match already played, and a match with no legs has not
+   started, so it re-freezes rather than carrying a stale one.
+
+   Returns null at every game whose handicap is a leg one, and for a team
+   match: a squad has no single handicap, exactly as it has no start deduction
+   at darts. Kept OUT of newLeg(), which returns a leg and must mutate
+   nothing. */
+function spotFor(m) {
+  const h = G().handicap;
+  if (h.scope !== 'match' || isTeams()) return null;
+  const one = (side) => { const p = playerById(m[side]); return h.apply(0, p && p.hcp != null ? p.hcp : 0); };
+  return { a: one('a'), b: one('b') };
 }
 function syncMatchStatus(m) {
   if (m.status === 'forfeit' || m.status === 'void') return;
@@ -5489,6 +5848,21 @@ function renderMatchDialog() {
     + '<span class="big">' + s.a + '<span class="dash">–</span>' + s.b + '</span>'
     + '<span class="mside' + (s.b > s.a && done ? ' won' : '') + '">' + esc(nameOf(m.b)) + '</span>';
   const fmt = matchFormatFor(m);
+  /* The wire, said out loud beside the score it is part of. Without this a
+     reader counts the rack rows, gets a different number from the one in the
+     big type, and has nothing on the card to explain the difference — and the
+     second sentence exists because a wire that has already reached the target
+     is a real state this cannot rule out and must not leave unexplained. */
+  const sp = m.spot || null;
+  const wired = sp && (sp.a || sp.b) && m.legs.length;
+  $('mtWire').hidden = !wired;
+  if (wired) {
+    const need = fmt.mode === 'bestOf' ? legsToWin(fmt) : null;
+    $('mtWire').textContent = nameOf(m.a) + ' ' + sp.a + ' – ' + sp.b + ' ' + nameOf(m.b) + ' on the wire — '
+      + G().unit.many + ' given before a ball was struck.'
+      + (need != null && (sp.a >= need || sp.b >= need)
+         ? ' That alone reaches ' + need + ', so the wire has decided this match under these rules.' : '');
+  }
   $('mtFormat').textContent = m.status === 'forfeit' ? 'Forfeited — ' + nameOf(winnerSide(m) === 'a' ? m.a : m.b) + ' take the match.'
     : m.status === 'void' ? 'Void — this match does not count.'
     : (fmt.mode === 'bestOf' ? 'Best of ' + fmt.n + ' ' + G().unit.many + ' — first to ' + legsToWin(fmt) + '.' : 'All ' + fmt.n + ' ' + G().unit.many + ' are played.')
@@ -5716,10 +6090,18 @@ $('mtAvail').addEventListener('click', (e) => {
 });
 function liveSummary(leg) {
   const m = curMatch();
-  if (G().liveScorer === 'frames') {
+  const ls = G().liveScorer;
+  if (ls === 'frames') {
     const st = frameState(leg);
     const one = (k) => esc(nameOf(m[k])) + ': ' + st.pts[k] + ' from ' + plural(st.fw[k], 'frame')
       + (st.hang[k] ? ', ' + plural(st.hang[k], 'hanger') : '');
+    return one('a') + ' · ' + one('b');
+  }
+  if (ls === 'pool') {
+    const one = (k) => { const s = poolLegStats(leg, k);
+      return esc(nameOf(m[k])) + ': ' + plural(s.visits, 'visit')
+        + (s.pot != null ? ', ' + plural(s.pot, 'ball') : '')
+        + (s.bnr ? ', break and run' : ''); };
     return one('a') + ' · ' + one('b');
   }
   const a = x01LegStats(leg, 'a'), b = x01LegStats(leg, 'b');
@@ -5729,6 +6111,13 @@ function liveSummary(leg) {
 $('addLegBtn').addEventListener('click', () => {
   const m = curMatch();
   if (!m || !canEdit()) return;
+  /* A match has a wire exactly when it has legs, so the first one freezes it —
+     and only when there is one to freeze: nobody on a handicap is NO wire, not
+     a stored nought, the same bargain `h` and `lineup` make. */
+  if (!m.legs.length) {
+    const sp = spotFor(m);
+    if (sp && (sp.a || sp.b)) m.spot = sp; else delete m.spot;
+  }
   m.legs.push(newLeg(m));
   touch(m); save(); render(); renderMatchDialog();
 });
@@ -5750,6 +6139,9 @@ $('legsWrap').addEventListener('click', (e) => {
     if (!m.legs[i]) return;
     if (m.legs[i].w !== null && !confirm('Remove ' + G().unit.one + ' ' + (i + 1) + ' and its figures?\n\nThere is no undo.')) return;
     m.legs.splice(i, 1);
+    /* Back to a match nobody has started, so the wire goes with the last rack
+       and the next one freezes it fresh from today's handicaps. */
+    if (!m.legs.length) delete m.spot;
     syncMatchStatus(m);
     touch(m); save(); render(); renderMatchDialog();
   }
@@ -5811,6 +6203,8 @@ function forfeitTo(winner) {
   const fmt = matchFormatFor(m);
   const n = fmt.mode === 'bestOf' ? legsToWin(fmt) : fmt.n;
   m.legs = [];
+  /* And the wire with them: the stored score below is the whole result. */
+  delete m.spot;
   m.score = winner === 'a' ? { a: n, b: 0 } : { a: 0, b: n };
   m.status = 'forfeit';
   touch(m); save(); render(); renderMatchDialog();
@@ -6081,7 +6475,12 @@ $('copyIdBtn').addEventListener('click', async () => {
 });
 $('trimBtn').addEventListener('click', () => {
   if (!canEdit()) return;
-  if (!confirm('Trim the closed seasons?\n\nEvery live-scored leg in a closed season keeps its figures — darts, checkout, 180s — and loses the visit-by-visit record. The tables do not change. There is no undo.')) return;
+  /* Worded from the GAME rather than from darts. The figures are the game's own
+     legFields labels — app-authored constants, never anything a member typed —
+     so this sentence stays true at a fourth game without being rewritten. */
+  if (!confirm('Trim the closed seasons?\n\nEvery live-scored ' + G().unit.one + ' in a closed season keeps its figures — '
+      + G().legFields.map((f) => f.label.toLowerCase()).join(', ')
+      + ' — and loses the record of how it was scored. The tables do not change. There is no undo.')) return;
   let n = 0;
   state.seasons.filter((s) => s.status === 'done').forEach((s) => {
     const out = compactSeason(state, s.id);
@@ -6091,7 +6490,7 @@ $('trimBtn').addEventListener('click', () => {
   });
   state.matches.forEach((m) => { if (m.seasonId && state.seasons.some((s) => s.id === m.seasonId && s.status === 'done') && m.legs.length) touch(m); });
   save(); render();
-  toast(plural(n, 'leg') + ' trimmed');
+  toast(plural(n, G().unit.one, G().unit.many) + ' trimmed');
 });
 $('forgetBtn').addEventListener('click', () => {
   const entry = myEntry();
@@ -6268,7 +6667,12 @@ $('firstRestore').addEventListener('click', () => $('importFile').click());
    are two paragraphs, written twice, and that is the cheaper half. */
 function helpGame() { return state ? G() : GAMES.darts; }
 const HELP = {
-  leg: () => (helpGame().liveScorer === 'frames'
+  leg: () => (helpGame().liveScorer === 'pool'
+    ? ['What a Rack Is', `<p>A <strong>rack</strong> is one game of 8-ball. Whoever breaks takes solids or stripes, and to win the rack a player must clear all <strong>seven of their own</strong> and then pot the <strong>8</strong>.</p>
+    <p>A <strong>visit</strong> is a turn at the table, and it ends the moment you miss. Winning a rack in a single visit from your own break is a <strong>break and run</strong>.</p>
+    <p><strong>The 8 comes last.</strong> Potting it while your own balls are still on the table — or fouling it off the table — loses the rack, and the app records that as one thing, because from the scorer's chair it is one thing: the rack went to the other player.</p>
+    <p>A <strong>match</strong> is a set of racks: best of five means the first to win three.</p>`]
+    : helpGame().liveScorer === 'frames'
     ? ['What a Game Is', `<p>A <strong>game</strong> is a race to a target. The board is played in <strong>frames</strong> — all eight weights, four each — and only one side scores a frame: whoever owns the weight furthest down the board takes everything of theirs that sits past the best of the other side's. A weight overhanging the far edge is a <strong>hanger</strong>, and is worth 4.</p>
     <p><strong>First to 15</strong> is the usual league game; <strong>first to 21</strong> is the longer one. The target is reached or passed — the frame that takes a side there can carry them past it, and the score stands as it fell.</p>
     <p>The <strong>hammer</strong> is the last weight of the frame. Whoever the scorer starts it with has it in frame one, and it alternates every frame after that.</p>
@@ -6276,35 +6680,60 @@ const HELP = {
     : ['What a Leg Is', `<p>A <strong>leg</strong> is one game of darts. Both players start on the same number and take it in turns to throw three darts, taking what they score off their total. The first to reach <strong>exactly zero</strong> wins the leg.</p>
     <p><strong>501</strong> is the number nearly every league starts from; <strong>301</strong> is the shorter game, for quick nights or beginners. With <strong>double-out</strong> on, the dart that takes you to zero must land in a double (the thin outer ring) or the bull — going below zero, or leaving exactly 1, is a bust and the turn scores nothing.</p>
     <p>A <strong>match</strong> is a set of legs: best of five means the first to win three.</p>`]),
-  rules: () => (helpGame().liveScorer === 'frames'
+  rules: () => (helpGame().liveScorer === 'pool'
+    ? ['How the Rules Apply', `<p><strong>Played as</strong> is fixed once a match exists: a singles league's matches are between players, a team league's between teams, and the two cannot be told apart afterwards. Everything else can change at any time.</p>
+    <p><strong>Match rules apply to matches scored from now on</strong> — a match that already has a rack in it remembers the racks it gave on the wire. <strong>Points and the tiebreak order re-rank the table at once</strong>, for every season, because they are how results are read rather than what was played.</p>
+    <p>A <strong>best of</strong> match ends when one side has more than half the racks, counting any given on the wire; a <strong>fixed number</strong> plays them all — every rack of it, whatever anyone was given — and can be drawn.</p>`]
+    : helpGame().liveScorer === 'frames'
     ? ['How the Rules Apply', `<p><strong>Played as</strong> is fixed once a match exists: a singles league's matches are between players, a team league's between teams, and the two cannot be told apart afterwards. Everything else can change at any time.</p>
     <p><strong>Game and match rules apply to matches scored from now on</strong> — a game already played remembers the target it was played to. <strong>Points and the tiebreak order re-rank the table at once</strong>, for every season, because they are how results are read rather than what was played.</p>
     <p>A <strong>best of</strong> match ends when one side has more than half the games; a <strong>fixed number</strong> plays them all and can be drawn.</p>`]
     : ['How the Rules Apply', `<p><strong>Played as</strong> is fixed once a match exists: a singles league's matches are between players, a team league's between teams, and the two cannot be told apart afterwards. Everything else can change at any time.</p>
     <p><strong>Leg and match rules apply to matches scored from now on</strong> — a leg already thrown remembers the start and the double-out rule it was played under. <strong>Points and the tiebreak order re-rank the table at once</strong>, for every season, because they are how results are read rather than what was played.</p>
     <p>A <strong>best of</strong> match ends when one side has more than half the legs; a <strong>fixed number</strong> plays them all and can be drawn.</p>`]),
-  standings: ['How the Table Is Ordered', `<p>Every side earns the league's points for a <strong>win, a draw or a loss</strong>, set on the League tab. Sides level on points are separated by the <strong>tiebreak order</strong> chosen there — by default leg difference, then legs for, then head-to-head.</p>
+  /* Forked because 8-ball is the one game where a side's "for" column can be
+     larger than the number of racks it played, and this is where a reader
+     comes to ask why. */
+  standings: () => (helpGame().handicap.scope === 'match'
+    ? ['How the Table Is Ordered', `<p>Every side earns the league's points for a <strong>win, a draw or a loss</strong>, set on the League tab. Sides level on points are separated by the <strong>tiebreak order</strong> chosen there — by default rack difference, then racks for, then head-to-head.</p>
+    <p><strong>Racks given on the wire count in the score, so they count here too.</strong> A player on a wire of two has two racks in their "for" column for every match they played, on top of the ones they won — the number in the table and the number on the match card are the same number, and that is the point of it. A forfeit carries no wire: it is a result rather than a count of racks.</p>
     <p><strong>Head-to-head is worked out among the sides still tied</strong>, as a mini-table of the matches between them, rather than pair by pair: three sides who each beat one of the others would otherwise rank differently depending on the order they were looked at. Sides the order cannot separate share a rank, and the next rank skips.</p>
-    <p>The <strong>Trend</strong> line is a side's points after each of its last ten matches, and Form is its last five results, oldest first.</p>`],
-  individual: () => (helpGame().liveScorer === 'frames'
+    <p>The <strong>Trend</strong> line is a side's points after each of its last ten matches, and Form is its last five results, oldest first.</p>`]
+    : ['How the Table Is Ordered', `<p>Every side earns the league's points for a <strong>win, a draw or a loss</strong>, set on the League tab. Sides level on points are separated by the <strong>tiebreak order</strong> chosen there — by default leg difference, then legs for, then head-to-head.</p>
+    <p><strong>Head-to-head is worked out among the sides still tied</strong>, as a mini-table of the matches between them, rather than pair by pair: three sides who each beat one of the others would otherwise rank differently depending on the order they were looked at. Sides the order cannot separate share a rank, and the next rank skips.</p>
+    <p>The <strong>Trend</strong> line is a side's points after each of its last ten matches, and Form is its last five results, oldest first.</p>`]),
+  individual: () => (helpGame().liveScorer === 'pool'
+    ? ['The Individual Table', `<p>In a team league every player also has a record of their own: the racks they played in across the team matches, and how many they won.</p>
+    <p><strong>The table figures — balls per visit, break and runs, and what they left when they were beaten — count only racks one person played alone.</strong> A doubles rack cannot say whose break and run it was, so it adds to the racks played and won and to nothing else.</p>`]
+    : helpGame().liveScorer === 'frames'
     ? ['The Individual Table', `<p>In a team league every player also has a record of their own: the games they played in across the team matches, and how many they won.</p>
     <p><strong>The board figures — points per game, hangers and best frame — count only games one person played alone.</strong> A doubles game cannot say whose hanger it was, so it adds to the games played and won and to nothing else.</p>`]
     : ['The Individual Table', `<p>In a team league every player also has a record of their own: the legs they threw in across the team matches, and how many they won.</p>
     <p><strong>Dart figures — the average, 180s and checkouts — count only legs one person threw alone.</strong> A doubles leg cannot say whose 180 it was, so it adds to the legs played and won and to nothing else.</p>`]),
-  matches: () => (helpGame().liveScorer === 'frames'
+  matches: () => (helpGame().liveScorer === 'pool'
+    ? ['How Matches Are Scored', `<p>Tap a match to score it. Add a rack, tap who won it, and the match ends itself when the format says it is over — <strong>best of five</strong> is over at three, and a fixed count is over when they have all been played.</p>
+    <p>Where somebody is on the <strong>wire</strong>, the match starts at that score and a line under it says so. Those racks were given, not played, so a fixed count still plays every rack of itself.</p>
+    <p>A <strong>forfeit</strong> hands the match to the side that turned up, at the full score, and counts in the table; nothing was played, so no wire is carried. A <strong>void</strong> match keeps whatever was scored but counts for nothing. Both can be reopened.</p>
+    <p>Every tap is saved as it lands, so a scorer can put the phone down mid-match and pick it up on another.</p>`]
+    : helpGame().liveScorer === 'frames'
     ? ['How Matches Are Scored', `<p>Tap a match to score it. Add a game, tap who won it, and the match ends itself when the format says it is over — <strong>best of five</strong> is over at three, and a fixed count is over when they have all been played.</p>
     <p>A <strong>forfeit</strong> hands the match to the side that turned up, at the full score, and counts in the table. A <strong>void</strong> match keeps whatever was scored but counts for nothing. Both can be reopened.</p>
     <p>Every tap is saved as it lands, so a scorer can put the phone down mid-match and pick it up on another.</p>`]
     : ['How Matches Are Scored', `<p>Tap a match to score it. Add a leg, tap who won it, and the match ends itself when the format says it is over — <strong>best of five</strong> is over at three, and a fixed count is over when they have all been played.</p>
     <p>A <strong>forfeit</strong> hands the match to the side that turned up, at the full score, and counts in the table. A <strong>void</strong> match keeps whatever was scored but counts for nothing. Both can be reopened.</p>
     <p>Every tap is saved as it lands, so a scorer can put the phone down mid-match and pick it up on another.</p>`]),
-  handicap: () => (helpGame().liveScorer === 'frames'
+  handicap: () => (helpGame().liveScorer === 'pool'
+    ? ['Handicaps', `<p>A player's handicap here is <strong>racks on the wire</strong>: racks they are given at the start of every match, before a ball is struck. With a wire of two, a match that goes to three racks is theirs once they have won one of them.</p>
+    <p><strong>It is a head start in the match, not in the rack.</strong> Every rack is still seven balls and the 8 — a wire changes nothing about how one is played, which is why the balls-per-visit figures are of the pool actually played.</p>
+    <p><strong>The wire is fixed when the match gets its first rack</strong>, and the match remembers it. Change somebody's handicap afterwards and matches already under way keep the wire they were given; the next match to start takes the new one.</p>
+    <p>Racks on the wire count in the match score and in the <strong>racks for and against</strong> in the table. A <strong>forfeit</strong> carries none — nothing was played, so there is nothing for a head start to be a start in — and team matches carry none either.</p>`]
+    : helpGame().liveScorer === 'frames'
     ? ['Handicaps', `<p>A player's handicap is a <strong>head start</strong>, taken off the target they are playing to: with a head start of 4, a game to 15 is a game to 11 for them. It applies to every game they play in a singles match, and the game remembers the target it gave them, so a points-per-game figure is worked out from what they actually scored.</p>
     <p>Team matches play every game to the full target.</p>`]
     : ['Handicaps', `<p>A player's handicap is taken off their <strong>starting score</strong>: with a deduction of 40, a 501 leg starts them on 461. It applies to every leg they throw in a singles match, and the leg remembers the start it gave them, so an average is worked out from the darts actually thrown.</p>
     <p>Team matches start every leg from the full score.</p>`]),
   copyPlayers: ['What Comes Across', `<p>A league is its own record — its own players, its own seasons, its own results. Copying brings the <strong>names</strong> over, and the <strong>teams</strong> they are in when both leagues are played in teams. Nothing else: the new league starts with no seasons, no fixtures and no results of its own.</p>
-    <p><strong>A handicap only comes across between two leagues playing the same game.</strong> A darts handicap is points off a 501 start; a shuffleboard one is points off the target a game is played to. The same number means a different thing in each, so across two games everybody arrives without one and you give them out again here.</p>
+    <p><strong>A handicap only comes across between two leagues playing the same game.</strong> A darts handicap is points off a 501 start; a shuffleboard one is points off the target a game is played to; a pool one is racks given at the start of a match. The same number means a different thing in each, so across two games everybody arrives without one and you give them out again here.</p>
     <p>Everyone arrives as a <strong>new player in this league</strong>. It is a copy and not a link: renaming somebody here does not rename them there, a result here is not a result there, and a name an account has claimed in one league is not claimed in the other.</p>`],
   tournament: ['How a Bracket Works', `<p>Entrants are <strong>seeded</strong> — from the standings, at random, or in roster order — and paired so the top seed meets the bottom seed first. When the count is not a power of two, the <strong>byes go to the top seeds</strong>, who skip the first round.</p>
     <p>In a <strong>double-elimination</strong> bracket a first loss drops a side into the losers' bracket and a second puts them out. The two survivors meet in the grand final; if the one from the losers' bracket wins it, both have lost once, so a second final decides it.</p>
@@ -6713,7 +7142,10 @@ const DEMO_TEAMS_ID = 'LN-DEMOTEAMS';
 /* Eight characters like the others, and an O in it like the others, so it is
    not a League ID and can never be pushed to the cloud. */
 const DEMO_BOARD_ID = 'LN-DEMOBORD';
-function isDemoId(id) { return id === DEMO_ID || id === DEMO_TEAMS_ID || id === DEMO_BOARD_ID; }
+const DEMO_POOL_ID = 'LN-DEMOPOOL';
+function isDemoId(id) {
+  return id === DEMO_ID || id === DEMO_TEAMS_ID || id === DEMO_BOARD_ID || id === DEMO_POOL_ID;
+}
 function daysAgo(n) {
   const d = new Date();
   d.setDate(d.getDate() - n);
@@ -6766,6 +7198,77 @@ function simulateGame(leg, skill, rnd) {
     cur = next;
   }
   return cur;
+}
+/* A plausible rack of 8-ball, scored through poolShot() so every rule the
+   sheet enforces holds here too — the 8 last, no potting more than you have
+   left, and nothing recorded after the rack is over.
+
+   Past sixty visits the rack has stopped resembling anything played on a
+   table, so the side in front of it finishes: a demo whose stored record
+   disagrees with its own result teaches the reader a rule that is not real. */
+function simulateRack(leg, skill, rnd) {
+  let cur = leg, guard = 0;
+  while (!poolState(cur).winner && guard++ < 90) {
+    const st = poolState(cur);
+    const side = st.turn;
+    const left = st.left[side];
+    const s = skill[side] / 100;
+    const push = guard > 60;
+    /* The black gone when it should not have been — potted early, or fouled
+       off the table. One record, because the app never claims which. */
+    if (!push && rnd() < 0.03) {
+      const bad = poolShot(cur, 0, 'lost');
+      if (bad.error) break;
+      cur = bad;
+      continue;
+    }
+    let n = 0;
+    while (n < left && (push || rnd() < s)) n++;
+    /* Cleared: the 8 goes down in the same visit, or is left for the next. */
+    const fin = (n === left && (push || rnd() < s)) ? 'won' : null;
+    const next = poolShot(cur, n, fin);
+    if (next.error) break;
+    cur = next;
+  }
+  return cur;
+}
+function demoPlayPool(st, m, strength, rnd, live) {
+  const fmt = S_of(st).matchFormat;
+  m.legs = [];
+  /* THE WIRE IS FROZEN BEFORE THE FIRST RACK, exactly as spotFor() freezes it
+     from the Add button. Set it afterwards instead and the match plays itself
+     out to its format and the wire then shoves the score past what its own
+     rules allow — a demo league that could not have happened. */
+  const wireOf = (side) => { const p = st.players.find((x) => x.id === m[side]); return p && p.hcp != null ? p.hcp : 0; };
+  const sp = { a: wireOf('a'), b: wireOf('b') };
+  if (sp.a || sp.b) m.spot = sp;
+  let guard = 0;
+  while (!matchDone(m, fmt) && guard++ < 25) {
+    const leg = { w: null, by: { a: [m.a], b: [m.b] },
+                  start: { a: POOL_GROUP, b: POOL_GROUP },
+                  first: m.legs.length % 2 ? 'b' : 'a' };
+    const skill = { a: strength(m.a), b: strength(m.b) };
+    if (live) {
+      const played = simulateRack(Object.assign({}, leg, { turns: [] }), skill, rnd);
+      const ps = poolState(played);
+      leg.w = ps.winner || (skill.a >= skill.b ? 'a' : 'b');
+      leg.turns = played.turns;
+    } else {
+      /* A typed rack: what a scorer writes down afterwards. The winner left
+         nothing on the table — that is what winning a rack IS — and a break
+         and run is one visit by whoever broke, or the figures describe a rack
+         that could not have been played. */
+      const pA = skill.a / (skill.a + skill.b);
+      leg.w = rnd() < pA ? 'a' : 'b';
+      const other = leg.w === 'a' ? 'b' : 'a';
+      const bnr = (leg.first === leg.w && rnd() < 0.12) ? 1 : 0;
+      const wv = bnr ? 1 : 2 + Math.floor(rnd() * 5);
+      leg[leg.w] = { left: 0, visits: wv, bnr: bnr };
+      leg[other] = { left: 1 + Math.floor(rnd() * 5), visits: bnr ? 0 : wv - 1 + Math.floor(rnd() * 2), bnr: 0 };
+    }
+    m.legs.push(leg);
+  }
+  m.status = 'played';
 }
 function demoPlayShuffle(st, m, strength, rnd, live) {
   const fmt = S_of(st).matchFormat;
@@ -7001,17 +7504,65 @@ function buildDemoShuffle() {
   st.brackets.push(cup);
   return normalizeLeague(st);
 }
+/* ── The 8-ball demo ───────────────────────────────────────────────────────
+   The fourth league, and the one that carries the THIRD GAME and the only
+   handicap in the app that is given in the match rather than in the leg: a
+   singles season under way with two players on the wire, the last round
+   scored rack by rack so the live sheet has something in it, and a cup from
+   the table. Best of five and a wire of at most two, so no match here is ever
+   decided before it began — a thing the rules permit and a demo must not
+   teach. Singles again, on purpose: what this league is for is the game. */
+function buildDemoPool() {
+  const rnd = mulberry32(20260909);
+  const st = blankLeague({ id: DEMO_POOL_ID, name: 'Thursday Pool (demo)', game: 'pool' });
+  st.league.settings.legFormat = '8ball';
+  st.league.settings.matchFormat = { mode: 'bestOf', n: 5 };
+  st.league.createdAt = daysAgo(56);
+  st.league.u = 1;
+  const P = [
+    { id: 'demo-q-lena',  name: 'Lena Okafor',    cue: 60 },
+    { id: 'demo-q-sol',   name: 'Sol Marchetti',  cue: 55 },
+    { id: 'demo-q-bess',  name: 'Bess Nakamura',  cue: 51 },
+    { id: 'demo-q-dev',   name: 'Dev Ramanathan', cue: 46 },
+    { id: 'demo-q-cato',  name: 'Cato Lindqvist', cue: 41, hcp: 1 },
+    { id: 'demo-q-nell',  name: 'Nell Abara',     cue: 36, hcp: 2 },
+  ];
+  P.forEach((p, i) => st.players.push({ id: p.id, name: p.name, teamId: null,
+    hcp: p.hcp == null ? null : p.hcp, active: true, u: 2 + i }));
+  const strength = (id) => (P.find((p) => p.id === id) || { cue: 50 }).cue;
+  const season = { id: 'demo-s-pool', name: 'Thursday League', startsOn: daysAgo(35), status: 'active', u: 10 };
+  st.seasons.push(season);
+  let n = 0;
+  /* Six players, five rounds, nobody sitting out. Played to round four, with
+     that round scored visit by visit. */
+  dateRounds(roundRobin(P.map((p) => p.id)), season.startsOn, 7).forEach((rd) => rd.pairs.forEach((pr) => {
+    const m = { id: 'demo-m-q-' + (++n), seasonId: season.id, bracketId: null, slot: null, round: rd.round,
+                date: rd.date, venue: rd.round % 2 ? 'The Corner Pocket' : 'Rack & Roll',
+                a: pr.a, b: pr.b, status: 'scheduled', score: { a: 0, b: 0 }, legs: [], u: 100 + n };
+    if (rd.round <= 4) demoPlayPool(st, m, strength, rnd, rd.round === 4);
+    st.matches.push(m);
+  }));
+  const cup = { id: 'demo-b-pool-cup', name: 'Break Cup', seasonId: season.id, type: 'single', bestOf: 5,
+                reset: true, seeded: 'standings',
+                entrants: seedFromStandings(rankSides(standings(st.matches, P.map((p) => p.id), st.league.settings), st.league.settings,
+                  { matches: st.matches, nameOf: (id) => sideName(st, id) })),
+                createdAt: daysAgo(4), u: 30 };
+  st.brackets.push(cup);
+  return normalizeLeague(st);
+}
 function loadDemo() {
+  const pool = buildDemoPool();
   const board = buildDemoShuffle();
   const teams = buildDemoTeams();
   const singles = buildDemoSingles();
   /* Adopted in this order so the darts singles league is the one on screen —
      it is the fullest, and the header picker is how the others are reached. */
+  adoptLeague(pool, 'owner', false);
   adoptLeague(board, 'owner', false);
   adoptLeague(teams, 'owner', false);
   adoptLeague(singles, 'owner', false);
   setTab('standings');
-  toast('Three demo leagues loaded — switch between them in the header');
+  toast('Four demo leagues loaded — switch between them in the header');
 }
 
 
@@ -7884,9 +8435,16 @@ function openLive(matchId, legIndex) {
   if (!c) { liveCtx = null; return; }
   /* Each scorer plants its own empty record, and ONLY its own: a darts leg
      that grew a `frames: []` would read as scored live to legIsLive() and
-     lose its Details boxes for a record nothing wrote to. */
-  if (G().liveScorer === 'frames') { if (!c.leg.frames) c.leg.frames = []; }
-  else if (!c.leg.visits) { c.leg.visits = { a: [], b: [] }; }
+     lose its Details boxes for a record nothing wrote to.
+
+     Three named branches and NO else. The else used to be darts, so every
+     game that was not shuffleboard planted a darts record — a third game
+     would have been given `visits` at the moment its own sheet opened, and
+     the boundary keeps an empty `visits` where it drops an empty `frames`. */
+  const ls = G().liveScorer;
+  if (ls === 'frames') { if (!c.leg.frames) c.leg.frames = []; }
+  else if (ls === 'pool') { if (!c.leg.turns) c.leg.turns = []; }
+  else if (ls === 'x01') { if (!c.leg.visits) c.leg.visits = { a: [], b: [] }; }
   if (!c.leg.first) c.leg.first = legIndex % 2 ? 'b' : 'a';
   if (c.leg.dOut == null) c.leg.dOut = S().dOut;
   renderLive();
@@ -7910,20 +8468,28 @@ function renderLiveWho(m, leg) {
     lw.textContent = ['a', 'b'].map((k) => nameOf(m[k]) + ': ' + nm(k).join(', ')).join(' · ');
   }
 }
+/* Every row and pad any sheet owns. Each branch used to hide the OTHER
+   branches' parts BY NAME, which is a list every new game has to be added to
+   in every branch — and a game that was missed would ship with two pads on
+   screen and every test still green. Hide the lot, then each sheet shows its
+   own; nothing is left for a fourth game to forget. */
+const LIVE_PARTS = ['lvFinishRow', 'lvPad', 'lvHangRow', 'lvScoredRow', 'lvSbPad', 'lvPoolRow', 'lvPoolPad'];
+function lvHideParts() { LIVE_PARTS.forEach((id) => { $(id).hidden = true; }); }
 function renderLive() {
   const c = curLive();
   if (!c) { $('liveDialog').close(); return; }
   $('liveTitle').textContent = capUnit(G().unit.one) + ' ' + (liveCtx.leg + 1) + ' · ' + nameOf(c.m.a) + ' v ' + nameOf(c.m.b);
   renderLiveWho(c.m, c.leg);
-  if (G().liveScorer === 'frames') renderLiveSb(c); else renderLiveX01(c);
+  lvHideParts();
+  const ls = G().liveScorer;
+  if (ls === 'frames') renderLiveSb(c);
+  else if (ls === 'pool') renderLivePool(c);
+  else renderLiveX01(c);
 }
 function renderLiveX01(c) {
   const { m, leg } = c;
   const st = x01State(leg);
   const edit = canEdit() && leg.w === null;
-  $('lvHangRow').hidden = true;
-  $('lvScoredRow').hidden = true;
-  $('lvSbPad').hidden = true;
   $('lvUndo').textContent = 'Undo last visit';
   const side = (k) => {
     const s = x01LegStats(leg, k);
@@ -7964,8 +8530,6 @@ function renderLiveSb(c) {
   const { m, leg } = c;
   const st = frameState(leg);
   const edit = canEdit() && leg.w === null;
-  $('lvFinishRow').hidden = true;
-  $('lvPad').hidden = true;
   $('lvUndo').textContent = 'Undo last frame';
   const side = (k) => {
     const need = st.target[k] == null ? null : Math.max(0, st.target[k] - st.pts[k]);
@@ -8101,6 +8665,80 @@ $('lvSbPad').addEventListener('click', (e) => {
   if (liveHang * 4 > total) liveHang = Math.floor(total / 4);
   renderLive();
 });
+/* ── The 8-ball sheet ──────────────────────────────────────────────────────
+   The same window and the same three shared parts again. What differs is that
+   a visit is a number AND an ending: the pad says how many of your own went
+   down, and the row says whether that was the end of the rack. The big figure
+   counts DOWN, like darts, because what a player is watching is how many they
+   have left to clear. */
+function renderLivePool(c) {
+  const { m, leg } = c;
+  const st = poolState(leg);
+  const edit = canEdit() && leg.w === null;
+  $('lvUndo').textContent = 'Undo last visit';
+  const side = (k) => {
+    const s = poolLegStats(leg, k);
+    const bits = [st.left[k] == null ? 'no group' : st.left[k] === 0 ? 'on the 8' : plural(st.left[k], 'ball') + ' left',
+                  plural(s.visits, 'visit')];
+    if (s.bpv != null) bits.push('avg ' + s.bpv.toFixed(1));
+    return '<div class="lvside' + (st.turn === k ? ' turn' : '') + (st.winner === k ? ' won' : '') + '"'
+      + (st.turn === k ? ' aria-current="true"' : '') + '>'
+      + '<div class="lvname">' + esc(nameOf(m[k]))
+      + (st.turn === k ? ' <span class="pill">at the table</span>' : '')
+      + (st.winner === k ? ' <span class="pill ok">won</span>' : '') + '</div>'
+      + '<div class="lvrem">' + (st.left[k] == null ? '—' : st.left[k]) + '</div>'
+      + '<div class="hint">' + esc(bits.join(' · ')) + '</div></div>';
+  };
+  $('lvSides').innerHTML = side('a') + side('b');
+  /* Who BROKE. After the break the table alternates every visit, so this is
+     the only one anybody chooses — the same shape as who throws first. */
+  const noTurns = st.turns === 0;
+  $('lvFirstRow').hidden = !noTurns || !edit;
+  $('lvFirstA').textContent = nameOf(m.a) + ' breaks';
+  $('lvFirstB').textContent = nameOf(m.b) + ' breaks';
+  $('lvFirstA').setAttribute('aria-pressed', String(leg.first !== 'b'));
+  $('lvFirstB').setAttribute('aria-pressed', String(leg.first === 'b'));
+  const left = st.turn ? st.left[st.turn] : null;
+  $('lvHint').textContent = st.winner ? nameOf(m[st.winner]) + ' takes the rack.'
+    : left == null ? nameOf(m[st.turn]) + ' is at the table.'
+    : left === 0 ? nameOf(m[st.turn]) + ' is at the table, on the 8.'
+    : nameOf(m[st.turn]) + ' is at the table — ' + plural(left, 'ball') + ' to clear.';
+  $('lvEntry').textContent = liveEntry || '0';
+  $('lvEntry').setAttribute('aria-label', 'Balls potted this visit ' + (liveEntry || 0));
+  $('lvPoolRow').hidden = !edit;
+  $('lvPoolPad').hidden = !edit;
+  $('lvUndo').hidden = !canEdit() || !(leg.turns || []).length;
+  $('lvUndo').disabled = !(leg.turns || []).length;
+}
+/* Records one visit, and how it ended. The twin of liveCommit()/sbCommit(),
+   saving, re-rendering and toasting the same way. The toast says the winner
+   TAKES the rack and never how the other side lost it — the record does not
+   know, and neither should the sentence. */
+function poolCommit(end) {
+  const c = curLive();
+  if (!c || !canEdit()) return;
+  const { m, leg } = c;
+  const next = poolShot(leg, Number(liveEntry || 0), end);
+  if (next.error) { toast(next.error); return; }
+  leg.turns = next.turns;
+  liveEntry = '';
+  const after = poolState(leg);
+  if (after.winner) { leg.w = after.winner; syncMatchStatus(m); }
+  touch(m); save(); render(); renderLive(); renderMatchDialog();
+  if (after.winner) toast(nameOf(m[after.winner]) + ' takes the rack.');
+}
+$('lvPoolPad').addEventListener('click', (e) => {
+  const key = e.target.closest('[data-key]');
+  if (!key || !curLive()) return;
+  /* A key SETS the figure rather than appending to it: a visit is one digit,
+     so a second tap is a correction and never a tens column. */
+  if (!/^\d$/.test(key.dataset.key)) return;
+  liveEntry = key.dataset.key;
+  renderLive();
+});
+$('lvPoolMiss').addEventListener('click', () => poolCommit(null));
+$('lvPoolWon').addEventListener('click', () => poolCommit('won'));
+$('lvPoolLost').addEventListener('click', () => poolCommit('lost'));
 $('lvScoredA').addEventListener('click', () => sbCommit('a'));
 $('lvScoredB').addEventListener('click', () => sbCommit('b'));
 /* Nobody scored: the total and the hangers are not asked and not read. */
@@ -8111,9 +8749,13 @@ $('lvUndo').addEventListener('click', () => {
   const c = curLive();
   if (!c || !canEdit()) return;
   const { m, leg } = c;
-  if (G().liveScorer === 'frames') {
+  const ls = G().liveScorer;
+  if (ls === 'frames') {
     leg.frames = frameUndo(leg).frames;
     if (leg.w !== null && !frameState(leg).winner) { leg.w = null; syncMatchStatus(m); }
+  } else if (ls === 'pool') {
+    leg.turns = poolUndo(leg).turns;
+    if (leg.w !== null && !poolState(leg).winner) { leg.w = null; syncMatchStatus(m); }
   } else {
     leg.visits = x01Undo(leg).visits;
     if (leg.w !== null && !x01State(leg).winner) { leg.w = null; syncMatchStatus(m); }
@@ -8292,7 +8934,7 @@ window.__lnTestHooks = {
   __viewOnly: function (on) { viewOnly = !!on; window.lnViewOnly = viewOnly; render(); },
   SCHEMA: SCHEMA, ID_RE: ID_RE, DEVICE_KEY: DEVICE_KEY, LEAGUE_KEY: LEAGUE_KEY, THEME_KEY: THEME_KEY, TAB_KEY: TAB_KEY,
   TABS: TABS, SHARE_FORMAT: SHARE_FORMAT, SHARE_PAYLOAD_V: SHARE_PAYLOAD_V, SHARED_ID: SHARED_ID,
-  DEMO_ID: DEMO_ID, DEMO_TEAMS_ID: DEMO_TEAMS_ID, DEMO_BOARD_ID: DEMO_BOARD_ID,
+  DEMO_ID: DEMO_ID, DEMO_TEAMS_ID: DEMO_TEAMS_ID, DEMO_BOARD_ID: DEMO_BOARD_ID, DEMO_POOL_ID: DEMO_POOL_ID,
   LEAGUE_ID_RE: LEAGUE_ID_RE, ADMIN_KEY_RE: ADMIN_KEY_RE,
   NAME_MAX: NAME_MAX, GAMES: GAMES, GAME_CONTRACT: GAME_CONTRACT, CHECKOUTS: CHECKOUTS, IMPOSSIBLE_VISITS: IMPOSSIBLE_VISITS,
   TIEBREAK_KEYS: TIEBREAK_KEYS, TIEBREAK_PRESETS: TIEBREAK_PRESETS, TOMBSTONE_KEEP_MS: TOMBSTONE_KEEP_MS,
@@ -8312,10 +8954,13 @@ window.__lnTestHooks = {
   x01LegStats: x01LegStats, legSideStats: legSideStats, checkoutRoute: checkoutRoute, dartValue: dartValue,
   dartsPlayerStats: dartsPlayerStats, legsIn: legsIn,
   buildDemoSingles: buildDemoSingles, buildDemoTeams: buildDemoTeams, buildDemoShuffle: buildDemoShuffle,
-  isDemoId: isDemoId,
+  buildDemoPool: buildDemoPool, isDemoId: isDemoId,
   frameState: frameState, frameScore: frameScore, frameUndo: frameUndo, frameLegStats: frameLegStats,
   sbSideStats: sbSideStats, legIsLive: legIsLive, FRAME_MAX: FRAME_MAX,
   shuffleboardPlayerStats: shuffleboardPlayerStats,
+  poolState: poolState, poolShot: poolShot, poolUndo: poolUndo, poolLegStats: poolLegStats,
+  poolSideStats: poolSideStats, poolPlayerStats: poolPlayerStats, POOL_GROUP: POOL_GROUP,
+  spotFor: spotFor,
   compactSeason: compactSeason, TRIM_AT: TRIM_AT,
   copyPlan: copyPlan, copyPlayers: copyPlayers, PLAYERS_MAX: PLAYERS_MAX, TEAMS_MAX: TEAMS_MAX,
   buildSharePayload: buildSharePayload, encodeShare: encodeShare, decodeShare: decodeShare,
