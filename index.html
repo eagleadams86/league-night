@@ -1141,7 +1141,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
   [data-tab]:not([data-tab="matches"]) #matchesPanel,
   [data-tab]:not([data-tab="players"]) #playersPanel,
   [data-tab]:not([data-tab="tournament"]) #tournamentPanel,
-  [data-tab]:not([data-tab="league"]) #leaguePanel { display: none; }
+  [data-tab]:not([data-tab="club"]) #clubPanel { display: none; }
   /* Every write surface goes for a viewer and in a shared snapshot. */
   html[data-readonly] .no-edit { display: none !important; }
   /* A field that cannot be changed LOOKS it: the game is fixed for a league's
@@ -1437,8 +1437,8 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
     <button class="no-print" id="findBtn" title="Search everything (⌘K / Ctrl+K)"><span aria-hidden="true">⌕</span> Find</button>
     <!-- The record picker: which league is on screen. A device can hold
          several. -->
-    <label class="sr-only" for="leagueSel" id="leagueSelLabel">League</label>
-    <select class="no-print" id="leagueSel" title="Switch between the leagues on this device"></select>
+    <label class="sr-only" for="leagueSel" id="leagueSelLabel">Club</label>
+    <select class="no-print" id="leagueSel" title="Switch between the clubs on this device"></select>
     <button class="no-print" id="dataBtn" title="Back up, restore or delete a league"><span aria-hidden="true">⇩</span> Back Up</button>
     <button class="no-print" id="shareBtn" title="Create a read-only link to show someone this league"><span aria-hidden="true">↗</span> Share</button>
     <label class="sr-only" for="themeSel">Theme</label>
@@ -1482,8 +1482,8 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
           aria-controls="playersPanel" aria-selected="false" tabindex="-1">Players</button>
   <button class="tab" role="tab" id="tab-tournament" data-tab="tournament"
           aria-controls="tournamentPanel" aria-selected="false" tabindex="-1">Tournament</button>
-  <button class="tab" role="tab" id="tab-league" data-tab="league"
-          aria-controls="leaguePanel" aria-selected="false" tabindex="-1">League</button>
+  <button class="tab" role="tab" id="tab-club" data-tab="club"
+          aria-controls="clubPanel" aria-selected="false" tabindex="-1">Club</button>
 </div>
   <!-- Dressed by dressPinBtn() — icon, accessible name and title change
        together, and there is no aria-pressed on top of them: the state would
@@ -1506,32 +1506,35 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
   <div class="card welcome" id="welcomeCard" hidden>
     <div class="empty">
       <h2>Welcome to League Night</h2>
-      <p>Runs a darts, shuffleboard, pool or cornhole league from your phone: the players or teams, a
-        season of fixtures, the table, a live scorer, and knock-out tournaments. Anyone signed in to Google with
-        the league's ID can follow it; anyone with its admin key can run it.</p>
-      <p>Nothing is uploaded unless you sign in and share a league. Until then a league lives in
+      <p>Runs your club's darts, shuffleboard, pool and cornhole leagues from your phone: the players or
+        teams, a season of fixtures, the table, a live scorer, and knock-out tournaments. One club, one
+        roster, as many leagues as you play. Anyone signed in to Google with the club's ID can follow it;
+        anyone with its admin key can run it.</p>
+      <p>Nothing is uploaded unless you sign in and share a club. Until then it lives in
         this browser only.</p>
       <p class="actions">
-        <button type="button" class="primary" id="firstCreate">Create a League</button>
+        <button type="button" class="primary" id="firstCreate">Create a Club</button>
         <button type="button" id="firstSignIn" class="cloud-only" hidden>Sign In</button>
-        <button type="button" id="firstJoin" class="cloud-only">Join a League</button>
+        <button type="button" id="firstJoin" class="cloud-only">Join a Club</button>
         <button type="button" id="firstDemo">Try the Demo</button>
         <button type="button" id="firstRestore">Restore a Backup</button></p>
-      <p><strong>Create a League</strong> asks for a name and whether it is played as singles or
-        in teams, and opens on the Players tab — add the people, start a season, and the
-        fixtures generate themselves.</p>
-      <p class="cloud-only" id="firstSignInNote" hidden><strong>Sign In</strong> brings back the leagues already on your
-        Google account — this browser opens on the one you were in last, and you need no League ID for a
-        league you have already joined.</p>
-      <p class="cloud-only"><strong>Join a League</strong> asks for the League ID someone sent you — and the
-        Admin Key, if they want you running it — and signs you in to Google, because a shared league
+      <p><strong>Create a Club</strong> asks for the club's name and the first league inside it — its
+        game, and whether it is played as singles or in teams — then opens on the Players tab. Add the
+        people once, start a season, and the fixtures generate themselves. More leagues, at any game,
+        go on the Club tab afterwards.</p>
+      <p class="cloud-only" id="firstSignInNote" hidden><strong>Sign In</strong> brings back the clubs already on your
+        Google account — this browser opens on the one you were in last, and you need no Club ID for a
+        club you have already joined.</p>
+      <p class="cloud-only"><strong>Join a Club</strong> asks for the Club ID someone sent you — and the
+        Admin Key, if they want you running it — and signs you in to Google, because a shared club
         is tied to real accounts.</p>
-      <p><strong>Try the Demo</strong> loads five invented leagues — a singles darts league
-        with a season under way, handicaps, a finished knockout and a double-elimination cup in
-        progress; a doubles darts league with team matches; a shuffleboard league scored
-        frame by frame; a pool league scored rack by rack, with two players on the wire; and a
-        cornhole league of four pairs, with a lineup card, a sub and games scored round by round
-        — so every tab, and all four games, have something on them.</p>
+      <p><strong>Try the Demo</strong> loads five invented clubs. The first runs <em>two leagues at
+        once</em> on one roster — a darts league with a season under way, handicaps, a finished knockout
+        and a double-elimination cup in progress, and a shuffleboard league scored frame by frame, with
+        two players carrying a handicap at each game. Then a doubles darts club with team matches; a
+        shuffleboard club; a pool club scored rack by rack, with two players on the wire; and a cornhole
+        club of four pairs, with a lineup card, a sub and games scored round by round — so every tab,
+        and all four games, have something on them.</p>
       <p><strong>Restore a Backup</strong> reads a League Night export — the JSON file the Back
         Up window writes.</p>
     </div>
@@ -1543,6 +1546,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
       <h2>Standings
         <button class="tile-help" type="button" data-help="standings" aria-label="How the table is ordered">i</button>
         <span class="spacer"></span>
+        <span class="pickwrap" id="stLeagueWrap"><label class="sr-only" for="stLeague">League</label><select id="stLeague" class="btn-small"></select></span>
         <span class="pickwrap"><label class="sr-only" for="stSeason">Season</label><select id="stSeason" class="btn-small"></select></span>
         <span class="seg no-print" id="stModeWrap" role="group" aria-label="Which table" hidden>
           <button type="button" class="btn-small" data-mode="sides" aria-pressed="true">Teams</button>
@@ -1565,6 +1569,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
       <h2>Matches
         <button class="tile-help" type="button" data-help="matches" aria-label="How matches are scored">i</button>
         <span class="spacer"></span>
+        <span class="pickwrap" id="mtLeagueWrap"><label class="sr-only" for="mtLeague">League</label><select id="mtLeague" class="btn-small"></select></span>
         <span class="pickwrap"><label class="sr-only" for="mtSeason">Season</label><select id="mtSeason" class="btn-small"></select></span>
         <button type="button" class="btn-small no-print" id="scheduleBtn" hidden>Generate Fixtures</button>
         <button type="button" class="btn-small no-print" id="addMatchBtn" hidden>＋ Add Match</button>
@@ -1606,6 +1611,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
       <h2>Tournaments
         <button class="tile-help" type="button" data-help="tournament" aria-label="How a bracket works">i</button>
         <span class="spacer"></span>
+        <span class="pickwrap" id="trLeagueWrap"><label class="sr-only" for="trLeague">League</label><select id="trLeague" class="btn-small"></select></span>
         <button type="button" class="btn-small no-print" id="addBracketBtn">＋ New Tournament</button>
       </h2>
       <p class="lede" style="margin:0">Knock-outs beside the league: seeded from the table or drawn at random,
@@ -1615,10 +1621,32 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
   </div>
 
   <!-- ═══════════════════════════ League ══════════════════════════════════ -->
-  <div id="leaguePanel" role="tabpanel" aria-labelledby="tab-league" hidden>
+  <div id="clubPanel" role="tabpanel" aria-labelledby="tab-club" hidden>
+    <!-- THE CLUB IS THE PEOPLE. Its name, and nothing else — the game and every
+         setting belong to a LEAGUE, which is what lets one roster run darts and
+         8-ball at the same time, and what the card below this one lists. -->
+    <div class="card" id="clubCard">
+      <h2>Club
+        <button class="tile-help" type="button" data-help="club" aria-label="What a club is, and how leagues sit inside it">i</button>
+      </h2>
+      <p class="lede">The people. Everyone here can play in every league below — one roster, one ID, one invite.</p>
+      <div class="field"><label for="cl_name">Name</label><input type="text" id="cl_name" maxlength="40" autocomplete="off"></div>
+    </div>
+
+    <div class="card" id="leaguesCard">
+      <h2>Leagues
+        <button class="tile-help" type="button" data-help="leagues" aria-label="What a league is, and why its game is fixed">i</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn-small no-print no-edit" id="addLeagueBtn">＋ New League</button>
+      </h2>
+      <div id="leaguesWrap"></div>
+    </div>
+
     <div class="card" id="rulesCard">
       <h2>League Rules
         <button class="tile-help" type="button" data-help="rules" aria-label="How the rules apply">i</button>
+        <span class="spacer"></span>
+        <span class="pickwrap" id="lrLeagueWrap"><label class="sr-only" for="lrLeague">League</label><select id="lrLeague" class="btn-small"></select></span>
       </h2>
       <p class="lede" id="rulesNote"></p>
       <div class="grid3">
@@ -1763,10 +1791,10 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
       <p class="hint" id="sizeMeter"></p>
       <div class="row no-print">
         <button type="button" id="trimBtn" hidden>Trim Closed Seasons</button>
-        <button type="button" id="newLeagueBtn">＋ Create Another League</button>
-        <button type="button" id="joinBtn" class="cloud-only" hidden>Join a League…</button>
-        <button type="button" id="forgetBtn">Forget This League</button>
-        <button type="button" class="danger" id="deleteLeagueBtn">Delete This League…</button>
+        <button type="button" id="newLeagueBtn">＋ Create Another Club</button>
+        <button type="button" id="joinBtn" class="cloud-only" hidden>Join a Club…</button>
+        <button type="button" id="forgetBtn">Forget This Club</button>
+        <button type="button" class="danger" id="deleteLeagueBtn">Delete This Club…</button>
       </div>
     </div>
   </div>
@@ -1802,7 +1830,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
   <button type="button" data-tab="matches"><span aria-hidden="true">⚔</span>Matches</button>
   <button type="button" data-tab="players"><span aria-hidden="true">☺</span>Players</button>
   <button type="button" data-tab="tournament"><span aria-hidden="true">⚑</span>Tournament</button>
-  <button type="button" data-tab="league"><span aria-hidden="true">⚙</span>League</button>
+  <button type="button" data-tab="club"><span aria-hidden="true">⚙</span>Club</button>
 </nav>
 
 <div id="toast" popover="manual" role="status" aria-live="polite"></div>
@@ -1810,20 +1838,25 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
 <!-- ── Dialogs ─────────────────────────────────────────────────────────────── -->
 
 <dialog id="leagueDialog" aria-labelledby="leagueTitle">
-  <h2 id="leagueTitle">Create a League</h2>
-  <div class="field"><label for="lg_name">Name</label><input type="text" id="lg_name" maxlength="40" autocomplete="off" placeholder="Tuesday Singles"></div>
-  <div class="grid2">
-    <div class="field"><label for="lg_game">Game</label><select id="lg_game"></select></div>
-    <div class="field"><label for="lg_format">Played as</label>
-      <select id="lg_format"><option value="singles">Singles</option><option value="teams">Teams (doubles)</option></select></div>
-  </div>
-  <!-- ── The same friends, a different game ────────────────────────────────
-       A league's game is fixed when it is made, so playing darts AND
-       shuffleboard with the same people is two leagues. This is what stops
-       that meaning typing everyone in twice. The whole block is hidden when
-       there is no other league on this device — the first league has nothing
-       to copy from, and a control that explains why it can do nothing is
-       worse than one that is not there. -->
+  <h2 id="leagueTitle">Create a Club</h2>
+  <p class="lede" style="margin-top:0">A club is the people. It starts with one league — one game — and you can
+    add as many more as you like afterwards, on the same roster.</p>
+  <div class="field"><label for="lg_name">Club name</label><input type="text" id="lg_name" maxlength="40" autocomplete="off" placeholder="The Anchor"></div>
+  <fieldset class="formpanel">
+    <legend>Its First League</legend>
+    <div class="field"><label for="lg_leagueName">Name</label><input type="text" id="lg_leagueName" maxlength="40" autocomplete="off" placeholder="Tuesday Singles"></div>
+    <div class="grid2">
+      <div class="field"><label for="lg_game">Game</label><select id="lg_game"></select></div>
+      <div class="field"><label for="lg_format">Played as</label>
+        <select id="lg_format"><option value="singles">Singles</option><option value="teams">Teams (doubles)</option></select></div>
+    </div>
+  </fieldset>
+  <!-- ── The same friends, a second club ───────────────────────────────────
+       A CLUB holds its people once and plays every game with them, so this is
+       no longer about a second game — it is about a genuinely different group
+       who happen to overlap. Hidden when there is no other club on this
+       device: the first has nothing to copy from, and a control that explains
+       why it can do nothing is worse than one that is not there. -->
   <fieldset class="formpanel" id="lg_copyWrap" hidden>
     <legend>The Same Players
       <button class="tile-help" type="button" data-help="copyPlayers" aria-label="What comes across when you copy players">i</button></legend>
@@ -1831,8 +1864,8 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
     <div id="lg_players" class="entrants picklist"></div>
     <p class="hint" id="lg_copyNote" role="status"></p>
   </fieldset>
-  <p>You will be its owner. The rules — legs, points, tiebreaks — can be changed on the League tab
-    until the first match is recorded.</p>
+  <p>You will be its owner. A league's rules — legs, points, tiebreaks — can be changed on the Club tab
+    until its first match is recorded; its game cannot change at all.</p>
   <p class="warn-line" id="leagueWarn" role="status"></p>
   <div class="row-actions">
     <button type="button" id="leagueCancel">Cancel</button>
@@ -1843,7 +1876,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
 <!-- Joining: the same username/password pairing as the Invite card, so a
      manager that saved a league's keys offers them back here. -->
 <dialog id="joinDialog" aria-labelledby="joinTitle">
-  <h2 id="joinTitle">Join a League</h2>
+  <h2 id="joinTitle">Join a Club</h2>
   <p>Enter the League ID you were sent. Add the Admin Key if you are to run the league; leave it blank
     to follow. You will be asked to sign in to Google.</p>
   <form id="joinForm" autocomplete="on">
@@ -1872,6 +1905,28 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
   </div>
 </dialog>
 
+<!-- A NEW LEAGUE INSIDE THIS CLUB. Adding, not editing, so it keeps
+     Cancel/Save — "never create it" is the one thing auto-save cannot say. The
+     game is asked for HERE and nowhere else: it is fixed for the life of the
+     league, because a leg already thrown was folded under that game's rules. -->
+<dialog id="newLeagueDialog" aria-labelledby="nl_title">
+  <h2 id="nl_title">New League</h2>
+  <p class="lede" style="margin-top:0">Another competition for the same people. It runs alongside the ones
+    you have — its own game, its own seasons, its own table.</p>
+  <div class="field"><label for="nl_name">Name</label><input type="text" id="nl_name" maxlength="40" autocomplete="off" placeholder="Winter Darts"></div>
+  <div class="grid2">
+    <div class="field"><label for="nl_game">Game</label><select id="nl_game"></select></div>
+    <div class="field"><label for="nl_format">Played as</label>
+      <select id="nl_format"><option value="singles">Singles</option><option value="teams">Teams</option></select></div>
+  </div>
+  <p class="hint">The game cannot change once the league exists — a result already recorded was scored under its rules.</p>
+  <p class="warn-line" id="nlWarn" role="status"></p>
+  <div class="row-actions">
+    <button type="button" id="nlCancel">Cancel</button>
+    <button type="button" class="primary" id="nlSave">Create</button>
+  </div>
+</dialog>
+
 <!-- The editors save as you go and close on Done — the family's rule for
      editing an existing record. The backdrop is the dismiss button. -->
 <dialog id="playerDialog" aria-labelledby="playerTitle">
@@ -1879,8 +1934,14 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
   <div class="grid2">
     <div class="field"><label for="pl_name">Name</label><input type="text" id="pl_name" maxlength="40" autocomplete="off"></div>
     <div class="field" id="pl_teamWrap"><label for="pl_team">Team</label><select id="pl_team"></select></div>
-    <div class="field"><label for="pl_hcp" id="pl_hcpLabel">Handicap</label><input type="number" id="pl_hcp" inputmode="numeric" placeholder="none"></div>
   </div>
+  <!-- ONE HANDICAP PER GAME. A club that plays one game draws one box and looks
+       exactly as it did before the split; a club running darts and 8-ball draws
+       two, each with its own word, its own range and its own meaning. The boxes
+       are REBUILT per open, so their `change` listener is delegated on the
+       container — a static list of ids would leave every rebuilt field unwired.
+       Hidden entirely when no league gives a handicap. -->
+  <div class="grid2" id="pl_hcps"></div>
   <label class="checkline"><input type="checkbox" id="pl_active"><span>Playing this season — untick to retire them; their results stay</span></label>
   <div class="stats" id="playerStats"></div>
   <p class="warn-line" id="playerWarn" role="status"></p>
@@ -2263,7 +2324,7 @@ const LEAGUE_KEY = (id) => 'ln-league-' + id;
 const KEY_KEY    = (id) => 'ln-key-' + id;
 const THEME_KEY  = 'ln-theme';
 const TAB_KEY    = 'ln-tab';
-const TABS       = ['standings', 'matches', 'players', 'tournament', 'league'];
+const TABS       = ['standings', 'matches', 'players', 'tournament', 'club'];
 const TAB_LABEL  = { standings: 'Standings', matches: 'Matches', players: 'Players',
                      tournament: 'Tournament', league: 'League' };
 
@@ -2389,8 +2450,8 @@ function nextU() { lastU = Math.max(Date.now(), lastU + 1); return lastU; }
 function noteU(u) { if (Number.isFinite(u) && u > lastU) lastU = u; }
 /* The largest stamp in a league, so an adopted copy moves the clock forward. */
 function maxU(st) {
-  let m = (st && st.league && Number(st.league.u)) || 0;
-  ['players', 'teams', 'seasons', 'matches', 'brackets'].forEach((k) => {
+  let m = (st && st.club && Number(st.club.u)) || 0;
+  ['leagues', 'players', 'teams', 'seasons', 'matches', 'brackets'].forEach((k) => {
     ((st && st[k]) || []).forEach((e) => { if (e && Number(e.u) > m) m = Number(e.u); });
   });
   ((st && st.tombstones) || []).forEach((t) => { if (t && Number(t.at) > m) m = Number(t.at); });
@@ -2427,6 +2488,11 @@ const CORNHOLE_MAX = 12;
    nobody can act on. Nothing in the app can reach them one Add at a time. */
 const PLAYERS_MAX = 500;
 const TEAMS_MAX = 250;
+/* The most LEAGUES one club may run. Mirrors `validSize` in firestore.rules,
+   and is a different number from CLUBS_MAX, which is how many clubs one
+   ACCOUNT may hold — the two were one constant before the split and confusing
+   them costs a refusal nobody can read. */
+const LEAGUES_MAX = 50;
 
 /* ── The game registry ─────────────────────────────────────────────────────
    One entry per game. The engine reads ONLY the keys named in GAME_CONTRACT
@@ -2679,7 +2745,7 @@ Object.keys(GAMES).forEach((k) => { if (GAMES[k].rounds) bindRounds(GAMES[k].rou
    `schema`, and every boundary refuses a copy carrying a higher one — see the
    halt below. BUMP IT AND normalizeLeague TOGETHER when a stored field is
    added. */
-const SCHEMA = 7;   /* 2: a leg carries `first` and `dOut` for the live scorer (2026-09-07)
+const SCHEMA = 8;   /* 2: a leg carries `first` and `dOut` for the live scorer (2026-09-07)
                        3: a trimmed leg carries `scored` per side, so Trim Closed
                           Seasons keeps its promise that no figure moves (2026-09-07)
                        4: a match carries `lineup` and a player carries `avail`, so a
@@ -2692,7 +2758,14 @@ const SCHEMA = 7;   /* 2: a leg carries `first` and `dOut` for the live scorer (
                           that match (2026-09-09)
                        7: a leg carries `bust` and `marg` — the ending rules the league
                           had chosen when it was played, since cornhole offers three
-                          (2026-09-09) */
+                          (2026-09-09)
+                       8: THE CLUB/LEAGUE SPLIT. `state.club` became `state.club` and
+                          holds only the people; the game and every setting moved onto
+                          `state.leagues[]`, one entry per competition, so one group of
+                          friends can play several games at once. A season, a match and
+                          a bracket each carry `leagueId`; a player's handicap became
+                          `hcps`, one figure per GAME. Migrated on load — see
+                          migrateToClub() (2026-09-10) */
 const TIEBREAK_KEYS = ['pts', 'legDiff', 'legsFor', 'wins', 'h2h', 'name'];
 const NAME_MAX = 40;
 /* The most names a lineup may hold. A CONSTANT, deliberately, and not
@@ -2721,13 +2794,30 @@ function defaultSettings(game) {
   };
 }
 
-function blankLeague(opts) {
+/* ONE COMPETITION, at one game. Its `game` is fixed when it is made and never
+   changes afterwards — a leg already thrown was folded under that game's rules,
+   and a league that could change game would re-score its own history. The club
+   around it is free to hold as many of these as it likes, at as many games. */
+function newLeagueEntity(opts) {
   const o = opts || {};
   const game = GAMES[o.game] ? o.game : 'darts';
   return {
+    id: o.id || uid(),
+    name: String(o.name || GAMES[game].name).slice(0, NAME_MAX),
+    game: game, createdAt: todayISO(), u: 0, settings: defaultSettings(game),
+  };
+}
+/* A CLUB: the people, and the leagues they play in. `club` holds no game and no
+   settings — those belong to a league, which is what lets one roster run darts
+   and 8-ball at the same time. A club always has at least one league, which is
+   what lets currentLeague() promise never to return null. */
+function blankClub(opts) {
+  const o = opts || {};
+  return {
     schema: SCHEMA,
-    league: { id: o.id || newLeagueId(), name: String(o.name || 'My League').slice(0, NAME_MAX),
-              game: game, createdAt: todayISO(), u: 0, settings: defaultSettings(game) },
+    club: { id: o.id || newLeagueId(), name: String(o.name || 'My Club').slice(0, NAME_MAX),
+            createdAt: todayISO(), u: 0 },
+    leagues: [newLeagueEntity({ game: o.game, name: o.leagueName })],
     players: [], teams: [], seasons: [], matches: [], brackets: [], tombstones: [],
   };
 }
@@ -2740,9 +2830,67 @@ function blankLeague(opts) {
    reference rewritten through one map. A key is written ONLY when it has a
    value: Firestore refuses a whole document over one `undefined` where
    localStorage silently drops it, so nothing here may create one. */
-function normalizeLeague(raw) {
-  const out = blankLeague({ id: DEMO_ID });   /* the id is replaced below */
+/* ── The club/league migration ─────────────────────────────────────────────
+   Every state written before 2026-09-10 is one group of people at ONE game:
+   a `league` object carrying the game and the settings, and a `hcp` on each
+   player. This turns that into a club with one league, and it runs at the top
+   of normalizeLeague so the allowlist below never sees the old keys at all and
+   strips them by construction.
+
+   GATED ON SHAPE AND NOT ON `schema < 8`, which would look like the obvious
+   test and would be wrong three ways: boot() stamps `schema: SCHEMA` onto a
+   share payload built by an OLDER app before handing it here, `__plant` passes
+   raws with no schema at all, and the suite's fixtures carry schema 1. Each
+   half is gated on the thing it converts, so a half-migrated state — which
+   setupState can genuinely produce — finishes the job.
+
+   THE LEAGUE'S ID IS DERIVED FROM THE CLUB'S AND NEVER MINTED. Two devices
+   migrating the same old cloud state independently would otherwise mint two
+   different ids, mergeList would keep both, and the club would silently split
+   its matches across two leagues that are the same league — with nothing on
+   screen to see and no way back. Derived, both devices converge on one id.
+
+   It never mutates its argument: every state that reaches it belongs to
+   somebody else — mergeLeague hands it both sides — so each step copies. */
+function migrateRaw(raw) {
+  let out = raw;
+  const L = raw.league;
+  const old = !Array.isArray(raw.leagues) && L && typeof L === 'object';
+  if (old) {
+    const lgId = 'lg-' + (String(L.id == null ? '' : L.id).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 56) || 'club');
+    const stamp = (list) => (Array.isArray(list) ? list : []).map((e) =>
+      (e && typeof e === 'object') ? Object.assign({}, e, { leagueId: lgId }) : e);
+    out = Object.assign({}, raw, {
+      club: { id: L.id, name: L.name, createdAt: L.createdAt, u: L.u },
+      /* The one league takes the club's own name. A club that only ever played
+         one game reads "Tuesday Darts · Darts" on the Leagues card, which is
+         honest and is the first thing anybody will rename. */
+      leagues: [{ id: lgId, name: L.name, game: L.game, createdAt: L.createdAt, u: L.u, settings: L.settings }],
+      seasons: stamp(raw.seasons), brackets: stamp(raw.brackets), matches: stamp(raw.matches),
+    });
+    delete out.league;   /* on the shallow COPY — `raw` is somebody else's object */
+  }
+  /* A handicap became one figure PER GAME. The old one belonged to the only
+     game that state ever had. */
+  const players = Array.isArray(out.players) ? out.players : [];
+  if (players.some((p) => p && typeof p === 'object' && p.hcps == null && p.hcp != null)) {
+    const game = (L && GAMES[L.game]) ? L.game : 'darts';
+    out = Object.assign({}, out, {
+      players: players.map((p) => {
+        if (!p || typeof p !== 'object' || p.hcps != null || p.hcp == null) return p;
+        const q = Object.assign({}, p, { hcps: { [game]: p.hcp } });
+        delete q.hcp;
+        return q;
+      }),
+    });
+  }
+  return out;
+}
+
+function normalizeLeague(raw, opts) {
+  const out = blankClub({ id: DEMO_ID });   /* the id is replaced below */
   if (!raw || typeof raw !== 'object') return out;
+  raw = migrateRaw(raw);
   const map = new Map();
   const fixId = (id) => {
     const key = String(id == null ? '' : id);
@@ -2785,34 +2933,72 @@ function normalizeLeague(raw) {
     return (Number.isFinite(n) && n >= 1) ? Math.min(9999, n) : null;
   };
 
-  const L = (raw.league && typeof raw.league === 'object') ? raw.league : {};
-  const game = GAMES[L.game] ? L.game : 'darts';
-  const G = GAMES[game];
-  const d = defaultSettings(game);
-  const S = (L.settings && typeof L.settings === 'object') ? L.settings : {};
-  const mf = (S.matchFormat && typeof S.matchFormat === 'object') ? S.matchFormat : {};
-  const pts = (S.points && typeof S.points === 'object') ? S.points : {};
-  const tb = Array.isArray(S.tiebreak)
-    ? S.tiebreak.filter((k, i, a) => TIEBREAK_KEYS.indexOf(k) !== -1 && k !== 'name' && a.indexOf(k) === i)
-    : d.tiebreak.slice(0, -1);
-  out.league = {
-    id: fixId(L.id),
-    name: str(L.name, NAME_MAX) || 'My League',
-    game: game,
-    createdAt: isoDate(L.createdAt) || todayISO(),
-    u: stamp(L.u),
-    settings: {
-      format: S.format === 'teams' ? 'teams' : 'singles',
-      teamSize: int(S.teamSize, 2, 8, d.teamSize),
-      legFormat: G.legFormats.some((f) => f.id === S.legFormat) ? S.legFormat : d.legFormat,
-      dOut: S.dOut !== false,
-      matchFormat: { mode: mf.mode === 'fixed' ? 'fixed' : 'bestOf', n: int(mf.n, 1, 21, d.matchFormat.n) },
-      points: { win: int(pts.win, -10, 10, d.points.win), draw: int(pts.draw, -10, 10, d.points.draw),
-                loss: int(pts.loss, -10, 10, d.points.loss) },
-      /* `name` is always last, and always there: an order that ran out of
-         keys would leave a tie with no answer. */
-      tiebreak: (tb.length ? tb : d.tiebreak.slice(0, -1)).concat(['name']),
-    },
+  const C = (raw.club && typeof raw.club === 'object') ? raw.club : {};
+  out.club = {
+    id: fixId(C.id),
+    name: str(C.name, NAME_MAX) || 'My Club',
+    createdAt: isoDate(C.createdAt) || todayISO(),
+    u: stamp(C.u),
+  };
+  /* ONE LEAGUE. Everything the club used to carry about a game lives here, so
+     one roster can run darts and 8-ball at once. `game` decides which registry
+     entry validates this league's settings AND every leg of every match that
+     points at it — which is why the leagues are walked before anything else. */
+  out.leagues = list(raw.leagues).map((L) => {
+    const game = GAMES[L.game] ? L.game : 'darts';
+    const G = GAMES[game];
+    const d = defaultSettings(game);
+    const S = (L.settings && typeof L.settings === 'object') ? L.settings : {};
+    const mf = (S.matchFormat && typeof S.matchFormat === 'object') ? S.matchFormat : {};
+    const pts = (S.points && typeof S.points === 'object') ? S.points : {};
+    const tb = Array.isArray(S.tiebreak)
+      ? S.tiebreak.filter((k, i, a) => TIEBREAK_KEYS.indexOf(k) !== -1 && k !== 'name' && a.indexOf(k) === i)
+      : d.tiebreak.slice(0, -1);
+    return {
+      id: fixId(L.id),
+      name: str(L.name, NAME_MAX) || G.name,
+      game: game,
+      createdAt: isoDate(L.createdAt) || todayISO(),
+      u: stamp(L.u),
+      settings: {
+        format: S.format === 'teams' ? 'teams' : 'singles',
+        teamSize: int(S.teamSize, 2, 8, d.teamSize),
+        legFormat: G.legFormats.some((f) => f.id === S.legFormat) ? S.legFormat : d.legFormat,
+        dOut: S.dOut !== false,
+        matchFormat: { mode: mf.mode === 'fixed' ? 'fixed' : 'bestOf', n: int(mf.n, 1, 21, d.matchFormat.n) },
+        points: { win: int(pts.win, -10, 10, d.points.win), draw: int(pts.draw, -10, 10, d.points.draw),
+                  loss: int(pts.loss, -10, 10, d.points.loss) },
+        /* `name` is always last, and always there: an order that ran out of
+           keys would leave a tie with no answer. */
+        tiebreak: (tb.length ? tb : d.tiebreak.slice(0, -1)).concat(['name']),
+      },
+    };
+  }).filter((L, i, a) => a.findIndex((x) => x.id === L.id) === i);
+  /* A CLUB ALWAYS HAS AT LEAST ONE LEAGUE, and every fallback below leans on
+     it: currentLeague() promises never to return null, and a match whose
+     league is gone lands on leagues[0]. A state that arrives with none — a
+     hostile file, or every league tombstoned — gets one rather than a club
+     nothing can be drawn for. */
+  if (!out.leagues.length) out.leagues = [newLeagueEntity({})];
+  const leagueIds = new Set(out.leagues.map((L) => L.id));
+  const firstLeague = out.leagues[0].id;
+  /* THE GAME A MATCH'S LEGS ARE VALIDATED AGAINST. `opts.knownGames` is the
+     union of both sides' leagues during a merge and is used for RESOLUTION
+     ONLY — never stored, never listed. Without it, a copy that has not yet
+     received a new cornhole league re-points its matches at leagues[0], frames()
+     finds no `rounds` on darts, and every round record on those legs is DELETED
+     — committed by mergeList if that side carried the higher `u`. See
+     mergeLeague. */
+  const known = (opts && opts.knownGames) || null;
+  const gameOfLeague = (id) => {
+    const L = out.leagues.find((x) => x.id === id);
+    if (L) return GAMES[L.game];
+    const g = known && known.get(id);
+    return (g && GAMES[g]) || null;
+  };
+  const settingsOfLeague = (id) => {
+    const L = out.leagues.find((x) => x.id === id);
+    return L ? L.settings : out.leagues[0].settings;
   };
   out.teams = list(raw.teams).map((t) => ({ id: fixId(t.id), name: str(t.name, NAME_MAX), u: stamp(t.u) }));
   const teamIds = new Set(out.teams.map((t) => t.id));
@@ -2823,26 +3009,54 @@ function normalizeLeague(raw) {
       id: fixId(p.id), name: str(p.name, NAME_MAX),
       /* A team that no longer exists is no team. */
       teamId: teamId && teamIds.has(teamId) ? teamId : null,
-      hcp: (p.hcp == null || p.hcp === '') ? null : int(p.hcp, G.handicap.min, G.handicap.max, null),
       active: p.active !== false, u: stamp(p.u),
     };
+    /* ONE HANDICAP PER GAME, and each is clamped by ITS OWN game's range. That
+       is the whole point of the key: int() clamps rather than refuses, so one
+       shared figure carried between games would land a darts 60 as a
+       shuffleboard head start of 10 — the maximum, a real advantage nobody was
+       given and indistinguishable afterwards from a setting.
+
+       Keyed on GAMES and not on the club's own leagues, so a handicap survives
+       deleting and recreating a league at the same game. ABSENT rather than
+       empty, avail's rule one level up: Firestore refuses a whole document over
+       one undefined, and an empty object is a key with nothing in it. */
+    const hcps = {};
+    Object.keys(GAMES).forEach((g) => {
+      const v = p.hcps && typeof p.hcps === 'object' ? p.hcps[g] : null;
+      if (v == null || v === '') return;
+      const n = int(v, GAMES[g].handicap.min, GAMES[g].handicap.max, null);
+      if (n != null) hcps[g] = n;
+    });
+    if (Object.keys(hcps).length) o.hcps = hcps;
     /* An ADMIN'S note about which nights this player can make, for the many
        players who will never sign in. What the player says about themselves
        lives on their own member document and wins over this — see availFor. */
     if (av) o.avail = av;
     return o;
   });
+  /* A season belongs to ONE league, and so plays one game. A leagueId naming
+     no league lands on the first one rather than becoming null: unlike a team
+     or a season, a league is what says which game this is, and nothing can be
+     folded or drawn without one. */
+  const lgRef = (v) => { const id = ref(v); return id && leagueIds.has(id) ? id : firstLeague; };
   out.seasons = list(raw.seasons).map((s) => ({
-    id: fixId(s.id), name: str(s.name, NAME_MAX),
+    id: fixId(s.id), leagueId: lgRef(s.leagueId), name: str(s.name, NAME_MAX),
     startsOn: isoDate(s.startsOn) || todayISO(),
     status: s.status === 'done' ? 'done' : 'active', u: stamp(s.u),
   }));
   const seasonIds = new Set(out.seasons.map((s) => s.id));
+  const seasonById = new Map(out.seasons.map((s) => [s.id, s]));
   out.brackets = list(raw.brackets).map((b) => {
     const seasonId = ref(b.seasonId);
+    const inSeason = seasonId && seasonIds.has(seasonId) ? seasonId : null;
+    /* A tournament inside a season belongs to that season's league, whatever it
+       says about itself — the two cannot disagree and the season is the older
+       claim. */
+    const leagueId = inSeason ? seasonById.get(inSeason).leagueId : lgRef(b.leagueId);
     return {
-      id: fixId(b.id), name: str(b.name, NAME_MAX) || 'Tournament',
-      seasonId: seasonId && seasonIds.has(seasonId) ? seasonId : null,
+      id: fixId(b.id), leagueId: leagueId, name: str(b.name, NAME_MAX) || 'Tournament',
+      seasonId: inSeason,
       type: b.type === 'double' ? 'double' : 'single',
       bestOf: int(b.bestOf, 1, 21, 3) | 1,           /* odd, always */
       reset: b.reset !== false,
@@ -2852,7 +3066,8 @@ function normalizeLeague(raw) {
     };
   });
   const bracketIds = new Set(out.brackets.map((b) => b.id));
-  const sideStats = (v) => {
+  const bracketById = new Map(out.brackets.map((b) => [b.id, b]));
+  const sideStats = (v, G) => {
     if (!v || typeof v !== 'object') return null;
     const o = {};
     G.legFields.forEach((f) => {
@@ -2886,7 +3101,7 @@ function normalizeLeague(raw) {
      frame nobody scored is forced to zero rather than trusted to be. `h` is
      written only when there are hangers AND they fit inside the total, so a
      restored file cannot make the Hangers column disagree with the points. */
-  const frames = (v) => {
+  const frames = (v, G) => {
     /* A RECORD BELONGS TO A GAME THAT HAS A SCORER FOR IT. Without this a
        darts leg could carry a round record — nothing writes one since
        openLive() stopped planting the wrong kind, but a hostile or corrupt
@@ -2920,7 +3135,7 @@ function normalizeLeague(raw) {
      visits(): visits() returns [], which is truthy, so an empty darts record
      survives the boundary to this day and reads as a leg somebody scored live.
      A key is written only when it has a value. */
-  const turns = (v, first, start) => {
+  const turns = (v, first, start, G) => {
     if (!Array.isArray(v)) return null;
     const other = first === 'b' ? 'a' : 'b';
     /* The running total is carried so no visit can pot balls the side has not
@@ -2950,12 +3165,28 @@ function normalizeLeague(raw) {
      `by` and a match's `lineup` — they are the same list of the same people. */
   const ids = (v) => (Array.isArray(v) ? v : []).map(ref).filter((x, i, a) => x && a.indexOf(x) === i);
   out.matches = list(raw.matches).map((m) => {
-    const seasonId = ref(m.seasonId), bracketId = ref(m.bracketId);
+    const rawSeason = ref(m.seasonId), rawBracket = ref(m.bracketId);
+    const seasonId = rawSeason && seasonIds.has(rawSeason) ? rawSeason : null;
+    const bracketId = rawBracket && bracketIds.has(rawBracket) ? rawBracket : null;
+    /* THE LEAGUE FIRST, because everything below is validated against ITS game:
+       a rack is folded by 8-ball's rules and a round by cornhole's, and reading
+       the wrong one strips the record rather than mis-drawing it.
+
+       A match inside a season or a bracket takes THAT one's league, whatever it
+       says about itself. The two cannot disagree, and a fixture that drifted
+       from its own season would be drawn on one table and folded by another
+       game's rules. Only a match belonging to neither answers for itself. */
+    const leagueId = seasonId ? seasonById.get(seasonId).leagueId
+      : bracketId ? bracketById.get(bracketId).leagueId
+      : lgRef(m.leagueId);
+    const G = gameOfLeague(leagueId) || GAMES.darts;
+    const fmt = settingsOfLeague(leagueId);
     const sc = (m.score && typeof m.score === 'object') ? m.score : {};
     const o = {
       id: fixId(m.id),
-      seasonId: seasonId && seasonIds.has(seasonId) ? seasonId : null,
-      bracketId: bracketId && bracketIds.has(bracketId) ? bracketId : null,
+      leagueId: leagueId,
+      seasonId: seasonId,
+      bracketId: bracketId,
       slot: /^(w\d+-\d+|l\d+-\d+|gf|gf2)$/.test(String(m.slot || '')) ? String(m.slot) : null,
       round: int(m.round, 0, 999, 0),
       date: isoDate(m.date),
@@ -3002,11 +3233,11 @@ function normalizeLeague(raw) {
         if (bu != null) leg.bust = bu;
         const mg = Math.round(Number(lg.marg));
         if (Number.isFinite(mg) && mg >= 2 && mg <= 9) leg.marg = mg;
-        const fr = frames(lg.frames);
+        const fr = frames(lg.frames, G);
         if (fr) leg.frames = fr;
-        const tn = turns(lg.turns, leg.first, leg.start);
+        const tn = turns(lg.turns, leg.first, leg.start, G);
         if (tn) leg.turns = tn;
-        const sa = sideStats(lg.a), sb = sideStats(lg.b);
+        const sa = sideStats(lg.a, G), sb = sideStats(lg.b, G);
         if (sa) leg.a = sa;
         if (sb) leg.b = sb;
         return leg;
@@ -3026,7 +3257,7 @@ function normalizeLeague(raw) {
 
        A side in a singles league IS the player, so a lineup there could only
        have come from a corrupt or hostile copy — it goes. */
-    if (m.lineup && typeof m.lineup === 'object' && out.league.settings.format === 'teams') {
+    if (m.lineup && typeof m.lineup === 'object' && fmt.format === 'teams') {
       o.lineup = { a: ids(m.lineup.a).slice(0, LINEUP_MAX), b: ids(m.lineup.b).slice(0, LINEUP_MAX) };
     }
     /* THE RACKS EACH SIDE STARTED ON, at a game whose handicap is given in the
@@ -3046,7 +3277,7 @@ function normalizeLeague(raw) {
   }).filter((m) => m.a && m.b && m.a !== m.b);
   out.tombstones = list(raw.tombstones).map((t) => ({
     id: fixId(t.id),
-    kind: ['player', 'team', 'season', 'match', 'bracket'].indexOf(t.kind) === -1 ? 'match' : t.kind,
+    kind: ['player', 'team', 'league', 'season', 'match', 'bracket'].indexOf(t.kind) === -1 ? 'match' : t.kind,
     at: stamp(t.at),
   })).filter((t) => t.at > 0);
   /* The tombstones are applied on the way in, so a deleted entity a stale
@@ -3087,7 +3318,7 @@ function applyTombstones(st) {
   if (!dead.size) return st;
   const keep = new Set();
   const out = Object.assign({}, st);
-  ['players', 'teams', 'seasons', 'matches', 'brackets'].forEach((k) => {
+  ['leagues', 'players', 'teams', 'seasons', 'matches', 'brackets'].forEach((k) => {
     out[k] = (st[k] || []).filter((e) => {
       const at = dead.get(e.id);
       if (at == null) return true;
@@ -3095,16 +3326,49 @@ function applyTombstones(st) {
       return false;
     });
   });
+  /* A CLUB KEEPS ITS LAST LEAGUE. The delete button already refuses one holding
+     seasons or matches, and refuses the last outright — but a tombstone can
+     arrive from ANOTHER device that deleted a league this copy's matches still
+     point at, and there is no button in that path. The newest survivor is kept
+     and its tombstone dropped, which is the same resurrection rule an edit
+     after a delete already gets. */
+  if (!out.leagues.length && (st.leagues || []).length) {
+    const survivor = (st.leagues || []).slice().sort((x, y) => Number(y.u) - Number(x.u))[0];
+    out.leagues = [survivor];
+    keep.add(survivor.id);
+  }
   out.tombstones = (st.tombstones || []).filter((t) => !keep.has(t.id));
   return out;
 }
+/* EVERY LEAGUE EITHER SIDE KNOWS ABOUT, read off the RAW states before either
+   is normalized, and handling the pre-split shape too. This exists for one
+   failure: normalizeLeague is called on each side ALONE, so a copy that has not
+   yet received a new cornhole league would re-point that league's matches at
+   leagues[0] (darts), frames() would find darts has no `rounds`, and every
+   round record on those legs would be DELETED — then committed by mergeList if
+   that side happened to carry the higher `u`. Handing both calls the union
+   means a league one side has not seen yet still resolves to its own game.
+   Resolution only: nothing here is stored, and an unknown league still lands
+   its matches on leagues[0]. */
+function gamesIn(a, b) {
+  const known = new Map();
+  [a, b].forEach((raw) => {
+    if (!raw || typeof raw !== 'object') return;
+    const r = migrateRaw(raw);
+    (Array.isArray(r.leagues) ? r.leagues : []).forEach((L) => {
+      if (L && typeof L === 'object' && L.id != null && GAMES[L.game]) known.set(String(L.id), L.game);
+    });
+  });
+  return known;
+}
 function mergeLeague(mine, theirs) {
-  const a = normalizeLeague(mine), b = normalizeLeague(theirs);
-  const out = blankLeague({ id: b.league.id });
-  out.league = Number(a.league.u) > Number(b.league.u) ? a.league : b.league;
-  ['players', 'teams', 'seasons', 'matches', 'brackets'].forEach((k) => { out[k] = mergeList(a[k], b[k]); });
+  const known = gamesIn(mine, theirs);
+  const a = normalizeLeague(mine, { knownGames: known }), b = normalizeLeague(theirs, { knownGames: known });
+  const out = blankClub({ id: b.club.id });
+  out.club = Number(a.club.u) > Number(b.club.u) ? a.club : b.club;
+  ['leagues', 'players', 'teams', 'seasons', 'matches', 'brackets'].forEach((k) => { out[k] = mergeList(a[k], b[k]); });
   out.tombstones = mergeTombstones(a.tombstones, b.tombstones);
-  return normalizeLeague(out);
+  return normalizeLeague(out, { knownGames: known });
 }
 
 /* ── What a member may send during Team Setup ──────────────────────────────
@@ -3172,16 +3436,21 @@ function setupState(mine, theirs) {
    field with no reader is a claim the boundary has to defend for ever. */
 function copyPlan(src, dst, ids) {
   if (!src || !dst) return { take: [], skip: [], teams: [], reuse: new Map(),
-                             sameGame: false, bothTeams: false, capped: false, retired: 0 };
+                             capped: false, retired: 0 };
   const want = new Set((Array.isArray(ids) ? ids : []).map((x) => String(x)));
-  const sameGame = src.league.game === dst.league.game;
-  /* A team is a shape BOTH leagues have to have: a singles league has nowhere
-     to put anybody, and a team league copied into a singles one leaves its
-     teams behind. Decided here rather than left to normalizeLeague, which
-     would null a dangling teamId as a side effect — the same outcome for a
-     reason nobody reading this could see. */
-  const bothTeams = src.league.settings.format === 'teams'
-                 && dst.league.settings.format === 'teams';
+  /* `sameGame` AND `bothTeams` BOTH DISSOLVED WITH THE CLUB/LEAGUE SPLIT, and
+     each for its own reason.
+
+     A handicap is `hcps` now, one figure per GAME, so copying the whole map is
+     correct BY CONSTRUCTION: a darts 60 lands under `darts` and only a darts
+     league ever reads it. The failure the old guard existed for — int() clamps
+     rather than refuses, so 60 became a shuffleboard head start of 10 — cannot
+     happen any more, because no figure changes game.
+
+     And teams are a CLUB's, while `format` belongs to each league. So there is
+     no longer a question to ask before bringing them: a club that gains a team
+     league later finds its teams already there, which is a better answer than
+     dropping people's teams on the way in and asking nobody. */
   /* A name already there is the same person, and the same refusal the Add a
      Player window makes. The set GROWS as people are accepted, so two source
      players called Ben — which a merge or a restored backup can produce even
@@ -3210,20 +3479,18 @@ function copyPlan(src, dst, ids) {
      the cap is dropped and its players still come, unteamed — a person
      matters more than their team. */
   const teams = [], reuse = new Map();
-  if (bothTeams) {
-    const wanted = [];
-    take.forEach((p) => { if (p.teamId && wanted.indexOf(p.teamId) === -1) wanted.push(p.teamId); });
-    const here = new Map(dst.teams.filter((t) => t.name).map((t) => [t.name.toLowerCase(), t.id]));
-    src.teams.forEach((t) => {
-      if (wanted.indexOf(t.id) === -1) return;
-      const mine = t.name ? here.get(t.name.toLowerCase()) : null;
-      if (mine) { reuse.set(t.id, mine); return; }
-      if (dst.teams.length + teams.length >= TEAMS_MAX) { capped = true; return; }
-      teams.push(t);
-    });
-  }
-  return { take: take, skip: skip, teams: teams, reuse: reuse, sameGame: sameGame,
-           bothTeams: bothTeams, capped: capped, retired: retired };
+  const wanted = [];
+  take.forEach((p) => { if (p.teamId && wanted.indexOf(p.teamId) === -1) wanted.push(p.teamId); });
+  const here = new Map(dst.teams.filter((t) => t.name).map((t) => [t.name.toLowerCase(), t.id]));
+  src.teams.forEach((t) => {
+    if (wanted.indexOf(t.id) === -1) return;
+    const mine = t.name ? here.get(t.name.toLowerCase()) : null;
+    if (mine) { reuse.set(t.id, mine); return; }
+    if (dst.teams.length + teams.length >= TEAMS_MAX) { capped = true; return; }
+    teams.push(t);
+  });
+  return { take: take, skip: skip, teams: teams, reuse: reuse,
+           capped: capped, retired: retired };
 }
 /* Returns `{ state, players, teams, skipped, capped }` — the counts, so the
    caller can say what happened in one sentence rather than a list. */
@@ -3243,23 +3510,26 @@ function copyPlayers(src, dst, ids) {
      than null — its keys are the SOURCE league's match nights, they annotate
      nothing here, and they would spend this league's AVAIL_MAX budget before
      anybody had answered for a night it actually plays. */
-  const players = plan.take.map((p) => touch({
+  /* `hcps` is COPIED WHOLE, and shallow-copied rather than shared: two clubs
+     pointing at one object is a change in one showing up in the other. Absent
+     stays absent — the allowlist's rule, and an empty map here would be the
+     one record in the app claiming a handicap nobody gave. */
+  const withHcps = (o, hcps) => {
+    if (hcps && Object.keys(hcps).length) o.hcps = Object.assign({}, hcps);
+    return o;
+  };
+  const players = plan.take.map((p) => touch(withHcps({
     id: uid(),
     name: p.name,
     /* Through the SAME map the teams were minted into — the family's rule that
        an id is a key prefix and a move rewrites from the moved-ids list, never
        by keeping the old id and hoping a boundary sorts it out. A team that
        did not travel leaves its player unteamed. */
-    teamId: (plan.bothTeams && p.teamId && idFor.get(p.teamId)) || null,
-    /* A handicap is a number in its GAME's own units: points off a 501 start
-       at darts, points off the target at shuffleboard. Carrying 120 across
-       would land as a head start of 10 — int() clamps rather than refuses —
-       and 10 is a real advantage nobody ever gave them. */
-    hcp: plan.sameGame ? p.hcp : null,
-    /* Retired is a fact about the league they stopped playing in. Somebody
+    teamId: (p.teamId && idFor.get(p.teamId)) || null,
+    /* Retired is a fact about the club they stopped playing in. Somebody
        ticked on purpose is here to play. */
     active: true,
-  }));
+  }, p.hcps)));
   /* NOT re-normalized on the way out. saveLocal stringifies `state` exactly as
      it is, so this has to be boundary-clean already — and a defensive
      normalize here would turn the test that proves it into a test of nothing. */
@@ -3291,12 +3561,15 @@ function legIsLive(leg) {
 }
 function compactSeason(st, seasonId) {
   const out = Object.assign({}, st);
-  /* The league's own game, read from the state and not from the app's — this
-     is pure, and a suite plants leagues it is not looking at. NO FALLBACK: a
-     game with no round scorer keeps no round records, so the branch below is
-     skipped outright rather than trimming one game's legs by another game's
-     rules. */
-  const R = (GAMES[st.league && st.league.game] || GAMES.darts).rounds || null;
+  /* THE SEASON'S OWN LEAGUE, and its game — read from the state and not from
+     the app's, because this is pure and a suite plants leagues it is not
+     looking at. NO FALLBACK TO DARTS: a club runs several games now, and
+     trimming one game's legs by another game's rules is exactly the figure
+     this function promises never to move. A game with no round scorer keeps no
+     round records, so the branch below is skipped outright. */
+  const season = ((st && st.seasons) || []).find((x) => x.id === seasonId) || null;
+  const SG = season ? gameIn(st, season.leagueId) : null;
+  const R = (SG && SG.rounds) || null;
   let trimmed = 0;
   out.matches = (st.matches || []).map((m) => {
     if (m.seasonId !== seasonId || !m.legs.some(legIsLive)) return m;
@@ -3384,14 +3657,32 @@ function pruneTombstones(st, now, keepMs) {
 
 /* ── Sides ─────────────────────────────────────────────────────────────────
    A side is what a match is between: a player in a singles league, a team in
-   a team league. Nothing below this line asks which. */
-function sidesOf(st, opts) {
+   a team league. Nothing below this line asks which.
+
+   EVERY ONE OF THESE TAKES A LEAGUE, because a club can run a singles darts
+   league and a doubles pool league at once and `format` is a LEAGUE's answer.
+   A reader that guessed at leagues[0] would look up a team id in the player
+   list for half a club's matches and hand back an em-dash. */
+
+/* The league a state means. `id` may be a league id, a MATCH (which carries
+   one), or nothing at all — in which case it is the club's first, which always
+   exists. Pure: it reads the state it is given and never the app's. */
+function leagueIn(st, id) {
+  const list = (st && st.leagues) || [];
+  const key = (id && typeof id === 'object') ? id.leagueId : id;
+  return list.find((L) => L.id === key) || list[0] || null;
+}
+/* This league's settings, and its game. */
+function settingsIn(st, id) { const L = leagueIn(st, id); return L ? L.settings : defaultSettings('darts'); }
+function gameIn(st, id) { const L = leagueIn(st, id); return (L && GAMES[L.game]) || null; }
+
+function sidesOf(st, lg, opts) {
   const o = opts || {};
-  if (st.league.settings.format === 'teams') return st.teams.map((t) => t.id);
+  if (settingsIn(st, lg).format === 'teams') return st.teams.map((t) => t.id);
   return st.players.filter((p) => o.all || p.active).map((p) => p.id);
 }
-function sideName(st, sideId) {
-  if (st.league.settings.format === 'teams') {
+function sideName(st, sideId, lg) {
+  if (settingsIn(st, lg).format === 'teams') {
     const t = st.teams.find((x) => x.id === sideId);
     return t ? t.name : '—';
   }
@@ -3412,7 +3703,9 @@ function sideName(st, sideId) {
    mistake as reading a stated zero as nothing recorded. */
 function lineupFor(st, m, side) {
   if (m.lineup && Array.isArray(m.lineup[side])) return { ids: m.lineup[side].slice(), recorded: true };
-  if (st.league.settings.format !== 'teams') return { ids: [m[side]], recorded: false };
+  /* The MATCH's own league, not the club's first — it is in hand, so this one
+     needs no argument. */
+  if (settingsIn(st, m).format !== 'teams') return { ids: [m[side]], recorded: false };
   return { ids: st.players.filter((p) => p.teamId === m[side] && p.active).map((p) => p.id), recorded: false };
 }
 
@@ -4390,11 +4683,17 @@ function poolPlayerStats(legs, playerId) {
            left: lost ? leftSum / lost : null,
            bestLeg: null, counted: counted };
 }
-/* Every leg in a league (or a season), each carrying its match, so a player's
-   figures are one pass. */
-function legsIn(st, seasonId) {
+/* Every leg in ONE LEAGUE (or one of its seasons), so a player's figures are
+   one pass.
+
+   `lg` IS NOT OPTIONAL and a null `seasonId` means "this league, every season"
+   — never "every league". A club runs several games, and folding a rack into a
+   darts player's average is a figure that changed with nothing on screen to
+   say so. */
+function legsIn(st, seasonId, lg) {
   const out = [];
   (st.matches || []).forEach((m) => {
+    if (m.leagueId !== lg) return;
     if (seasonId && m.seasonId !== seasonId) return;
     if (!countsForStandings(m)) return;
     (m.legs || []).forEach((leg) => out.push(leg));
@@ -4418,8 +4717,9 @@ function normalizeDevice(raw) {
     .filter((l) => l && typeof l === 'object' && ID_RE.test(String(l.id || '')))
     .map((l) => ({
       id: String(l.id),
-      name: String(l.name || '').slice(0, NAME_MAX) || 'League',
-      game: GAMES[l.game] ? l.game : 'darts',
+      name: String(l.name || '').slice(0, NAME_MAX) || 'Club',
+      /* No `game`. A club runs as many as it likes, so the device record has no
+         single answer and nothing reads one — the header picker shows names. */
       role: ['owner', 'admin', 'viewer'].indexOf(l.role) === -1 ? 'viewer' : l.role,
       cloud: l.cloud === true,
       /* The cloud revision this device last adopted, and whether it holds an
@@ -4528,7 +4828,7 @@ function loadLeague(id) {
     const st = normalizeLeague(raw);
     /* The saved copy's id is the key it was found under, whatever normalize
        minted for a copy that had lost it. */
-    st.league.id = id;
+    st.club.id = id;
     return st;
   } catch (e) { return null; }
 }
@@ -4559,9 +4859,9 @@ function saveLocal() {
   try {
     if (state) {
       state.schema = SCHEMA;
-      const entry = device.leagues.find((l) => l.id === state.league.id);
-      if (entry) { entry.name = state.league.name; entry.game = state.league.game; }
-      localStorage.setItem(LEAGUE_KEY(state.league.id), JSON.stringify(state));
+      const entry = device.leagues.find((l) => l.id === state.club.id);
+      if (entry) { entry.name = state.club.name; }
+      localStorage.setItem(LEAGUE_KEY(state.club.id), JSON.stringify(state));
     }
     localStorage.setItem(DEVICE_KEY, JSON.stringify(device));
   } catch (e) {
@@ -4571,7 +4871,7 @@ function saveLocal() {
 function save() {
   if (viewOnly) return;
   editSeq += 1;
-  const entry = state ? device.leagues.find((l) => l.id === state.league.id) : null;
+  const entry = state ? device.leagues.find((l) => l.id === state.club.id) : null;
   if (entry && entry.cloud) entry.dirty = true;
   saveLocal();
   if (typeof window.cloudPush === 'function') window.cloudPush();
@@ -4593,13 +4893,13 @@ addEventListener('storage', (e) => {
     render();
     return;
   }
-  if (state && e.key === LEAGUE_KEY(state.league.id)) {
+  if (state && e.key === LEAGUE_KEY(state.club.id)) {
     let incoming = null;
     try { incoming = JSON.parse(e.newValue || 'null'); } catch (err) { return; }
     if (!incoming) return;
     if (Number(incoming.schema || 1) > SCHEMA) haltForNewerData(incoming.schema);
     state = normalizeLeague(incoming);
-    state.league.id = e.key.slice(LEAGUE_KEY('').length);
+    state.club.id = e.key.slice(LEAGUE_KEY('').length);
     noteU(maxU(state));
     render();
   }
@@ -4610,7 +4910,7 @@ addEventListener('storage', (e) => {
    owner; what a cloud league says about this account arrives with sync. Every
    write surface in the app asks canEdit(), which is also where a shared
    snapshot says no. */
-function myEntry() { return state ? device.leagues.find((l) => l.id === state.league.id) || null : null; }
+function myEntry() { return state ? device.leagues.find((l) => l.id === state.club.id) || null : null; }
 function myRole() { const e = myEntry(); return e ? e.role : 'viewer'; }
 function canEdit() { return !!state && !viewOnly && myRole() !== 'viewer'; }
 function isOwner() { return !!state && !viewOnly && myRole() === 'owner'; }
@@ -4630,7 +4930,7 @@ function isOwner() { return !!state && !viewOnly && myRole() === 'owner'; }
    is what keeps it to teams and their own membership. Charles chose that trade
    knowingly; CLAUDE.md records it. */
 let setupOf = null;          /* { id, on } — the league document's `setup` field */
-function setupOpen() { return !!(state && setupOf && setupOf.id === state.league.id && setupOf.on); }
+function setupOpen() { return !!(state && setupOf && setupOf.id === state.club.id && setupOf.on); }
 function canSetUp() {
   return canEdit()
     || (!!state && !viewOnly && setupOpen() && isCloudLeague() && !!cloudUser && !!meDoc);
@@ -4662,10 +4962,10 @@ function openLeague(id) {
    backup, or the demo. Additive — a league already known is replaced under its
    own id and the others are untouched. */
 function adoptLeague(st, role, cloud) {
-  const known = device.leagues.find((l) => l.id === st.league.id);
-  if (known) { known.name = st.league.name; known.game = st.league.game; if (role) known.role = role; if (cloud != null) known.cloud = cloud; }
-  else device.leagues.push({ id: st.league.id, name: st.league.name, game: st.league.game, role: role || 'owner', cloud: !!cloud });
-  device.current = st.league.id;
+  const known = device.leagues.find((l) => l.id === st.club.id);
+  if (known) { known.name = st.club.name; if (role) known.role = role; if (cloud != null) known.cloud = cloud; }
+  else device.leagues.push({ id: st.club.id, name: st.club.name, role: role || 'owner', cloud: !!cloud });
+  device.current = st.club.id;
   state = st;
   noteU(maxU(state));
   seasonPick = null;
@@ -5005,27 +5305,61 @@ document.querySelector('.tabs').addEventListener('keydown', (e) => {
 document.querySelectorAll('.tab, .tabbar button').forEach((b) =>
   b.addEventListener('click', () => pressTab(b.dataset.tab)));
 
-/* ═══════════════════════════════ Reading the league ═══════════════════════
-   Small helpers every view uses. `seasonPick` is a VIEW state, like a sort
-   order: it lives beside the tab, never in `state`, so it rides into no backup
-   and no link. */
+/* ═══════════════════════════════ Reading the club ═════════════════════════
+   Small helpers every view uses. `seasonPick` and `leaguePick` are VIEW state,
+   like a sort order: they live beside the tab, never in `state`, so they ride
+   into no backup and no link. */
 const $ = (id) => document.getElementById(id);
 let seasonPick = null;          /* season id chosen in a picker, or null for "the current one" */
+let leaguePick = null;          /* league id chosen in a picker, or null for "the first one" */
 let standingsMode = 'sides';    /* 'sides' or 'players' — the individual table in a team league */
 
-function G() { return GAMES[state.league.game]; }
+/* THE LEAGUE EVERY VIEW IS LOOKING AT. Mirrors currentSeason() one level up,
+   and NEVER RETURNS NULL — normalizeLeague guarantees a club has at least one
+   league, which is the whole reason G() and S() can stay no-arg and ~90 call
+   sites did not have to change. */
+function currentLeague() {
+  if (!state) return null;
+  const all = state.leagues;
+  if (leaguePick) { const hit = all.find((L) => L.id === leaguePick); if (hit) return hit; }
+  return all[0] || null;
+}
+function currentLeagueId() { const L = currentLeague(); return L ? L.id : null; }
+/* The PICKED league's game. Every league-wide view — the table, the rules card,
+   the season list — reads this.
+
+   ANYTHING HOLDING ONE SPECIFIC MATCH MUST USE gameOf(m) INSTEAD. A club runs
+   several games, so a pool match reached while the picker sits on darts would
+   otherwise be folded by the x01 rules — with nothing on screen to say so, and
+   the leg is stored. */
+function G() { return GAMES[currentLeague().game]; }
+/* The game a MATCH is played at, from the match's own league. Never the picker. */
+function gameOf(m) { return (state && gameIn(state, m)) || GAMES.darts; }
+/* The settings a MATCH is played under. Same rule as gameOf. */
+function settingsOf(m) { return settingsIn(state, m); }
 /* The game's own word at the start of a sentence or a label. `unit` is stored
    lower case because that is how it reads mid-sentence, which is nearly
    everywhere it is used. */
 function capUnit(w) { return w.charAt(0).toUpperCase() + w.slice(1); }
-function S() { return state.league.settings; }
+function S() { return currentLeague().settings; }
 function isTeams() { return !!state && S().format === 'teams'; }
-function nameOf(id) { return state ? sideName(state, id) : '—'; }
+function nameOf(id) { return state ? sideName(state, id, currentLeagueId()) : '—'; }
+/* A side named in one specific MATCH — which may belong to a league played as
+   teams while the picker sits on a singles one. */
+function nameIn(m, id) { return state ? sideName(state, id, m) : '—'; }
 function playerById(id) { return state.players.find((p) => p.id === id) || null; }
 function teamById(id) { return state.teams.find((t) => t.id === id) || null; }
 function playerName(id) { const p = playerById(id); return p ? p.name : '—'; }
-function seasonsSorted() {
-  return state.seasons.slice().sort((a, b) => b.startsOn.localeCompare(a.startsOn) || b.u - a.u);
+/* A player's handicap AT THE PICKED LEAGUE'S GAME, and at any game. Absent is
+   null, and null is not nought — a nought handicap was never given. */
+function hcpFor(p, game) { return (p && p.hcps && p.hcps[game] != null) ? p.hcps[game] : null; }
+function hcpOf(p) { return hcpFor(p, currentLeague().game); }
+/* The handicap that applies in one specific MATCH. */
+function hcpIn(m, p) { const L = leagueIn(state, m); return L ? hcpFor(p, L.game) : null; }
+function seasonsSorted(lg) {
+  const id = lg === undefined ? currentLeagueId() : lg;
+  return state.seasons.filter((s) => s.leagueId === id)
+    .sort((a, b) => b.startsOn.localeCompare(a.startsOn) || b.u - a.u);
 }
 /* The season a picker means: the one chosen, else the newest active one, else
    the newest, else none. */
@@ -5035,17 +5369,27 @@ function currentSeason() {
   if (seasonPick) { const hit = all.find((s) => s.id === seasonPick); if (hit) return hit; }
   return all.find((s) => s.status === 'active') || all[0] || null;
 }
-/* League matches — the schedule, never a bracket's — of one season. With no
-   seasons at all, every league match; with seasons, only the one asked for. */
-function leagueMatches(seasonId) {
-  return state.matches.filter((m) => !m.bracketId
-    && (state.seasons.length ? m.seasonId === seasonId : true));
+/* League matches — the schedule, never a bracket's — of one season, IN ONE
+   LEAGUE. With no seasons in that league, every one of its league matches;
+   with seasons, only the one asked for.
+
+   THE NO-SEASONS FALLBACK IS PER LEAGUE and not per club: a club with a
+   seasonless darts league beside a seasoned pool league would otherwise draw
+   every pool fixture on the darts table. It is the same rule it always was —
+   the first season adopts the matches that came before it — asked of one
+   league at a time. */
+function leagueMatches(seasonId, lg) {
+  const id = lg === undefined ? currentLeagueId() : lg;
+  const seasoned = state.seasons.some((s) => s.leagueId === id);
+  return state.matches.filter((m) => !m.bracketId && m.leagueId === id
+    && (seasoned ? m.seasonId === seasonId : true));
 }
 /* The sides a season's table lists: every active side, plus any side that
    played in it and has since retired — a result counted is a result shown. */
-function sidesForSeason(seasonId) {
-  const set = new Set(sidesOf(state));
-  leagueMatches(seasonId).forEach((m) => { if (countsForStandings(m)) { set.add(m.a); set.add(m.b); } });
+function sidesForSeason(seasonId, lg) {
+  const id = lg === undefined ? currentLeagueId() : lg;
+  const set = new Set(sidesOf(state, id));
+  leagueMatches(seasonId, id).forEach((m) => { if (countsForStandings(m)) { set.add(m.a); set.add(m.b); } });
   return [...set];
 }
 function tableFor(seasonId) {
@@ -5240,7 +5584,7 @@ function render() {
   renderMatches();
   renderPlayers();
   renderTournament();
-  renderLeagueTab();
+  renderClubTab();
   /* Every edit surface goes for a viewer and in a shared view. */
   const edit = canEdit();
   document.documentElement.toggleAttribute('data-readonly', !edit);
@@ -5257,7 +5601,7 @@ function renderLeaguePicker() {
   $('leagueSelLabel').hidden = !many;
   if (!many) return;
   sel.innerHTML = device.leagues.map((l) =>
-    '<option value="' + esc(l.id) + '"' + (state && l.id === state.league.id ? ' selected' : '') + '>'
+    '<option value="' + esc(l.id) + '"' + (state && l.id === state.club.id ? ' selected' : '') + '>'
     + esc(l.name) + '</option>').join('');
 }
 
@@ -5265,7 +5609,7 @@ function renderViewbar() {
   const bar = $('viewbar');
   bar.hidden = !viewOnly;
   if (!viewOnly) { bar.textContent = ''; return; }
-  bar.innerHTML = '<strong>You are looking at a shared snapshot of ' + esc(state.league.name) + '.</strong>'
+  bar.innerHTML = '<strong>You are looking at a shared snapshot of ' + esc(state.club.name) + '.</strong>'
     + '<span>Nothing here is saved to this browser, and your own leagues are untouched.</span>'
     + (shareMeta && shareMeta.sharedAt
         ? '<span class="muted">Shared ' + esc(fmtDate(shareMeta.sharedAt)) + '</span>' : '')
@@ -5277,6 +5621,21 @@ function renderViewbar() {
 
 /* One season picker per view, all reading the same choice. Rebuilt on every
    render because the list can change; the choice survives it. */
+/* THE LEAGUE EVERY GAME-SCOPED VIEW IS SHOWING. One global `leaguePick` drawn
+   in three headings, exactly as `seasonPick` already is: choosing on Standings
+   moves Matches and Tournament with it, because they are three views of one
+   competition and disagreeing about which would be a bug you could see.
+
+   HIDDEN BELOW TWO, the same rule the season picker follows — a club that runs
+   one league reads exactly as it did before the split. */
+function fillLeaguePicker(sel) {
+  const all = state.leagues;
+  const cur = currentLeague();
+  const wrap = sel.closest('.pickwrap') || sel;
+  wrap.hidden = all.length < 2;
+  sel.innerHTML = all.map((L) => '<option value="' + esc(L.id) + '"' + (cur && L.id === cur.id ? ' selected' : '') + '>'
+    + esc(L.name) + '</option>').join('');
+}
 function fillSeasonPicker(sel) {
   const all = seasonsSorted();
   const cur = currentSeason();
@@ -5288,6 +5647,7 @@ function fillSeasonPicker(sel) {
 
 function renderStandings() {
   const season = currentSeason();
+  fillLeaguePicker($('stLeague'));
   fillSeasonPicker($('stSeason'));
   const seasonId = season ? season.id : null;
   const wrap = $('standingsWrap');
@@ -5315,7 +5675,7 @@ function renderStandings() {
   const played = t.matches.filter(countsForStandings).length;
   const anyDraw = t.rows.some((r) => r.d > 0) || S().matchFormat.mode === 'fixed';
   const cols = (!isTeams()) ? G().leaderboardColumns : [];
-  const legs = seasonId ? legsIn(state, seasonId) : legsIn(state, null);
+  const legs = legsIn(state, seasonId || null, currentLeagueId());
   const statsFor = (id) => cols.length ? G().playerStats(legs, id) : null;
   const unit = G().unit;
   wrap.innerHTML = '<table id="standingsTable"><thead><tr>'
@@ -5336,7 +5696,7 @@ function renderStandings() {
         + '<td class="num">' + r.rank + '</td>'
         + '<th scope="row"><button type="button" class="rowbtn" data-side-open="' + esc(r.sideId) + '">' + esc(nameOf(r.sideId)) + '</button>'
         + (p && !p.active ? ' <span class="pill">retired</span>' : '')
-        + (p && p.hcp != null ? ' <span class="pill" title="' + esc(G().handicap.label) + '">' + esc(G().handicap.pill(p.hcp)) + '</span>' : '')
+        + (p && hcpOf(p) != null ? ' <span class="pill" title="' + esc(G().handicap.label) + '">' + esc(G().handicap.pill(hcpOf(p))) + '</span>' : '')
         + '</th>'
         + '<td class="num">' + r.p + '</td><td class="num">' + r.w + '</td>'
         + (anyDraw ? '<td class="num">' + r.d + '</td>' : '')
@@ -5358,7 +5718,7 @@ function renderStandings() {
      the GAME says both how the figure is drawn and what it means — this line
      used to work the first out by reading the first word of the label, which
      would have drawn a second game's handicap wrong with nothing to see. */
-  const anyHcp = t.rows.some((r) => { const p = playerById(r.sideId); return p && p.hcp != null; });
+  const anyHcp = t.rows.some((r) => { const p = playerById(r.sideId); return p && hcpOf(p) != null; });
   const key = 'P played, W won' + (anyDraw ? ', D drawn' : '') + ', L lost, ' + unit.many + ' for and against, ± ' + unit.one + ' difference.'
     + (anyHcp ? ' The figure beside a name is that player’s ' + G().handicap.label.toLowerCase()
        + ', ' + G().handicap.note + '.' : '');
@@ -5369,7 +5729,7 @@ function renderStandings() {
 }
 /* The individual table of a team league: every player's own legs. */
 function renderIndividual(seasonId, wrap) {
-  const legs = legsIn(state, seasonId);
+  const legs = legsIn(state, seasonId, currentLeagueId());
   const cols = G().leaderboardColumns;
   /* Sorted on the game's OWN first column after wins — the 3-dart average at
      darts, points per game at shuffleboard — rather than on `avg3`, which a
@@ -5424,11 +5784,12 @@ function matchRow(m) {
 }
 function renderMatches() {
   const season = currentSeason();
+  fillLeaguePicker($('mtLeague'));
   fillSeasonPicker($('mtSeason'));
   const seasonId = season ? season.id : null;
   const wrap = $('matchesWrap');
   const matches = (state.seasons.length && !season) ? [] : leagueMatches(seasonId);
-  const sides = sidesOf(state);
+  const sides = sidesOf(state, currentLeagueId());
   /* Offered until something has been PLAYED: an unplayed set can be drawn
      again with different dates or a double round, and the window says so. */
   const anyPlayed = matches.some((m) => m.status !== 'scheduled' || m.legs.length);
@@ -5465,7 +5826,7 @@ function renderMatches() {
 
 /* ── Players and teams ─────────────────────────────────────────────────── */
 function renderPlayers() {
-  const legs = legsIn(state, null);
+  const legs = legsIn(state, null, currentLeagueId());
   const hcpLabel = G().handicap.label;
   const lead = G().leaderboardColumns[0];
   const mineId = myClaim();
@@ -5475,7 +5836,7 @@ function renderPlayers() {
     return '<button type="button" class="prow" data-player="' + esc(p.id) + '">'
       + '<span class="pname">' + esc(p.name)
       + (team ? ' <span class="pill">' + esc(team.name) + '</span>' : '')
-      + (p.hcp != null ? ' <span class="pill" title="' + esc(hcpLabel) + '">' + esc(hcpLabel) + ' ' + p.hcp + '</span>' : '')
+      + (hcpOf(p) != null ? ' <span class="pill" title="' + esc(hcpLabel) + '">' + esc(hcpLabel) + ' ' + hcpOf(p) + '</span>' : '')
       + (p.id === mineId ? ' <span class="pill ok">you</span>' : '')
       + (!p.active ? ' <span class="pill">retired</span>' : '') + '</span>'
       /* The game's OWN headline figure, not `st.avg3` — that is a darts key, so
@@ -5552,23 +5913,52 @@ function renderBracketCard(b) {
 }
 function renderTournament() {
   const wrap = $('bracketsWrap');
-  $('addBracketBtn').hidden = !canEdit() || sidesOf(state).length < 2;
-  const list = state.brackets.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.u - a.u);
+  fillLeaguePicker($('trLeague'));
+  $('addBracketBtn').hidden = !canEdit() || sidesOf(state, currentLeagueId()).length < 2;
+  const lg = currentLeagueId();
+  const list = state.brackets.filter((b) => b.leagueId === lg)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.u - a.u);
   wrap.innerHTML = list.length ? list.map(renderBracketCard).join('')
-    : '<div class="card"><p class="empty">No tournaments yet' + (canEdit() && sidesOf(state).length >= 2 ? ' — start one above.' : '.') + '</p></div>';
+    : '<div class="card"><p class="empty">No tournaments yet' + (canEdit() && sidesOf(state, currentLeagueId()).length >= 2 ? ' — start one above.' : '.') + '</p></div>';
 }
 
-/* ── The League tab ────────────────────────────────────────────────────── */
+/* ── The Club tab ──────────────────────────────────────────────────────── */
 const TIEBREAK_PRESETS = [
   ['pts,legDiff,legsFor,h2h', 'Points · difference · for · head-to-head'],
   ['pts,h2h,legDiff,legsFor', 'Points · head-to-head · difference · for'],
   ['pts,wins,legDiff,legsFor', 'Points · wins · difference · for'],
   ['pts,legDiff,legsFor', 'Points · difference · for'],
 ];
-function renderLeagueTab() {
+/* The club's leagues, oldest first — the order they were created, which is the
+   order everything else falls back to. Each row says its game and how much is
+   in it, and pressing one PICKS it: the rules card, the season list and every
+   game-scoped tab follow, which is the whole answer to "which league is this". */
+function renderLeaguesCard() {
+  const cur = currentLeagueId();
+  $('addLeagueBtn').hidden = !canEdit();
+  $('leaguesWrap').innerHTML = '<div class="plist">' + state.leagues.map((L) => {
+    const seasons = state.seasons.filter((x) => x.leagueId === L.id).length;
+    const played = state.matches.filter((m) => m.leagueId === L.id && countsForStandings(m)).length;
+    return '<button type="button" class="prow" data-league="' + esc(L.id) + '">'
+      + '<span class="pname">' + esc(L.name)
+      + ' <span class="pill">' + esc(GAMES[L.game].name) + '</span>'
+      + (L.id === cur ? ' <span class="pill ok">showing</span>' : '') + '</span>'
+      + '<span class="pstat">' + (seasons ? plural(seasons, 'season') : 'no seasons yet')
+      + ' · ' + (played ? plural(played, 'match', 'matches') + ' played' : 'nothing played') + '</span></button>';
+  }).join('') + '</div>';
+}
+
+function renderClubTab() {
+  const lg = currentLeague();
   const s = S();
-  const locked = state.matches.length > 0;
-  $('lr_name').value = state.league.name;
+  /* LOCKED PER LEAGUE, not per club. `format` is fixed once a match exists —
+     but a club that has played a season of darts must still be able to say its
+     brand new pool league is played in teams. */
+  const locked = state.matches.some((m) => m.leagueId === lg.id);
+  $('cl_name').value = state.club.name;
+  renderLeaguesCard();
+  fillLeaguePicker($('lrLeague'));
+  $('lr_name').value = lg.name;
   $('lr_game').value = G().name;
   $('lr_format').value = s.format;
   $('lr_format').disabled = locked || !canEdit();
@@ -5605,7 +5995,8 @@ function renderLeagueTab() {
     if (el.id !== 'lr_format' && el.id !== 'lr_game') el.disabled = !canEdit();
     if (el.id === 'lr_game') el.disabled = true;
   });
-  /* Seasons */
+  /* Seasons — OF THE PICKED LEAGUE. A season belongs to one competition, so a
+     club running two games has two lists and never one mixed one. */
   const seasons = seasonsSorted();
   $('addSeasonBtn').hidden = !canEdit();
   $('seasonsWrap').innerHTML = seasons.length ? '<div class="plist">' + seasons.map((sn) => {
@@ -5617,7 +6008,8 @@ function renderLeagueTab() {
     return '<' + tag + ' data-season="' + esc(sn.id) + '"><span class="pname">' + esc(sn.name)
       + (sn.status === 'done' ? ' <span class="pill">closed</span>' : ' <span class="pill ok">active</span>') + '</span>'
       + '<span class="pstat">from ' + esc(fmtDate(sn.startsOn)) + ' · ' + (n ? played + ' of ' + plural(n, 'match', 'matches') + ' played' : 'no fixtures yet') + '</span></' + (canEdit() ? 'button' : 'div') + '>';
-  }).join('') + '</div>' : '<p class="empty">No seasons yet' + (canEdit() ? ' — start one above.' : '.') + '</p>';
+  }).join('') + '</div>' : '<p class="empty">No seasons in ' + esc(lg.name) + ' yet'
+      + (canEdit() ? ' — start one above.' : '.') + '</p>';
   /* Invite and Members — and neither card in somebody else's snapshot: there
      is no device record, no ID worth showing and nothing to create or forget.
      Charles found Create Another League live in a read-only link. */
@@ -5637,7 +6029,7 @@ function renderLeagueTab() {
   $('trimBtn').hidden = !canEdit() || !trimmable || bytes < TRIM_AT;
   $('deleteLeagueBtn').hidden = !isOwner();
   $('forgetBtn').hidden = viewOnly;
-  $('forgetBtn').textContent = (myEntry() && myEntry().cloud && myRole() !== 'owner') ? 'Leave This League' : 'Forget This League';
+  $('forgetBtn').textContent = (myEntry() && myEntry().cloud && myRole() !== 'owner') ? 'Leave This Club' : 'Forget This Club';
   $('joinBtn').hidden = !(window.lnCloud && window.lnCloud.on);
 }
 
@@ -5664,7 +6056,9 @@ function openAdd(kind) {
 }
 function suggestSeasonName() {
   const y = new Date().getFullYear();
-  const taken = new Set(state.seasons.map((s) => s.name));
+  /* Names taken IN THIS LEAGUE. Two leagues in one club may each have a
+     "Winter 2026" — they are different competitions. */
+  const taken = new Set(seasonsSorted().map((s) => s.name));
   const base = ['Spring ' + y, 'Summer ' + y, 'Autumn ' + y, 'Winter ' + y][Math.floor(new Date().getMonth() / 3)];
   let name = base, n = 2;
   while (taken.has(name)) name = base + ' (' + (n++) + ')';
@@ -5685,21 +6079,26 @@ $('addSave').addEventListener('click', () => {
     if (state.players.some((p) => p.name.toLowerCase() === name.toLowerCase())) {
       $('addWarn').textContent = 'There is already a player called ' + name + '.'; return;
     }
-    state.players.push(touch({ id: uid(), name: name, teamId: null, hcp: null, active: true }));
+    state.players.push(touch({ id: uid(), name: name, teamId: null, active: true }));
   } else if (addKind === 'team') {
     state.teams.push(touch({ id: uid(), name: name }));
   } else if (addKind === 'season') {
     const date = $('ad_date').value;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { $('addWarn').textContent = 'Pick the date it starts.'; $('ad_date').focus(); return; }
-    const sn = touch({ id: uid(), name: name, startsOn: date, status: 'active' });
-    /* THE FIRST SEASON TAKES THE MATCHES THAT CAME BEFORE IT. With no seasons
-       at all, leagueMatches() returns every league match; the moment one
-       exists it returns only that season's, so a match added earlier — which
-       has no season, because there was none to give it — dropped off the
-       Matches tab and out of the table with nothing said. It was played in
-       this league, and this is the league's first season. Only the first:
-       after that a match belongs to whichever season it was added under. */
-    const orphans = state.seasons.length ? [] : state.matches.filter((m) => !m.bracketId && !m.seasonId);
+    const lgId = currentLeagueId();
+    const sn = touch({ id: uid(), leagueId: lgId, name: name, startsOn: date, status: 'active' });
+    /* THE FIRST SEASON TAKES THE MATCHES THAT CAME BEFORE IT — the first
+       season OF THIS LEAGUE, and only that league's loose matches. With no
+       seasons at all, leagueMatches() returns every one of the league's
+       matches; the moment one exists it returns only that season's, so a match
+       added earlier — which has no season, because there was none to give it —
+       dropped off the Matches tab and out of the table with nothing said. It
+       was played in this league, and this is the league's first season. Only
+       the first: after that a match belongs to whichever season it was added
+       under. Scoped per league, or starting a season in a brand new pool
+       league would swallow the darts league's loose fixtures. */
+    const seasoned = state.seasons.some((x) => x.leagueId === lgId);
+    const orphans = seasoned ? [] : state.matches.filter((m) => !m.bracketId && !m.seasonId && m.leagueId === lgId);
     state.seasons.push(sn);
     orphans.forEach((m) => { m.seasonId = sn.id; touch(m); });
     seasonPick = sn.id;
@@ -5716,9 +6115,9 @@ $('addCancel').addEventListener('click', () => $('addDialog').close());
 ['ad_name', 'ad_date'].forEach((id) => $(id).addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) { e.preventDefault(); $('addSave').click(); }
 }));
-$('lg_name').addEventListener('keydown', (e) => {
+['lg_name', 'lg_leagueName'].forEach((id) => $(id).addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) { e.preventDefault(); $('leagueSave').click(); }
-});
+}));
 
 /* ── The player editor ────────────────────────────────────────────────── */
 let playerCtx = null;
@@ -5734,13 +6133,36 @@ function openPlayer(id) {
   $('pl_team').innerHTML = '<option value="">No team</option>' + state.teams.slice().sort((a, b) => a.name.localeCompare(b.name))
     .map((t) => '<option value="' + esc(t.id) + '">' + esc(t.name) + '</option>').join('');
   $('pl_team').value = p.teamId || '';
-  $('pl_hcpLabel').textContent = G().handicap.label;
-  $('pl_hcp').min = String(G().handicap.min); $('pl_hcp').max = String(G().handicap.max);
-  $('pl_hcp').value = p.hcp == null ? '' : String(p.hcp);
+  fillHcpFields(p);
   $('pl_active').checked = p.active;
-  $('playerStats').innerHTML = statsHtml(G().playerStats(legsIn(state, null), p.id));
+  $('playerStats').innerHTML = statsHtml(G().playerStats(legsIn(state, null, currentLeagueId()), p.id));
   $('playerWarn').textContent = '';
   openModal($('playerDialog'));
+}
+/* The games this club actually plays, oldest league first, deduped — never
+   every game in the registry, which would read four boxes at a club that has
+   only ever thrown darts. */
+function clubGames() {
+  const out = [];
+  state.leagues.forEach((L) => { if (out.indexOf(L.game) === -1) out.push(L.game); });
+  return out;
+}
+function fillHcpFields(p) {
+  const games = clubGames();
+  const wrap = $('pl_hcps');
+  wrap.innerHTML = games.map((g) => {
+    const G0 = GAMES[g];
+    const v = hcpFor(p, g);
+    /* The game's name rides in the hint under the label rather than in it: the
+       label is the game's own word for the figure ("Start deduction"), and two
+       games' words are what tell the boxes apart. */
+    return '<div class="field"><label for="plh_' + esc(g) + '">' + esc(G0.handicap.label)
+      + (games.length > 1 ? ' <span class="hint">· ' + esc(G0.name) + '</span>' : '')
+      + '</label><input type="number" id="plh_' + esc(g) + '" data-game="' + esc(g)
+      + '" inputmode="numeric" placeholder="none" min="' + G0.handicap.min + '" max="' + G0.handicap.max
+      + '" value="' + (v == null ? '' : esc(String(v))) + '"></div>';
+  }).join('');
+  wrap.hidden = !games.length;
 }
 function statsHtml(st) {
   const unit = G().unit;
@@ -5758,22 +6180,43 @@ function playerChanged() {
   if (!p) return;
   const name = $('pl_name').value.trim().slice(0, NAME_MAX);
   if (!name) { $('playerWarn').textContent = 'Not saved while the name is empty.'; return; }
-  const hcpRaw = $('pl_hcp').value.trim();
-  const hcp = hcpRaw === '' ? null : Math.round(Number(hcpRaw));
-  if (hcp != null && (!Number.isFinite(hcp) || hcp < G().handicap.min || hcp > G().handicap.max)) {
-    $('playerWarn').textContent = 'Not saved: the ' + G().handicap.label.toLowerCase() + ' must be between ' + G().handicap.min + ' and ' + G().handicap.max + '.'; return;
+  /* EACH BOX AGAINST ITS OWN GAME'S RANGE, and the refusal names the game —
+     "between -8 and 8" says nothing at a club where one box allows 200. */
+  const hcps = {};
+  const boxes = [...$('pl_hcps').querySelectorAll('input[data-game]')];
+  for (const el of boxes) {
+    const g = el.dataset.game, H = GAMES[g].handicap;
+    const raw = el.value.trim();
+    if (raw === '') continue;
+    const n = Math.round(Number(raw));
+    if (!Number.isFinite(n) || n < H.min || n > H.max) {
+      $('playerWarn').textContent = 'Not saved: the ' + GAMES[g].name + ' ' + H.label.toLowerCase()
+        + ' must be between ' + H.min + ' and ' + H.max + '.';
+      return;
+    }
+    hcps[g] = n;
   }
   $('playerWarn').textContent = '';
   p.name = name;
   p.teamId = isTeams() && $('pl_team').value ? $('pl_team').value : null;
-  p.hcp = hcp;
+  /* ABSENT rather than empty — the boundary's own rule, and a key with nothing
+     in it would ride into every backup and Firestore document for ever. A game
+     the club no longer plays keeps its figure: clubGames() draws no box for it,
+     so nothing here can clear it by accident. */
+  const kept = Object.assign({}, p.hcps || {});
+  clubGames().forEach((g) => { delete kept[g]; });
+  const merged = Object.assign(kept, hcps);
+  if (Object.keys(merged).length) p.hcps = merged; else delete p.hcps;
   p.active = $('pl_active').checked;
   touch(p);
   $('playerTitle').textContent = p.name;
   save();
   render();
 }
-['pl_name', 'pl_team', 'pl_hcp', 'pl_active'].forEach((id) => $(id).addEventListener('change', playerChanged));
+['pl_name', 'pl_team', 'pl_active'].forEach((id) => $(id).addEventListener('change', playerChanged));
+/* DELEGATED, because the handicap boxes are rebuilt every time the window
+   opens and a listener attached to one of them would go with it. */
+$('pl_hcps').addEventListener('change', (e) => { if (e.target.dataset.game) playerChanged(); });
 $('playerDone').addEventListener('click', () => $('playerDialog').close());
 $('playerDialog').addEventListener('close', () => { if (!$('playerDialog').open) playerCtx = null; });
 $('playerDelete').addEventListener('click', () => {
@@ -5929,7 +6372,7 @@ function openSchedule() {
   openModal($('scheduleDialog'));
 }
 function scheduleNote() {
-  const sides = sidesOf(state);
+  const sides = sidesOf(state, currentLeagueId());
   const rounds = roundRobin(sides, { doubleRound: $('sc_double').checked });
   const n = rounds.reduce((a, r) => a + r.length, 0);
   const seasonId = $('sc_season').value;
@@ -5956,12 +6399,14 @@ $('scheduleSave').addEventListener('click', () => {
   /* An unplayed set goes, tombstoned so no other device brings it back. */
   const at = nextU();
   existing.forEach((m) => state.tombstones.push({ id: m.id, kind: 'match', at: at }));
-  state.matches = state.matches.filter((m) => !(m.seasonId === seasonId && !m.bracketId));
+  const wipe = new Set(existing.map((m) => m.id));
+  state.matches = state.matches.filter((m) => !wipe.has(m.id));
   const everyRaw = Number($('sc_every').value);
   const every = Number.isFinite(everyRaw) && everyRaw >= 0 ? Math.round(everyRaw) : 7;
-  const rounds = dateRounds(roundRobin(sidesOf(state), { doubleRound: $('sc_double').checked }), start, every);
+  const rounds = dateRounds(roundRobin(sidesOf(state, currentLeagueId()), { doubleRound: $('sc_double').checked }), start, every);
+  const lgId = currentLeagueId();
   rounds.forEach((rd) => rd.pairs.forEach((pr) => state.matches.push(touch({
-    id: uid(), seasonId: seasonId, bracketId: null, slot: null, round: rd.round, date: rd.date, venue: '',
+    id: uid(), leagueId: lgId, seasonId: seasonId, bracketId: null, slot: null, round: rd.round, date: rd.date, venue: '',
     a: pr.a, b: pr.b, status: 'scheduled', score: { a: 0, b: 0 }, legs: [],
   }))));
   seasonPick = seasonId;
@@ -5981,7 +6426,7 @@ $('scheduleCancel').addEventListener('click', () => $('scheduleDialog').close())
 /* ── Adding one match by hand ─────────────────────────────────────────── */
 function openAddMatch() {
   const season = currentSeason();
-  const sides = sidesOf(state).slice().sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+  const sides = sidesOf(state, currentLeagueId()).slice().sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
   const opts = sides.map((id) => '<option value="' + esc(id) + '">' + esc(nameOf(id)) + '</option>').join('');
   $('am_a').innerHTML = opts; $('am_b').innerHTML = opts;
   if (sides.length > 1) $('am_b').value = sides[1];
@@ -5999,8 +6444,9 @@ $('addMatchSave').addEventListener('click', () => {
   if (!a || !b || a === b) { $('addMatchWarn').textContent = 'Pick two different sides.'; return; }
   const date = $('am_date').value;
   if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) { $('addMatchWarn').textContent = 'That date is not a date.'; return; }
-  const seasonId = state.seasons.length ? $('am_season').value : null;
-  const m = touch({ id: uid(), seasonId: seasonId, bracketId: null, slot: null,
+  const seasons = seasonsSorted();
+  const seasonId = seasons.length ? $('am_season').value : null;
+  const m = touch({ id: uid(), leagueId: currentLeagueId(), seasonId: seasonId, bracketId: null, slot: null,
     round: Math.max(0, Math.min(999, Math.round(Number($('am_round').value) || 0))), date: date || null, venue: '',
     a: a, b: b, status: 'scheduled', score: { a: 0, b: 0 }, legs: [] });
   state.matches.push(m);
@@ -6017,15 +6463,37 @@ $('addMatchCancel').addEventListener('click', () => $('addMatchDialog').close())
    match ends itself when the format says it is over. */
 let matchCtx = null;
 function curMatch() { return matchCtx && state ? state.matches.find((m) => m.id === matchCtx) || null : null; }
+/* OPENING A MATCH MOVES THE PICKER TO ITS LEAGUE, and that is a correctness
+   rule, not a convenience.
+
+   G() means "the game of the league in the picker". Every renderer inside this
+   window — the leg rows, the Details boxes, the live sheet, the unit words —
+   asks G(). Reach a pool match while the picker sits on darts (through Find,
+   through a bracket, or through a stale pick after a merge) and the sheet
+   would fold a rack under the x01 rules, with nothing on screen to say so and
+   the leg STORED. Syncing here means the picker can never disagree with what
+   is on screen, at any of the doors a match can be opened from.
+
+   Belt and braces: matchFormatFor(), settingsOf() and hcpIn() read the MATCH's
+   own league directly, so nothing that writes a figure depends on this. */
 function openMatch(id) {
   const m = state.matches.find((x) => x.id === id);
   if (!m) return;
+  if (m.leagueId && m.leagueId !== currentLeagueId()) {
+    leaguePick = m.leagueId;
+    seasonPick = null;
+    render();
+  }
   matchCtx = id;
   renderMatchDialog();
   openModal($('matchDialog'));
 }
+/* THE MATCH'S OWN LEAGUE, resolved here and used throughout — never G()/S().
+   This function is what freezes a game's rules onto a leg that is about to be
+   stored, so it must not be able to read a picker that has drifted. */
 function newLeg(m) {
-  const fmt = G().legFormats.find((f) => f.id === S().legFormat) || G().legFormats[0];
+  const MG = gameOf(m), MS = settingsOf(m);
+  const fmt = MG.legFormats.find((f) => f.id === MS.legFormat) || MG.legFormats[0];
   const base = fmt.start || null;
   /* Pre-filled from the card ONLY when that side has one name down. A whole
      squad ticked onto every leg would make by[side].length !== 1, and
@@ -6033,20 +6501,22 @@ function newLeg(m) {
      every average, 180 and checkout for that team's season would quietly
      vanish. The card is the night's roster; the leg still asks who threw. */
   const one = (side) => { const l = lineupFor(state, m, side); return l.recorded && l.ids.length === 1 ? l.ids.slice() : []; };
-  const by = isTeams() ? { a: one('a'), b: one('b') } : { a: [m.a], b: [m.b] };
+  const teams = MS.format === 'teams';
+  const by = teams ? { a: one('a'), b: one('b') } : { a: [m.a], b: [m.b] };
   const startFor = (side) => {
     if (base == null) return null;
-    if (isTeams()) return base;
+    if (teams) return base;
     /* Tested for the scope it WANTS and never for the one it does not: a game
        that declared neither would otherwise inherit this branch and quietly
        get a per-leg handicap it never asked for. At 8-ball the head start is
        racks on the wire and lives on the match — see spotFor(). */
-    if (G().handicap.scope !== 'leg') return base;
+    if (MG.handicap.scope !== 'leg') return base;
     const p = playerById(m[side]);
-    return G().handicap.apply(base, p && p.hcp != null ? p.hcp : 0);
+    const v = hcpIn(m, p);
+    return MG.handicap.apply(base, v != null ? v : 0);
   };
   const leg = { w: null, by: by, start: { a: startFor('a'), b: startFor('b') },
-                first: m.legs.length % 2 ? 'b' : 'a', dOut: S().dOut };
+                first: m.legs.length % 2 ? 'b' : 'a', dOut: MS.dOut };
   /* The ending rules of the format the league has chosen, frozen on now — so a
      league that switches to a different one never re-scores a game already
      played. Written only when the format has them, so no other game's legs
@@ -6065,9 +6535,10 @@ function newLeg(m) {
    at darts. Kept OUT of newLeg(), which returns a leg and must mutate
    nothing. */
 function spotFor(m) {
-  const h = G().handicap;
-  if (h.scope !== 'match' || isTeams()) return null;
-  const one = (side) => { const p = playerById(m[side]); return h.apply(0, p && p.hcp != null ? p.hcp : 0); };
+  /* THE MATCH'S OWN LEAGUE — this freezes a wire onto a stored match. */
+  const h = gameOf(m).handicap;
+  if (h.scope !== 'match' || settingsOf(m).format === 'teams') return null;
+  const one = (side) => { const p = playerById(m[side]); const v = hcpIn(m, p); return h.apply(0, v != null ? v : 0); };
   return { a: one('a'), b: one('b') };
 }
 function syncMatchStatus(m) {
@@ -6487,8 +6958,8 @@ function openSide(id) {
   $('sideTitle').textContent = name;
   let html = '';
   if (p) {
-    html += '<div class="stats">' + statsHtml(G().playerStats(legsIn(state, null), p.id)) + '</div>';
-    if (p.hcp != null) html += '<p class="hint">' + esc(G().handicap.label) + ': ' + p.hcp + '</p>';
+    html += '<div class="stats">' + statsHtml(G().playerStats(legsIn(state, null, currentLeagueId()), p.id)) + '</div>';
+    if (hcpOf(p) != null) html += '<p class="hint">' + esc(G().handicap.label) + ': ' + hcpOf(p) + '</p>';
   }
   const recent = state.matches.filter((m) => (m.a === id || m.b === id) && countsForStandings(m))
     .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || b.u - a.u).slice(0, 8);
@@ -6562,7 +7033,7 @@ function openBracketDialog() {
   $('br_seasonWrap').hidden = !state.seasons.length;
   $('br_season').innerHTML = '<option value="">No season</option>' + seasonsSorted().map((s) => '<option value="' + esc(s.id) + '">' + esc(s.name) + '</option>').join('');
   $('br_season').value = season ? season.id : '';
-  const sides = sidesOf(state).slice().sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+  const sides = sidesOf(state, currentLeagueId()).slice().sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
   $('br_entrants').innerHTML = sides.map((id) => '<label class="checkline"><input type="checkbox" data-entrant="' + esc(id) + '" checked><span>' + esc(nameOf(id)) + '</span></label>').join('');
   bracketNote();
   openModal($('bracketDialog'));
@@ -6588,7 +7059,7 @@ $('bracketSave').addEventListener('click', () => {
     entrants = seedRandom(chosen, Date.now() % 2147483647);
   } else entrants = chosen;
   const name = $('br_name').value.trim().slice(0, NAME_MAX) || ($('br_type').value === 'double' ? 'Double Elimination' : 'Knockout') + ' ' + new Date().getFullYear();
-  const b = touch({ id: uid(), name: name, seasonId: seasonId, type: $('br_type').value === 'double' ? 'double' : 'single',
+  const b = touch({ id: uid(), leagueId: currentLeagueId(), name: name, seasonId: seasonId, type: $('br_type').value === 'double' ? 'double' : 'single',
     bestOf: Number($('br_bestOf').value) | 1, reset: $('br_reset').checked, seeded: seeded, entrants: entrants, createdAt: todayISO() });
   state.brackets.push(b);
   save(); render();
@@ -6624,7 +7095,7 @@ $('bracketsWrap').addEventListener('click', (e) => {
   if (!c || c.pending || c.bye || !c.a || !c.b) return;
   /* A bracket match plays to ITS best-of, not the league's: the match carries
      nothing of its own, so the scorer reads the bracket's rule. */
-  const m = touch({ id: uid(), seasonId: b.seasonId, bracketId: b.id, slot: slot, round: 0, date: todayISO(), venue: '',
+  const m = touch({ id: uid(), leagueId: b.leagueId, seasonId: b.seasonId, bracketId: b.id, slot: slot, round: 0, date: todayISO(), venue: '',
     a: c.a, b: c.b, status: 'scheduled', score: { a: 0, b: 0 }, legs: [] });
   state.matches.push(m);
   save(); render();
@@ -6638,25 +7109,33 @@ function matchFormatFor(m) {
     const b = state && state.brackets.find((x) => x.id === m.bracketId);
     if (b) return { mode: 'bestOf', n: b.bestOf };
   }
-  return S().matchFormat;
+  /* THE MATCH'S OWN LEAGUE, never the picked one. A match is scored under the
+     rules of the competition it belongs to, and a club can run best-of-five
+     darts beside a fixed four of cornhole. */
+  return settingsOf(m).matchFormat;
 }
 
 /* ── League rules, saved as they change ───────────────────────────────── */
 function rulesChanged(e) {
   if (!canEdit()) return;
-  const s = S();
+  const lg = currentLeague();
+  const s = lg.settings;
   const id = e.target.id;
   const int = (v, lo, hi, d) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
   /* The name is edited IN ITS BOX like every other rule here — a box that
      looks editable and is not was the first thing Charles hit. Handled in
      this one listener, because a second one would run after render() had
-     already put the old name back in the box. */
+     already put the old name back in the box.
+
+     TWO NAMES SIT ON THIS TAB NOW and they are different records: `cl_name` is
+     the CLUB, on its own card and its own listener, and `lr_name` is the
+     LEAGUE this card is editing. */
   if (id === 'lr_name') {
     const name = $('lr_name').value.trim().slice(0, NAME_MAX);
-    if (!name) { $('lr_name').value = state.league.name; toast('The league keeps its name — the box was empty'); return; }
-    state.league.name = name;
+    if (!name) { $('lr_name').value = lg.name; toast('The league keeps its name — the box was empty'); return; }
+    lg.name = name;
   }
-  if (id === 'lr_format' && !state.matches.length) s.format = $('lr_format').value === 'teams' ? 'teams' : 'singles';
+  if (id === 'lr_format' && !state.matches.some((m) => m.leagueId === lg.id)) s.format = $('lr_format').value === 'teams' ? 'teams' : 'singles';
   if (id === 'lr_teamSize') s.teamSize = int($('lr_teamSize').value, 2, 8, 2);
   if (id === 'lr_legFormat') s.legFormat = $('lr_legFormat').value;
   if (id === 'lr_dOut') s.dOut = $('lr_dOut').checked;
@@ -6670,16 +7149,35 @@ function rulesChanged(e) {
   if (id === 'lr_draw') s.points.draw = int($('lr_draw').value, -10, 10, 1);
   if (id === 'lr_loss') s.points.loss = int($('lr_loss').value, -10, 10, 0);
   if (id === 'lr_tiebreak') s.tiebreak = $('lr_tiebreak').value.split(',').filter(Boolean).concat(['name']);
-  touch(state.league);
+  /* The LEAGUE's stamp, not the club's — a merge picks a winner per entity, and
+     stamping the club for a change to one league's points would hand the whole
+     club to whichever device happened to edit a rule last. */
+  touch(lg);
   save(); render();
 }
 document.querySelectorAll('#rulesCard input, #rulesCard select').forEach((el) => el.addEventListener('change', rulesChanged));
+/* The CLUB's name, on its own card and its own listener for the same reason
+   `lr_name` has one: render() would put the old value back. */
+$('cl_name').addEventListener('change', () => {
+  if (!canEdit()) return;
+  const name = $('cl_name').value.trim().slice(0, NAME_MAX);
+  if (!name) { $('cl_name').value = state.club.name; toast('The club keeps its name — the box was empty'); return; }
+  state.club.name = name;
+  touch(state.club);
+  save(); render();
+});
 
 
 /* ═══════════════════════════════ Wiring ═══════════════════════════════════ */
 $('leagueSel').addEventListener('change', (e) => openLeague(e.target.value));
 $('stSeason').addEventListener('change', (e) => { seasonPick = e.target.value; render(); });
 $('mtSeason').addEventListener('change', (e) => { seasonPick = e.target.value; render(); });
+/* CHANGING LEAGUE CLEARS THE SEASON. A season id belongs to one league, so
+   carrying it across would leave the season picker naming nothing and
+   currentSeason() falling back without saying why. */
+['stLeague', 'mtLeague', 'trLeague'].forEach((id) =>
+  $(id).addEventListener('change', (e) => { leaguePick = e.target.value; seasonPick = null; render(); }));
+$('lrLeague').addEventListener('change', (e) => { leaguePick = e.target.value; seasonPick = null; render(); });
 $('stModeWrap').addEventListener('click', (e) => {
   const b = e.target.closest('[data-mode]');
   if (!b) return;
@@ -6706,6 +7204,48 @@ $('seasonsWrap').addEventListener('click', (e) => {
   const btn = e.target.closest('[data-season]');
   if (btn) openSeason(btn.dataset.season);
 });
+/* Pressing a league PICKS it — every game-scoped view follows. It is not an
+   editor: the rules card below is, and it is already on this tab. */
+$('leaguesWrap').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-league]');
+  if (!btn) return;
+  leaguePick = btn.dataset.league;
+  seasonPick = null;
+  render();
+});
+$('addLeagueBtn').addEventListener('click', openNewLeague);
+function openNewLeague() {
+  if (!canEdit()) return;
+  if (state.leagues.length >= LEAGUES_MAX) { toast('That is ' + LEAGUES_MAX + ' leagues in one club.'); return; }
+  $('nl_name').value = '';
+  $('nl_game').innerHTML = Object.keys(GAMES).map((g) =>
+    '<option value="' + esc(g) + '">' + esc(GAMES[g].name) + '</option>').join('');
+  $('nl_format').value = S().format;
+  $('nlWarn').textContent = '';
+  openModal($('newLeagueDialog'));
+  $('nl_name').focus();
+}
+$('nlCancel').addEventListener('click', () => $('newLeagueDialog').close());
+$('nlSave').addEventListener('click', () => {
+  if (!canEdit()) return;
+  const name = $('nl_name').value.trim().slice(0, NAME_MAX);
+  if (!name) { $('nlWarn').textContent = 'Give the league a name.'; return; }
+  if (state.leagues.some((L) => L.name.toLowerCase() === name.toLowerCase())) {
+    $('nlWarn').textContent = 'This club already has a league called that.'; return;
+  }
+  if (state.leagues.length >= LEAGUES_MAX) { $('nlWarn').textContent = 'That is ' + LEAGUES_MAX + ' leagues in one club.'; return; }
+  const L = newLeagueEntity({ game: $('nl_game').value, name: name });
+  L.settings.format = $('nl_format').value === 'teams' ? 'teams' : 'singles';
+  state.leagues.push(touch(L));
+  /* The new league is what you were just asked about, so it is what you get. */
+  leaguePick = L.id;
+  seasonPick = null;
+  $('newLeagueDialog').close();
+  save(); render();
+  toast(name + ' created — start a season for it below.');
+});
+/* Enter in the name box creates it, the family's rule in every add window. */
+$('nl_name').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('nlSave').click(); } });
 $('addPlayerBtn').addEventListener('click', () => openAdd('player'));
 $('addTeamBtn').addEventListener('click', () => openAdd('team'));
 $('addSeasonBtn').addEventListener('click', () => openAdd('season'));
@@ -6713,7 +7253,7 @@ $('scheduleBtn').addEventListener('click', openSchedule);
 $('addMatchBtn').addEventListener('click', openAddMatch);
 $('addBracketBtn').addEventListener('click', openBracketDialog);
 $('copyIdBtn').addEventListener('click', async () => {
-  if (await copyText(state.league.id)) toast('League ID copied'); else { $('leagueIdBox').select(); toast('Press ⌘C to copy'); }
+  if (await copyText(state.club.id)) toast('League ID copied'); else { $('leagueIdBox').select(); toast('Press ⌘C to copy'); }
 });
 $('trimBtn').addEventListener('click', () => {
   if (!canEdit()) return;
@@ -6738,11 +7278,11 @@ $('forgetBtn').addEventListener('click', () => {
   const entry = myEntry();
   if (!entry) return;
   const cloud = entry.cloud;
-  if (!confirm('Forget ' + state.league.name + ' on this device?\n\n' + (cloud
+  if (!confirm('Forget ' + state.club.name + ' on this device?\n\n' + (cloud
     ? 'It stays in the cloud for everyone else, and you can open it again with its ID.'
     : 'This league lives only on this device, so this deletes it. Download a backup first if you might want it.'))) return;
-  const name = state.league.name;
-  forgetLeague(state.league.id);
+  const name = state.club.name;
+  forgetLeague(state.club.id);
   toast(name + ' forgotten');
 });
 
@@ -6757,27 +7297,29 @@ $('forgetBtn').addEventListener('click', () => {
 let copySrc = null;
 function openCreate() {
   $('lg_name').value = '';
+  $('lg_leagueName').value = '';
   $('lg_game').innerHTML = Object.keys(GAMES).map((g) => '<option value="' + esc(g) + '">' + esc(GAMES[g].name) + '</option>').join('');
   $('lg_format').value = 'singles';
   $('leagueWarn').textContent = '';
-  /* Every league this device holds, in the header picker's own order, and one
-     this account only FOLLOWS: copying names out of a league writes nothing to
-     it, so there is nothing to gate — this path calls neither canEdit() nor
-     canSetUp() and must not. The friend who was added as a viewer of the darts
-     league is exactly who starts the shuffleboard one.
+  /* Every club this device holds, in the header picker's own order, and one
+     this account only FOLLOWS: copying names out writes nothing to the source,
+     so there is nothing to gate — this path calls neither canEdit() nor
+     canSetUp() and must not.
 
-     The DEMO leagues are left out. Their people are invented, loadDemo rebuilds
+     The DEMO clubs are left out. Their people are invented, loadDemo rebuilds
      them, and everyone active would arrive pre-ticked. A device holding only
      the demo shows no fieldset at all, which is the right answer: that reader
-     has nobody of their own recorded yet. */
+     has nobody of their own recorded yet.
+
+     NO GAME SUFFIX any more. A club has as many games as it has leagues, so
+     "· Darts" beside its name was about to become a lie. */
   copySrc = null;
   const from = device.leagues.filter((l) => !isDemoId(l.id));
   $('lg_from').innerHTML = '<option value="">Nobody — start with an empty roster</option>'
-    + from.map((l) => '<option value="' + esc(l.id) + '">' + esc(l.name)
-        + ' · ' + esc((GAMES[l.game] || GAMES.darts).name) + '</option>').join('');
-  /* Nobody is pre-selected even when there is only one league to pick. Enter
-     in the name box fires Create, so a pre-selected source with everyone
-     ticked would make one keystroke create a league with twenty people in it. */
+    + from.map((l) => '<option value="' + esc(l.id) + '">' + esc(l.name) + '</option>').join('');
+  /* Nobody is pre-selected even when there is only one club to pick. Enter in
+     the name box fires Create, so a pre-selected source with everyone ticked
+     would make one keystroke create a club with twenty people in it. */
   $('lg_from').value = '';
   $('lg_copyWrap').hidden = !from.length;
   renderCopyList();
@@ -6816,23 +7358,20 @@ function copyNote() {
   const note = $('lg_copyNote');
   if (!copySrc) { note.textContent = ''; note.hidden = true; return; }
   note.hidden = false;
-  if (!copySrc.players.length) { note.textContent = 'That league has nobody on its roster yet.'; return; }
+  if (!copySrc.players.length) { note.textContent = 'That club has nobody on its roster yet.'; return; }
   const ids = [...$('lg_players').querySelectorAll('input:checked')].map((i) => i.dataset.copy);
   /* A provisional destination, because the league does not exist yet. */
   const game = $('lg_game').value;
-  const dst = blankLeague({ game: game });
-  dst.league.settings.format = $('lg_format').value === 'teams' ? 'teams' : 'singles';
+  const dst = blankClub({ game: game });
+  dst.leagues[0].settings.format = $('lg_format').value === 'teams' ? 'teams' : 'singles';
   const plan = copyPlan(copySrc, dst, ids);
-  if (!plan.take.length) { note.textContent = 'Nobody ticked — the league starts with an empty roster.'; return; }
+  if (!plan.take.length) { note.textContent = 'Nobody ticked — the club starts with an empty roster.'; return; }
   let msg = plural(plan.take.length, 'player');
   if (plan.teams.length) msg += ' and ' + plural(plan.teams.length, 'team');
   msg += ' will come over.';
-  if (plan.take.some((p) => p.hcp != null)) {
-    msg += plan.sameGame ? ' Handicaps come with them.'
-      : ' Handicaps stay behind — a ' + (GAMES[copySrc.league.game] || GAMES.darts).handicap.label.toLowerCase()
-        + ' is not a ' + (GAMES[game] || GAMES.darts).handicap.label.toLowerCase() + '.';
-  }
-  if (!plan.bothTeams && plan.take.some((p) => p.teamId)) msg += ' Teams stay behind — this league is singles.';
+  /* Every handicap comes, at every game, and no clause is needed to say which:
+     a figure is filed under its own game and only that game's leagues read it. */
+  if (plan.take.some((p) => p.hcps)) msg += ' Their handicaps come with them, game by game.';
   if (plan.retired) msg += ' Anyone retired arrives playing.';
   if (plan.skip.length) msg += ' Two people with the same name only come over once.';
   if (plan.capped) msg += ' Only the first ' + PLAYERS_MAX + ' will fit.';
@@ -6852,14 +7391,16 @@ $('lg_from').addEventListener('change', () => {
 ['lg_players', 'lg_game', 'lg_format'].forEach((id) => $(id).addEventListener('change', copyNote));
 $('leagueSave').addEventListener('click', () => {
   const name = $('lg_name').value.trim().slice(0, NAME_MAX);
-  if (!name) { $('leagueWarn').textContent = 'Give the league a name.'; $('lg_name').focus(); return; }
+  if (!name) { $('leagueWarn').textContent = 'Give the club a name.'; $('lg_name').focus(); return; }
   /* `let`, because copyPlayers returns a NEW state rather than mutating this
-     one. And the copy happens after the format is set and the league stamped:
-     copyPlayers derives everything it does from the destination's own game and
-     format, so the destination has to be finished first. */
-  let st = blankLeague({ name: name, game: $('lg_game').value });
-  st.league.settings.format = $('lg_format').value === 'teams' ? 'teams' : 'singles';
-  touch(st.league);
+     one. And the copy happens after the format is set and the club stamped:
+     copyPlayers derives everything it does from the destination's own roster,
+     so the destination has to be finished first. */
+  const lgName = $('lg_leagueName').value.trim().slice(0, NAME_MAX);
+  let st = blankClub({ name: name, game: $('lg_game').value, leagueName: lgName });
+  st.leagues[0].settings.format = $('lg_format').value === 'teams' ? 'teams' : 'singles';
+  touch(st.club);
+  touch(st.leagues[0]);
   /* The players ride in the SAME save() adoptLeague makes — one write, one
      push, and a league that has never existed without its people. The ticks
      are harvested from what is on screen, against the snapshot in copySrc,
@@ -6915,6 +7456,14 @@ function helpGame() { return state ? G() : GAMES.darts; }
    no test able to tell. A test pins that every game in the registry has its
    own body in every topic that forks. */
 const HELP = {
+  club: ['A Club and Its Leagues', `<p>A <strong>club</strong> is the people. One roster, one Club ID, one invite, one admin key — and inside it, as many <strong>leagues</strong> as you play.</p>
+    <p>A league is one competition at one game: Tuesday darts, Wednesday shuffleboard, a summer pool ladder. Each has its own rules, its own seasons and its own table, and they can all run at the same time. Add somebody to the club once and they can play in any of them.</p>
+    <p><strong>Everything about people is the club's</strong> — the players, the teams, who is retired, who has claimed which name. <strong>Everything about how a game is scored is the league's</strong> — singles or teams, the format, the points, the tiebreak order.</p>
+    <p>A <strong>handicap</strong> sits between the two: it belongs to a player, but there is one per <em>game</em>, because a 60-point start at darts and a head start of 4 on the board are not the same thing and never convert.</p>`],
+  leagues: ['What a League Is', `<p>Each league here is a competition at one game, played by the people on this club's roster. Pick one to see its rules, its seasons and its table — the Standings, Matches and Tournament tabs all follow whichever is showing.</p>
+    <p><strong>A league's game is fixed when it is created and cannot change.</strong> That is not stubbornness: every result already recorded was folded under that game's rules — a darts leg counts down from 501, a rack of 8-ball counts balls, a board game counts up to a target — so a league that changed game would be re-scoring its own history. To play a different game, add another league.</p>
+    <p>Its <em>name</em>, its format and its rules can all change, on the card below, until its first match is recorded.</p>
+    <p>A league can be deleted while it is empty. Once it holds a season or a match it stays, because deleting it would take those with it; and a club always keeps at least one.</p>`],
   leg: () => (helpGame().name === 'Cornhole'
     ? ['What a Game Is', `<p>A <strong>game</strong> is a race to 21, played in <strong>rounds</strong>. A round is four bags each, and only the <strong>difference</strong> counts: a bag in the hole is 3, a bag on the board is 1, and whoever comes out ahead scores the gap. So exactly one side scores a round, and the most it can be worth is 12.</p>
     <p>The league picks how a game ends. <strong>First to 21</strong> takes the round that carries a side to 21 or past it. <strong>Exact 21</strong> sends a side that would go over back to <strong>11</strong> instead. <strong>Win by 2</strong> plays on until somebody is two clear. Whichever it is, a game already played remembers the rule it was played under.</p>
@@ -7001,14 +7550,15 @@ const HELP = {
     <p>Team matches play every game to the full target.</p>`]
     : ['Handicaps', `<p>A player's handicap is taken off their <strong>starting score</strong>: with a deduction of 40, a 501 leg starts them on 461. It applies to every leg they throw in a singles match, and the leg remembers the start it gave them, so an average is worked out from the darts actually thrown.</p>
     <p>Team matches start every leg from the full score.</p>`]),
-  copyPlayers: ['What Comes Across', `<p>A league is its own record — its own players, its own seasons, its own results. Copying brings the <strong>names</strong> over, and the <strong>teams</strong> they are in when both leagues are played in teams. Nothing else: the new league starts with no seasons, no fixtures and no results of its own.</p>
-    <p><strong>A handicap only comes across between two leagues playing the same game.</strong> A darts handicap is points off a 501 start; a shuffleboard or cornhole one is points off the target a game is played to; a pool one is racks given at the start of a match. The same number means a different thing in each, so across two games everybody arrives without one and you give them out again here.</p>
-    <p>Everyone arrives as a <strong>new player in this league</strong>. It is a copy and not a link: renaming somebody here does not rename them there, a result here is not a result there, and a name an account has claimed in one league is not claimed in the other.</p>`],
+  copyPlayers: ['What Comes Across', `<p>A club is its own record — its own players, its own leagues, its own results. Copying brings the <strong>names</strong> over, and the <strong>teams</strong> they are in. Nothing else: the new club starts with no seasons, no fixtures and no results of its own.</p>
+    <p><strong>Handicaps come across whole, game by game.</strong> A handicap is filed under the game it was given at — a 60-point start at darts, a head start of 4 on the board, two racks on the wire at pool — so each arrives meaning exactly what it meant, and only a league at that game ever reads it.</p>
+    <p>You only need this for a <strong>second, different group of people</strong>. The same friends playing another game is not a second club — it is another league inside this one, added on the Club tab, on the roster you already have.</p>
+    <p>Everyone arrives as a <strong>new player in the new club</strong>. It is a copy and not a link: renaming somebody here does not rename them there, a result here is not a result there, and a name an account has claimed in one club is not claimed in the other.</p>`],
   tournament: ['How a Bracket Works', `<p>Entrants are <strong>seeded</strong> — from the standings, at random, or in roster order — and paired so the top seed meets the bottom seed first. When the count is not a power of two, the <strong>byes go to the top seeds</strong>, who skip the first round.</p>
     <p>In a <strong>double-elimination</strong> bracket a first loss drops a side into the losers' bracket and a second puts them out. The two survivors meet in the grand final; if the one from the losers' bracket wins it, both have lost once, so a second final decides it.</p>
     <p>Tap a match with both sides known to score it. Changing an earlier result after later matches were played marks those results as no longer fitting, rather than quietly moving sides around.</p>`],
-  invite: ['Sharing a League', `<p>The <strong>League ID</strong> is how others find this league: anyone who signs in to Google and enters it can follow the table and the fixtures. The <strong>Admin Key</strong> is separate and lets someone run the league — enter it once and your account becomes an admin.</p>
-    <p>Both are kept by your browser's password manager, never by the app's sync or backups. Removing a member takes them off the list; anyone who still has the ID can rejoin as a viewer, so a league that must be closed to someone is a new league with a new ID.</p>`],
+  invite: ['Sharing a Club', `<p>The <strong>Club ID</strong> is how others find this club: anyone who signs in to Google and enters it can follow every league in it — the tables, the fixtures, the tournaments. The <strong>Admin Key</strong> is separate and lets someone run the club — enter it once and your account becomes an admin.</p>
+    <p>One ID covers the whole club, however many leagues it runs. Both keys are kept by your browser's password manager, never by the app's sync or backups. Removing a member takes them off the list; anyone who still has the ID can rejoin as a viewer, so a club that must be closed to someone is a new club with a new ID.</p>`],
   device: ['This League on This Device', `<p>A league is kept in this browser, and once shared, in the cloud too. <strong>Forget</strong> removes only this device's copy. <strong>Delete</strong> removes the league itself, for everyone, and only its owner can.</p>
     <p>The size line is how much of the space one league may hold is used. A season of leg-by-leg scoring is a small fraction of it; a league that grows past the warning can close old seasons to trim them.</p>`],
   lineup: ['Subs and the Card', `<p>The <strong>card</strong> is who is actually throwing for each team tonight. Until somebody sets it, the app assumes the team's own players. Anyone on a card who is not on that team is a <strong>sub</strong> — the app keeps no other record of one, and needs none.</p>
@@ -7039,7 +7589,7 @@ $('helpCloseBtn').addEventListener('click', () => helpDialog.close());
 
 /* ── Back up and restore ──────────────────────────────────────────────── */
 $('dataBtn').addEventListener('click', () => {
-  $('dataLeagueName').textContent = state ? state.league.name : 'a league';
+  $('dataLeagueName').textContent = state ? state.club.name : 'a league';
   ['exportBtn', 'csvBtn', 'clearBtn'].forEach((id) => { $(id).hidden = !state; });
   $('clearBtn').hidden = !isOwner();
   /* IN A SHARED SNAPSHOT this window may only take a copy OUT. Restore ran
@@ -7060,7 +7610,7 @@ function downloadBackup() {
   const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'league-night-' + slug(state.league.name) + '-' + todayISO() + '.json';
+  a.download = 'league-night-' + slug(state.club.name) + '-' + todayISO() + '.json';
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   toast('Backup downloaded');
@@ -7089,7 +7639,7 @@ $('csvBtn').addEventListener('click', () => {
   const blob = new Blob(['\uFEFF' + csvMatches(state)], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'league-night-' + slug(state.league.name) + '-matches-' + todayISO() + '.csv';
+  a.download = 'league-night-' + slug(state.club.name) + '-matches-' + todayISO() + '.csv';
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   toast('CSV downloaded');
@@ -7109,13 +7659,15 @@ $('importFile').addEventListener('change', () => {
     /* The same newer-build boundary as boot. A backup file is exactly the copy
        most likely to have been written by a newer build. */
     if (raw && Number(raw.schema || 1) > SCHEMA) haltForNewerData(raw.schema);
-    if (!raw || typeof raw !== 'object' || !raw.league) { toast('That file is not a League Night backup.'); return; }
+    /* EITHER SHAPE. A backup taken before the club/league split says `league`;
+       migrateRaw converts it one step further in. */
+    if (!raw || typeof raw !== 'object' || !(raw.club || raw.league)) { toast('That file is not a League Night backup.'); return; }
     /* The guard behind the hidden button: a snapshot has nowhere to put it. */
     if (viewOnly) { toast('This is somebody else’s shared snapshot — open your own leagues to restore a backup.'); return; }
     const incoming = normalizeLeague(raw);
-    const known = device.leagues.find((l) => l.id === incoming.league.id);
+    const known = device.leagues.find((l) => l.id === incoming.club.id);
     if (known && known.cloud && known.role === 'viewer') { toast('You follow ' + known.name + ' — only an admin can restore a backup into it.'); return; }
-    const what = incoming.league.name + ': ' + plural(incoming.players.length, 'player') + ', ' + plural(incoming.matches.length, 'match', 'matches');
+    const what = incoming.club.name + ': ' + plural(incoming.players.length, 'player') + ', ' + plural(incoming.matches.length, 'match', 'matches');
     if (!confirm((known ? 'Replace ' + known.name + ' on this device with the backup?\n\n' : 'Add this league to this device?\n\n') + what)) return;
     adoptLeague(incoming, known ? known.role : 'owner', known ? known.cloud : false);
     $('dataDialog').close();
@@ -7137,8 +7689,8 @@ function openClear(mode) {
   clearMode = mode;
   $('dataDialog').close();
   if (mode === 'league') {
-    $('clearTitle').textContent = 'Delete This League?';
-    $('clearBody').textContent = 'This deletes ' + state.league.name + ' — ' + plural(state.players.length, 'player') + ', '
+    $('clearTitle').textContent = 'Delete This Club?';
+    $('clearBody').textContent = 'This deletes ' + state.club.name + ' — ' + plural(state.players.length, 'player') + ', '
       + plural(state.matches.length, 'match', 'matches') + ' and ' + plural(state.brackets.length, 'tournament') + '. '
       + (myEntry() && myEntry().cloud ? 'It goes for every member, not only this device. ' : '')
       + 'Your other leagues, your settings and your theme are kept. There is no undo — a downloaded backup is the only way to get any of it back.';
@@ -7159,7 +7711,7 @@ $('clearConfirm').addEventListener('click', () => {
   if (!state) return;
   clearDialog.close();
   if (clearMode === 'league') {
-    const name = state.league.name, id = state.league.id;
+    const name = state.club.name, id = state.club.id;
     const entry = myEntry();
     if (entry && entry.cloud && typeof window.cloudDelete === 'function') window.cloudDelete(id);
     device.leagues.forEach((l) => { if (l.id === id) l.cloud = false; });   /* so forget does not also "leave" */
@@ -7189,7 +7741,7 @@ $('clearConfirm').addEventListener('click', () => {
    tombstones (housekeeping). Ported from the family; the format marker and
    the payload version are two different numbers on purpose. */
 const SHARE_FORMAT = 1;
-const SHARE_PAYLOAD_V = 1;
+const SHARE_PAYLOAD_V = 2;   /* 2: a club and its leagues, not one league (2026-09-10) */
 const SHARE_WARN_AT = 8000;
 const SHARED_ID = 'LN-SHAREDVIEW';
 
@@ -7215,17 +7767,26 @@ async function squeeze(bytes, Stream, format) {
 function buildSharePayload(st, opts) {
   const o = opts || {};
   const seasonId = o.season || null;
-  const keepMatch = (m) => !seasonId || m.seasonId === seasonId;
   const season = seasonId ? st.seasons.find((s) => s.id === seasonId) : null;
+  /* A share is EITHER one season, or one league, or the whole club. A season
+     names its league, so `league` never has to be asked for alongside it. */
+  const leagueId = season ? season.leagueId : (o.league || null);
+  const keepMatch = (m) => (!seasonId || m.seasonId === seasonId)
+                        && (!leagueId || m.leagueId === leagueId);
+  const keepLeague = (L) => !leagueId || L.id === leagueId;
   const out = {
     v: SHARE_PAYLOAD_V,
     sharedAt: todayISO(),
-    league: { name: st.league.name, game: st.league.game, createdAt: st.league.createdAt, settings: st.league.settings },
+    /* THE CLUB AND ITS LEAGUES, and the leagues are what carry the settings —
+       a snapshot of a club running two games has two sets of rules in it and
+       no single answer to "what game is this". */
+    club: { name: st.club.name, createdAt: st.club.createdAt },
+    leagues: st.leagues.filter(keepLeague),
     players: st.players, teams: st.teams,
-    seasons: seasonId ? st.seasons.filter((s) => s.id === seasonId) : st.seasons,
+    seasons: st.seasons.filter((x) => (!seasonId || x.id === seasonId) && (!leagueId || x.leagueId === leagueId)),
     matches: st.matches.filter(keepMatch).map((m) => o.details === false
       ? Object.assign({}, m, { legs: m.legs.map((l) => ({ w: l.w, by: l.by, start: l.start })) }) : m),
-    brackets: st.brackets.filter((b) => !seasonId || b.seasonId === seasonId),
+    brackets: st.brackets.filter((b) => (!seasonId || b.seasonId === seasonId) && (!leagueId || b.leagueId === leagueId)),
   };
   if (season) out.season = season.name;
   return out;
@@ -7248,7 +7809,10 @@ async function decodeShare(token) {
     json = new TextDecoder().decode(await squeeze(bytes, DecompressionStream, 'deflate-raw'));
   } else throw new Error('unknown format ' + marker);
   const p = JSON.parse(json);
-  if (!p || !p.league || !Array.isArray(p.matches)) throw new Error('not a share payload');
+  /* v1 said `league`, v2 says `club` + `leagues`. A link made before the
+     club/league split still opens — migrateRaw does the conversion one step
+     further in, which is why this only has to recognise EITHER shape. */
+  if (!p || !(p.club || p.league) || !Array.isArray(p.matches)) throw new Error('not a share payload');
   if (Number(p.v || 1) > SHARE_PAYLOAD_V) {
     const err = new Error('share payload v' + p.v + ' is newer than this build');
     err.newerVersion = true;
@@ -7263,17 +7827,21 @@ async function refreshShareLink() {
   const setBusy = (on) => { $('shareCopyBtn').disabled = on; $('shareOpenBtn').disabled = on; };
   setBusy(true);
   link.value = 'Building the link…';
-  const seasonId = $('shareKeep').value || null;
+  const pick = $('shareKeep').value || '';
+  const seasonId = pick.indexOf('s:') === 0 ? pick.slice(2) : null;
+  const leagueId = pick.indexOf('l:') === 0 ? pick.slice(2) : null;
   const details = $('shareDetails').checked;
   try {
-    const payload = buildSharePayload(state, { season: seasonId, details: details });
+    const payload = buildSharePayload(state, { season: seasonId, league: leagueId, details: details });
     const token = await encodeShare(payload);
     if (busy !== shareSeq) return;
     const url = location.origin + location.pathname + SHARE_PREFIX + token;
     link.value = url;
     setBusy(false);
     meta.textContent = plural(payload.matches.length, 'match', 'matches') + ' · ' + url.length.toLocaleString() + ' characters';
-    scope.textContent = [seasonId ? payload.season + ' only.' : 'Every season.',
+    const lgName = leagueId ? (state.leagues.find((L) => L.id === leagueId) || {}).name : null;
+    scope.textContent = [seasonId ? payload.season + ' only.' : lgName ? lgName + ' only.'
+        : state.leagues.length > 1 ? 'Every league.' : 'Every season.',
       details ? '' : capUnit(G().unit.one) + ' detail is left behind — scores and results only.'].filter(Boolean).join(' ');
     warn.textContent = url.length > SHARE_WARN_AT
       ? 'Long enough that some chat apps and mail clients will cut it. Send it as a link rather than pasting the text, or share one season without the detail.' : '';
@@ -7285,9 +7853,20 @@ async function refreshShareLink() {
 $('shareBtn').addEventListener('click', () => {
   if (!state) return;
   $('shareDetailsLabel').textContent = capUnit(G().unit.one) + ' detail — ' + G().detail;
-  $('shareKeep').innerHTML = '<option value="">Every season</option>' + seasonsSorted().map((s) => '<option value="' + esc(s.id) + '">' + esc(s.name) + '</option>').join('');
+  /* THREE SCOPES, one picker: the whole club, one of its leagues, or one
+     season of one league. Prefixed values (`l:` / `s:`) rather than two
+     selects — a league and a season are not independent choices, and the list
+     reads as the club's own shape. */
+  const multi = state.leagues.length > 1;
+  const opts = ['<option value="">' + (multi ? 'Every league' : 'Every season') + '</option>'];
+  state.leagues.forEach((L) => {
+    if (multi) opts.push('<option value="l:' + esc(L.id) + '">' + esc(L.name) + ' — every season</option>');
+    seasonsSorted(L.id).forEach((x) => opts.push('<option value="s:' + esc(x.id) + '">'
+      + (multi ? esc(L.name) + ' · ' : '') + esc(x.name) + '</option>'));
+  });
+  $('shareKeep').innerHTML = opts.join('');
   const cur = currentSeason();
-  $('shareKeep').value = cur && state.seasons.length > 1 ? cur.id : '';
+  $('shareKeep').value = (cur && (multi || state.seasons.length > 1)) ? 's:' + cur.id : '';
   openModal($('shareDialog'));
   refreshShareLink();
 });
@@ -7510,7 +8089,7 @@ function demoPlayPool(st, m, strength, rnd, live) {
      from the Add button. Set it afterwards instead and the match plays itself
      out to its format and the wire then shoves the score past what its own
      rules allow — a demo league that could not have happened. */
-  const wireOf = (side) => { const p = st.players.find((x) => x.id === m[side]); return p && p.hcp != null ? p.hcp : 0; };
+  const wireOf = (side) => { const p = st.players.find((x) => x.id === m[side]); const v = hcpsOf(st, m, p); return v == null ? 0 : v; };
   const sp = { a: wireOf('a'), b: wireOf('b') };
   if (sp.a || sp.b) m.spot = sp;
   let guard = 0;
@@ -7620,7 +8199,8 @@ function demoPlayShuffle(st, m, strength, rnd, live) {
   while (!matchDone(m, fmt) && guard++ < 25) {
     const startFor = (side) => {
       const p = st.players.find((x) => x.id === m[side]);
-      return base - (p && p.hcp != null ? p.hcp : 0);
+      const v = hcpsOf(st, m, p);
+      return base - (v == null ? 0 : v);
     };
     const leg = { w: null, by: { a: [m.a], b: [m.b] }, start: { a: startFor('a'), b: startFor('b') },
                   first: m.legs.length % 2 ? 'b' : 'a' };
@@ -7659,11 +8239,12 @@ function demoPlay(st, m, strength, rnd, live) {
   let guard = 0;
   while (!matchDone(m, fmt) && guard++ < 25) {
     const startFor = (side) => {
-      if (st.league.settings.format === 'teams') return base;
+      if (settingsIn(st, m).format === 'teams') return base;
       const p = st.players.find((x) => x.id === m[side]);
-      return base - (p && p.hcp != null ? p.hcp : 0);
+      const v = hcpsOf(st, m, p);
+      return base - (v == null ? 0 : v);
     };
-    const by = st.league.settings.format === 'teams'
+    const by = settingsIn(st, m).format === 'teams'
       ? { a: st.players.filter((p) => p.teamId === m.a).map((p) => p.id).slice(0, m.legs.length % 2 === 0 ? 1 : 2),
           b: st.players.filter((p) => p.teamId === m.b).map((p) => p.id).slice(0, m.legs.length % 2 === 0 ? 1 : 2) }
       : { a: [m.a], b: [m.b] };
@@ -7688,12 +8269,26 @@ function demoPlay(st, m, strength, rnd, live) {
   }
   m.status = 'played';
 }
-function S_of(st) { return st.league.settings; }
+/* A demo player, with a handicap AT ONE GAME. Written field by field with the
+   key omitted when there is no figure, the way the boundary itself writes it —
+   a demo that stored `hcps: {}` would be the one state in the app disagreeing
+   with the allowlist about what "no handicap" looks like. */
+function demoPlayer(p, game, hcp) {
+  if (hcp != null) p.hcps = { [game]: hcp };
+  return p;
+}
+/* A player's handicap at the game the MATCH is played at. Pure, like every
+   other demo helper: it reads the state it is handed and never the app's. */
+function hcpsOf(st, m, p) {
+  const L = leagueIn(st, m);
+  return (L && p && p.hcps && p.hcps[L.game] != null) ? p.hcps[L.game] : null;
+}
+function S_of(st) { return st.leagues[0].settings; }
 function buildDemoSingles() {
   const rnd = mulberry32(20260907);
-  const st = blankLeague({ id: DEMO_ID, name: 'Tuesday Singles (demo)', game: 'darts' });
-  st.league.createdAt = daysAgo(70);
-  st.league.u = 1;
+  const st = blankClub({ id: DEMO_ID, name: 'The Anchor (demo)', game: 'darts', leagueName: 'Tuesday Singles' });
+  st.club.createdAt = daysAgo(70);
+  st.club.u = 1;
   const P = [
     { id: 'demo-p-lee',    name: 'Lee Tanaka',    avg: 57 },
     { id: 'demo-p-maya',   name: 'Maya Osei',     avg: 52 },
@@ -7704,16 +8299,22 @@ function buildDemoSingles() {
     { id: 'demo-p-nia',    name: 'Nia Reyes',     avg: 34, hcp: 60 },
     { id: 'demo-p-rae',    name: 'Rae Fenwick',   avg: 45, active: false },
   ];
-  P.forEach((p, i) => st.players.push({ id: p.id, name: p.name, teamId: null, hcp: p.hcp == null ? null : p.hcp, active: p.active !== false, u: 2 + i }));
+  P.forEach((p, i) => st.players.push(demoPlayer({ id: p.id, name: p.name, teamId: null, active: p.active !== false, u: 2 + i }, 'darts', p.hcp)));
   const strength = (id) => (P.find((p) => p.id === id) || { avg: 50 }).avg;
+  /* THIS CLUB RUNS TWO LEAGUES, and it is the only demo that does — the one
+     place a reader sees what the club/league split is FOR without building it
+     themselves. Same eight people, same ID, same invite; darts on a Tuesday
+     and shuffleboard on a Wednesday, both seasons open at once, and two of
+     them carrying a handicap at each game that means something different. */
+  const darts = st.leagues[0].id;
   /* A finished season, then the one under way. */
-  const spring = { id: 'demo-s-spring', name: 'Spring League', startsOn: daysAgo(154), status: 'done', u: 10 };
-  const autumn = { id: 'demo-s-autumn', name: 'Autumn League', startsOn: daysAgo(42), status: 'active', u: 11 };
+  const spring = { id: 'demo-s-spring', leagueId: darts, name: 'Spring League', startsOn: daysAgo(154), status: 'done', u: 10 };
+  const autumn = { id: 'demo-s-autumn', leagueId: darts, name: 'Autumn League', startsOn: daysAgo(42), status: 'active', u: 11 };
   st.seasons.push(spring, autumn);
   let n = 0;
   const schedule = (season, ids, playedUpTo, live) => {
     dateRounds(roundRobin(ids), season.startsOn, 7).forEach((rd) => rd.pairs.forEach((pr) => {
-      const m = { id: 'demo-m-' + season.id.slice(7, 9) + '-' + (++n), seasonId: season.id, bracketId: null, slot: null,
+      const m = { id: 'demo-m-' + season.id.slice(7, 9) + '-' + (++n), leagueId: season.leagueId, seasonId: season.id, bracketId: null, slot: null,
                   round: rd.round, date: rd.date, venue: rd.round % 3 === 0 ? 'The Anchor' : 'The Crown', a: pr.a, b: pr.b,
                   status: 'scheduled', score: { a: 0, b: 0 }, legs: [], u: 100 + n };
       if (rd.round <= playedUpTo) demoPlay(st, m, strength, rnd, live && rd.round === playedUpTo);
@@ -7730,8 +8331,8 @@ function buildDemoSingles() {
   const vd = autumnPlayed[5]; vd.status = 'void';
   /* A knockout from the spring table, finished; and a double-elimination cup
      under way. */
-  const cup = { id: 'demo-b-cup', name: 'Spring Cup', seasonId: spring.id, type: 'single', bestOf: 3, reset: true, seeded: 'standings',
-                entrants: seedFromStandings(rankSides(standings(st.matches.filter((m) => m.seasonId === spring.id), P.slice(0, 7).map((p) => p.id), st.league.settings), st.league.settings,
+  const cup = { id: 'demo-b-cup', leagueId: darts, name: 'Spring Cup', seasonId: spring.id, type: 'single', bestOf: 3, reset: true, seeded: 'standings',
+                entrants: seedFromStandings(rankSides(standings(st.matches.filter((m) => m.seasonId === spring.id), P.slice(0, 7).map((p) => p.id), st.leagues[0].settings), st.leagues[0].settings,
                   { matches: st.matches.filter((m) => m.seasonId === spring.id), nameOf: (id) => sideName(st, id) })),
                 createdAt: daysAgo(100), u: 20 };
   st.brackets.push(cup);
@@ -7742,7 +8343,7 @@ function buildDemoSingles() {
       if (!cells.length || played >= upTo) break;
       cells.forEach((c) => {
         if (played >= upTo) return;
-        const m = { id: 'demo-m-' + b.id.slice(7) + '-' + c.slot, seasonId: b.seasonId, bracketId: b.id, slot: c.slot, round: 0,
+        const m = { id: 'demo-m-' + b.id.slice(7) + '-' + c.slot, leagueId: b.leagueId, seasonId: b.seasonId, bracketId: b.id, slot: c.slot, round: 0,
                     date: daysAgo(Math.max(0, 60 - played * 3 - (b.type === 'double' ? -40 : 0))), venue: '', a: c.a, b: c.b,
                     status: 'scheduled', score: { a: 0, b: 0 }, legs: [], u: 200 + (++n) };
         demoPlay(st, m, strength, rnd, false);
@@ -7752,7 +8353,7 @@ function buildDemoSingles() {
     }
   };
   playBracket(cup, 99);
-  const pub = { id: 'demo-b-pub', name: 'Pub Cup', seasonId: autumn.id, type: 'double', bestOf: 3, reset: true, seeded: 'random',
+  const pub = { id: 'demo-b-pub', leagueId: darts, name: 'Pub Cup', seasonId: autumn.id, type: 'double', bestOf: 3, reset: true, seeded: 'random',
                 entrants: seedRandom(['demo-p-lee', 'demo-p-maya', 'demo-p-pete', 'demo-p-dev', 'demo-p-hannah', 'demo-p-tomasz'], 7),
                 createdAt: daysAgo(12), u: 21 };
   st.brackets.push(pub);
@@ -7766,16 +8367,51 @@ function buildDemoSingles() {
     m.legs.forEach((l) => { if (a < need && bb < need) { keep.push(l); if (l.w === 'a') a++; else bb++; } });
     m.legs = keep;
   });
+
+  /* ── The SECOND league: the same eight at shuffleboard ──────────────────
+     Pushed after everything above so no darts record can pick it up as
+     leagues[0]. Every record below names it explicitly, because demoPlayShuffle
+     resolves a match's game through its leagueId — hand it an unstamped match
+     and it would fold a board game by the x01 rules. */
+  const board = newLeagueEntity({ game: 'shuffleboard', name: 'Wednesday Board' });
+  board.id = 'demo-lg-board';
+  board.createdAt = daysAgo(30);
+  board.u = 12;
+  board.settings.legFormat = '15';
+  board.settings.matchFormat = { mode: 'bestOf', n: 3 };
+  st.leagues.push(board);
+  /* A head start at shuffleboard is not a start deduction at darts, and these
+     two carry BOTH — the whole reason a handicap is filed per game. Hannah is
+     40 at darts and 4 on the board; Nia 60 and 6. */
+  const boardHcp = { 'demo-p-hannah': 4, 'demo-p-nia': 6, 'demo-p-dev': 2 };
+  st.players.forEach((p) => {
+    if (boardHcp[p.id] == null) return;
+    p.hcps = Object.assign({}, p.hcps, { shuffleboard: boardHcp[p.id] });
+  });
+  const winter = { id: 'demo-s-winter', leagueId: board.id, name: 'Winter Board', startsOn: daysAgo(28), status: 'active', u: 13 };
+  st.seasons.push(winter);
+  const boardIds = ['demo-p-lee', 'demo-p-maya', 'demo-p-dev', 'demo-p-hannah', 'demo-p-tomasz', 'demo-p-nia'];
+  const boardRnd = mulberry32(20260910);
+  let bn = 0;
+  dateRounds(roundRobin(boardIds), winter.startsOn, 7).forEach((rd) => rd.pairs.forEach((pr) => {
+    const m = { id: 'demo-m-wb-' + (++bn), leagueId: board.id, seasonId: winter.id, bracketId: null, slot: null,
+                round: rd.round, date: rd.date, venue: 'The Anchor', a: pr.a, b: pr.b,
+                status: 'scheduled', score: { a: 0, b: 0 }, legs: [], u: 400 + bn };
+    /* Played to round three, the last one scored frame by frame — the same
+       shape the darts season has, so both leagues have something live. */
+    if (rd.round <= 3) demoPlayShuffle(st, m, (id) => (P.find((p) => p.id === id) || { avg: 50 }).avg, boardRnd, rd.round === 3);
+    st.matches.push(m);
+  }));
   return normalizeLeague(st);
 }
 function buildDemoTeams() {
   const rnd = mulberry32(19770719);
-  const st = blankLeague({ id: DEMO_TEAMS_ID, name: 'Thursday Doubles (demo)', game: 'darts' });
-  st.league.settings.format = 'teams';
-  st.league.settings.matchFormat = { mode: 'fixed', n: 4 };
-  st.league.settings.points = { win: 2, draw: 1, loss: 0 };
-  st.league.createdAt = daysAgo(50);
-  st.league.u = 1;
+  const st = blankClub({ id: DEMO_TEAMS_ID, name: 'The Crown (demo)', game: 'darts', leagueName: 'Thursday Doubles' });
+  st.leagues[0].settings.format = 'teams';
+  st.leagues[0].settings.matchFormat = { mode: 'fixed', n: 4 };
+  st.leagues[0].settings.points = { win: 2, draw: 1, loss: 0 };
+  st.club.createdAt = daysAgo(50);
+  st.club.u = 1;
   const T = [['demo-t-anchor', 'The Anchor', ['Sol Adeyemi', 'Bea Lindqvist'], 52],
              ['demo-t-crown', 'The Crown', ['Kai Whitfield', 'Rosa Marin'], 49],
              ['demo-t-swan', 'The Swan', ['Femi Okoro', 'Jude Callahan'], 46],
@@ -7785,7 +8421,7 @@ function buildDemoTeams() {
   const strengthOf = {};
   T.forEach((t, i) => {
     st.teams.push({ id: t[0], name: t[1], u: 2 + i });
-    t[2].forEach((name, j) => { const id = t[0].replace('demo-t-', 'demo-p-') + '-' + j; st.players.push({ id: id, name: name, teamId: t[0], hcp: null, active: true, u: 10 + i * 2 + j }); strengthOf[id] = t[3] + (j ? -4 : 4); });
+    t[2].forEach((name, j) => { const id = t[0].replace('demo-t-', 'demo-p-') + '-' + j; st.players.push({ id: id, name: name, teamId: t[0], active: true, u: 10 + i * 2 + j }); strengthOf[id] = t[3] + (j ? -4 : 4); });
   });
   const season = { id: 'demo-s-doubles', name: 'Autumn Doubles', startsOn: daysAgo(35), status: 'active', u: 20 };
   st.seasons.push(season);
@@ -7797,7 +8433,7 @@ function buildDemoTeams() {
     st.matches.push(m);
   }));
   const ko = { id: 'demo-b-ko', name: 'Pairs Knockout', seasonId: season.id, type: 'single', bestOf: 3, reset: true, seeded: 'standings',
-               entrants: seedFromStandings(rankSides(standings(st.matches, T.map((t) => t[0]), st.league.settings), st.league.settings,
+               entrants: seedFromStandings(rankSides(standings(st.matches, T.map((t) => t[0]), st.leagues[0].settings), st.leagues[0].settings,
                  { matches: st.matches, nameOf: (id) => sideName(st, id) })), createdAt: daysAgo(3), u: 30 };
   st.brackets.push(ko);
   return normalizeLeague(st);
@@ -7810,11 +8446,11 @@ function buildDemoTeams() {
    between them, and what this one is for is the game. */
 function buildDemoShuffle() {
   const rnd = mulberry32(20260908);
-  const st = blankLeague({ id: DEMO_BOARD_ID, name: 'Sunday Shuffleboard (demo)', game: 'shuffleboard' });
-  st.league.settings.legFormat = '15';
-  st.league.settings.matchFormat = { mode: 'bestOf', n: 3 };
-  st.league.createdAt = daysAgo(60);
-  st.league.u = 1;
+  const st = blankClub({ id: DEMO_BOARD_ID, name: 'The Swan (demo)', game: 'shuffleboard', leagueName: 'Sunday Shuffleboard' });
+  st.leagues[0].settings.legFormat = '15';
+  st.leagues[0].settings.matchFormat = { mode: 'bestOf', n: 3 };
+  st.club.createdAt = daysAgo(60);
+  st.club.u = 1;
   const P = [
     { id: 'demo-b-vera',  name: 'Vera Lindholm', board: 58 },
     { id: 'demo-b-otis',  name: 'Otis Mbeki',    board: 54 },
@@ -7823,8 +8459,8 @@ function buildDemoShuffle() {
     { id: 'demo-b-marta', name: 'Marta Kovač',   board: 42, hcp: 3 },
     { id: 'demo-b-wes',   name: 'Wes Okonkwo',   board: 38, hcp: 5 },
   ];
-  P.forEach((p, i) => st.players.push({ id: p.id, name: p.name, teamId: null,
-    hcp: p.hcp == null ? null : p.hcp, active: true, u: 2 + i }));
+  P.forEach((p, i) => st.players.push(demoPlayer({ id: p.id, name: p.name, teamId: null,
+    active: true, u: 2 + i }, 'shuffleboard', p.hcp)));
   const strength = (id) => (P.find((p) => p.id === id) || { board: 50 }).board;
   const season = { id: 'demo-s-board', name: 'Sunday League', startsOn: daysAgo(35), status: 'active', u: 10 };
   st.seasons.push(season);
@@ -7840,7 +8476,7 @@ function buildDemoShuffle() {
   }));
   const cup = { id: 'demo-b-board-cup', name: 'Board Cup', seasonId: season.id, type: 'single', bestOf: 3,
                 reset: true, seeded: 'standings',
-                entrants: seedFromStandings(rankSides(standings(st.matches, P.map((p) => p.id), st.league.settings), st.league.settings,
+                entrants: seedFromStandings(rankSides(standings(st.matches, P.map((p) => p.id), st.leagues[0].settings), st.leagues[0].settings,
                   { matches: st.matches, nameOf: (id) => sideName(st, id) })),
                 createdAt: daysAgo(4), u: 30 };
   st.brackets.push(cup);
@@ -7856,11 +8492,11 @@ function buildDemoShuffle() {
    teach. Singles again, on purpose: what this league is for is the game. */
 function buildDemoPool() {
   const rnd = mulberry32(20260909);
-  const st = blankLeague({ id: DEMO_POOL_ID, name: 'Thursday Pool (demo)', game: 'pool' });
-  st.league.settings.legFormat = '8ball';
-  st.league.settings.matchFormat = { mode: 'bestOf', n: 5 };
-  st.league.createdAt = daysAgo(56);
-  st.league.u = 1;
+  const st = blankClub({ id: DEMO_POOL_ID, name: 'The Fox & Hounds (demo)', game: 'pool', leagueName: 'Thursday Pool' });
+  st.leagues[0].settings.legFormat = '8ball';
+  st.leagues[0].settings.matchFormat = { mode: 'bestOf', n: 5 };
+  st.club.createdAt = daysAgo(56);
+  st.club.u = 1;
   const P = [
     { id: 'demo-q-lena',  name: 'Lena Okafor',    cue: 60 },
     { id: 'demo-q-sol',   name: 'Sol Marchetti',  cue: 55 },
@@ -7869,8 +8505,8 @@ function buildDemoPool() {
     { id: 'demo-q-cato',  name: 'Cato Lindqvist', cue: 41, hcp: 1 },
     { id: 'demo-q-nell',  name: 'Nell Abara',     cue: 36, hcp: 2 },
   ];
-  P.forEach((p, i) => st.players.push({ id: p.id, name: p.name, teamId: null,
-    hcp: p.hcp == null ? null : p.hcp, active: true, u: 2 + i }));
+  P.forEach((p, i) => st.players.push(demoPlayer({ id: p.id, name: p.name, teamId: null,
+    active: true, u: 2 + i }, 'pool', p.hcp)));
   const strength = (id) => (P.find((p) => p.id === id) || { cue: 50 }).cue;
   const season = { id: 'demo-s-pool', name: 'Thursday League', startsOn: daysAgo(35), status: 'active', u: 10 };
   st.seasons.push(season);
@@ -7886,7 +8522,7 @@ function buildDemoPool() {
   }));
   const cup = { id: 'demo-b-pool-cup', name: 'Break Cup', seasonId: season.id, type: 'single', bestOf: 5,
                 reset: true, seeded: 'standings',
-                entrants: seedFromStandings(rankSides(standings(st.matches, P.map((p) => p.id), st.league.settings), st.league.settings,
+                entrants: seedFromStandings(rankSides(standings(st.matches, P.map((p) => p.id), st.leagues[0].settings), st.leagues[0].settings,
                   { matches: st.matches, nameOf: (id) => sideName(st, id) })),
                 createdAt: daysAgo(4), u: 30 };
   st.brackets.push(cup);
@@ -7901,12 +8537,12 @@ function buildDemoPool() {
    number stored here would be a number that does nothing. */
 function buildDemoCornhole() {
   const rnd = mulberry32(20260910);
-  const st = blankLeague({ id: DEMO_CORN_ID, name: 'Saturday Cornhole (demo)', game: 'cornhole' });
-  st.league.settings.format = 'teams';
-  st.league.settings.legFormat = '21bust';
-  st.league.settings.matchFormat = { mode: 'fixed', n: 4 };
-  st.league.createdAt = daysAgo(48);
-  st.league.u = 1;
+  const st = blankClub({ id: DEMO_CORN_ID, name: 'The Feathers (demo)', game: 'cornhole', leagueName: 'Saturday Cornhole' });
+  st.leagues[0].settings.format = 'teams';
+  st.leagues[0].settings.legFormat = '21bust';
+  st.leagues[0].settings.matchFormat = { mode: 'fixed', n: 4 };
+  st.club.createdAt = daysAgo(48);
+  st.club.u = 1;
   const T = [['demo-c-pit', 'The Bag Pit', ['Dana Moreau', 'Trey Ellison'], 54],
              ['demo-c-slide', 'Slide Rulers', ['Priya Anand', 'Hollis Byrne'], 50],
              ['demo-c-airmail', 'Airmail', ['Zeke Alvarez', 'Nadia Petrov'], 46],
@@ -7916,7 +8552,7 @@ function buildDemoCornhole() {
     st.teams.push({ id: t[0], name: t[1], u: 2 + i });
     t[2].forEach((name, j) => {
       const id = t[0].replace('demo-c-', 'demo-p-c-') + '-' + j;
-      st.players.push({ id: id, name: name, teamId: t[0], hcp: null, active: true, u: 10 + i * 2 + j });
+      st.players.push({ id: id, name: name, teamId: t[0], active: true, u: 10 + i * 2 + j });
       strengthOf[id] = t[3] + (j ? -4 : 4);
     });
   });
@@ -7958,7 +8594,7 @@ function buildDemoCornhole() {
   }
   const cup = { id: 'demo-b-corn-cup', name: 'Bag Cup', seasonId: season.id, type: 'single', bestOf: 3,
                 reset: true, seeded: 'standings',
-                entrants: seedFromStandings(rankSides(standings(st.matches, T.map((t) => t[0]), st.league.settings), st.league.settings,
+                entrants: seedFromStandings(rankSides(standings(st.matches, T.map((t) => t[0]), st.leagues[0].settings), st.leagues[0].settings,
                   { matches: st.matches, nameOf: (id) => sideName(st, id) })),
                 createdAt: daysAgo(4), u: 30 };
   st.brackets.push(cup);
@@ -8019,7 +8655,7 @@ let editSeq = 0;             /* counts local edits, so a push knows if it is sta
 function isCloudLeague() { const e = myEntry(); return !!(e && e.cloud); }
 
 window.lnGet = () => state;
-window.lnLeagueId = () => (state ? state.league.id : null);
+window.lnLeagueId = () => (state ? state.club.id : null);
 window.lnEntry = () => myEntry();
 window.lnDevice = () => device;
 window.lnSchema = () => SCHEMA;
@@ -8042,12 +8678,12 @@ window.lnRegisterCloud = (o) => {
   let entry = device.leagues.find((l) => l.id === o.id);
   if (o.state) {
     const st = normalizeLeague(o.state);
-    st.league.id = o.id;
+    st.club.id = o.id;
     noteU(maxU(st));
     try { localStorage.setItem(LEAGUE_KEY(o.id), JSON.stringify(st)); } catch (e) {}
-    if (!entry) { entry = { id: o.id, name: st.league.name, game: st.league.game, role: o.role || 'viewer', cloud: true, rev: 0, dirty: false }; device.leagues.push(entry); }
-    entry.name = st.league.name; entry.game = st.league.game;
-    if (o.current || (state && state.league.id === o.id)) { state = st; device.current = o.id; seasonPick = null; }
+    if (!entry) { entry = { id: o.id, name: st.club.name, role: o.role || 'viewer', cloud: true, rev: 0, dirty: false }; device.leagues.push(entry); }
+    entry.name = st.club.name;
+    if (o.current || (state && state.club.id === o.id)) { state = st; device.current = o.id; seasonPick = null; }
   } else if (!entry) {
     return;
   }
@@ -8102,11 +8738,11 @@ window.lnRemote = (id, remoteState, rev, iAmOwner) => {
   else if (!iAmOwner && entry.role === 'owner') entry.role = 'admin';
   if (rev <= (entry.rev || 0)) { saveLocal(); render(); return; }
   const incoming = normalizeLeague(remoteState);
-  incoming.league.id = id;
-  const onScreen = state && state.league.id === id;
+  incoming.club.id = id;
+  const onScreen = state && state.club.id === id;
   if (entry.dirty && onScreen) {
     state = mergeLeague(state, incoming);
-    state.league.id = id;
+    state.club.id = id;
     entry.rev = rev;
     noteU(maxU(state));
     saveLocal();
@@ -8115,7 +8751,7 @@ window.lnRemote = (id, remoteState, rev, iAmOwner) => {
     return;
   }
   entry.rev = rev;
-  entry.name = incoming.league.name;
+  entry.name = incoming.club.name;
   noteU(maxU(incoming));
   if (onScreen) { state = incoming; saveLocal(); render(); toast('Updated from the league ☁️'); }
   else { try { localStorage.setItem(LEAGUE_KEY(id), JSON.stringify(incoming)); } catch (e) {} saveLocal(); render(); }
@@ -8126,11 +8762,11 @@ window.lnAdopt = (id, merged, rev, seq) => {
   const entry = device.leagues.find((l) => l.id === id);
   if (!entry) return;
   entry.rev = rev;
-  if (state && state.league.id === id) {
+  if (state && state.club.id === id) {
     const st = normalizeLeague(merged);
-    st.league.id = id;
+    st.club.id = id;
     if (seq === editSeq) { state = st; entry.dirty = false; }
-    else { state = mergeLeague(state, st); state.league.id = id; }
+    else { state = mergeLeague(state, st); state.club.id = id; }
     noteU(maxU(state));
   }
   saveLocal();
@@ -8198,12 +8834,12 @@ function renderInvite() {
   const entry = myEntry();
   const cloud = !!(entry && entry.cloud);
   const role = myRole();
-  const demo = isDemoId(state.league.id);
-  $('leagueIdBox').value = state.league.id;
+  const demo = isDemoId(state.club.id);
+  $('leagueIdBox').value = state.club.id;
   $('shareLeagueBtn').hidden = !on || cloud || !isOwner() || demo;
   $('keyForm').hidden = !on || !cloud;
-  $('keyAccount').value = state.league.id;
-  const key = adminKeyFor(state.league.id);
+  $('keyAccount').value = state.club.id;
+  const key = adminKeyFor(state.club.id);
   const kb = $('ln_adminKey');
   if (document.activeElement !== kb) kb.value = key;
   const owner = role === 'owner', admin = role === 'admin';
@@ -8224,7 +8860,7 @@ function renderInvite() {
 function renderMembers() {
   if (!state) return;
   const wrap = $('membersWrap');
-  if (!wrap || membersFor !== state.league.id) { if (wrap) wrap.innerHTML = '<p class="hint">Loading members…</p>'; return; }
+  if (!wrap || membersFor !== state.club.id) { if (wrap) wrap.innerHTML = '<p class="hint">Loading members…</p>'; return; }
   const owner = isOwner();
   const admin = canEdit();
   const me = cloudUser ? cloudUser.uid : null;
@@ -8378,7 +9014,7 @@ const REQ_REASON = {
 function renderRequests() {
   const wrap = $('requestsWrap');
   if (!wrap) return;
-  const on = !!state && !viewOnly && canEdit() && requestsFor === state.league.id && requests.length;
+  const on = !!state && !viewOnly && canEdit() && requestsFor === state.club.id && requests.length;
   $('requestsCard').hidden = !on;
   renderRequestBadge(on ? requests.length : 0);
   if (!on) { wrap.innerHTML = ''; return; }
@@ -8407,7 +9043,7 @@ function renderRequests() {
    reader is told to ignore — the badge is the only thing on the tab that
    says there is anything to do. */
 function renderRequestBadge(n) {
-  [$('tab-league'), document.querySelector('.tabbar [data-tab="league"]')].forEach((btn) => {
+  [$('tab-club'), document.querySelector('.tabbar [data-tab="club"]')].forEach((btn) => {
     if (!btn) return;
     const old = btn.querySelector('.pill');
     if (old) old.remove();
@@ -8488,7 +9124,7 @@ function ownerUid() {
      Before that call existed, an admin or a viewer saw the owner listed as an
      ordinary 'admin': the card says the owner decides who may run the league
      and then would not say who that was. */
-  if (ownerOf && ownerOf.id === state.league.id && ownerOf.uid) return ownerOf.uid;
+  if (ownerOf && ownerOf.id === state.club.id && ownerOf.uid) return ownerOf.uid;
   return isOwner() && cloudUser ? cloudUser.uid : null;
 }
 $('membersWrap').addEventListener('click', async (e) => {
@@ -8509,7 +9145,7 @@ $('membersWrap').addEventListener('click', async (e) => {
   if (own) {
     const m = members.find((x) => x.uid === own.dataset.owner);
     if (!m) return;
-    if (!confirm('Make ' + m.name + ' the owner of ' + state.league.name + '?\n\nThey alone will be able to change members and the Admin Key from then on. You stay an admin.')) return;
+    if (!confirm('Make ' + m.name + ' the owner of ' + state.club.name + '?\n\nThey alone will be able to change members and the Admin Key from then on. You stay an admin.')) return;
     if (await window.lnCloud.transferOwner(m.uid)) toast(m.name + ' owns the league now');
     return;
   }
@@ -8529,7 +9165,7 @@ $('meLink').addEventListener('change', async () => {
 });
 $('shareLeagueBtn').addEventListener('click', async () => {
   if (!window.lnCloud || !state) return;
-  if (!confirm('Share ' + state.league.name + '?\n\nIt goes up to the cloud under your Google account. Anyone signed in who has its League ID can follow it; anyone you give the Admin Key to can run it.')) return;
+  if (!confirm('Share ' + state.club.name + '?\n\nIt goes up to the cloud under your Google account. Anyone signed in who has its League ID can follow it; anyone you give the Admin Key to can run it.')) return;
   $('shareLeagueBtn').disabled = true;
   try { await window.lnCloud.share(); } finally { $('shareLeagueBtn').disabled = false; }
 });
@@ -8541,7 +9177,7 @@ $('keyShowBtn').addEventListener('click', () => {
   $('keyShowBtn').setAttribute('aria-label', (shown ? 'Show' : 'Hide') + ' Admin Key');
 });
 $('keyCopyBtn').addEventListener('click', async () => {
-  const key = adminKeyFor(state.league.id) || (window.lnCloud && await window.lnCloud.fetchKey());
+  const key = adminKeyFor(state.club.id) || (window.lnCloud && await window.lnCloud.fetchKey());
   if (!key) { toast('The key is not on this device — Rotate makes a new one'); return; }
   if (await copyText(key)) toast('Admin Key copied'); else toast('Could not copy');
 });
@@ -8849,6 +9485,11 @@ function openLive(matchId, legIndex) {
   liveEntry = ''; liveHang = 0;
   const c = curLive();
   if (!c) { liveCtx = null; return; }
+  /* The picker follows the match, as it does in openMatch — the sheet's own
+     renderers ask G() and the record it plants below is the GAME's. Normally
+     redundant (the match window is already open), and it is here because this
+     is a second door: the hooks and a resumed sheet both come straight in. */
+  if (c.m.leagueId && c.m.leagueId !== currentLeagueId()) { leaguePick = c.m.leagueId; seasonPick = null; }
   /* Each scorer plants its own empty record, and ONLY its own: a darts leg
      that grew a `frames: []` would read as scored live to legIsLive() and
      lose its Details boxes for a record nothing wrote to.
@@ -8857,7 +9498,7 @@ function openLive(matchId, legIndex) {
      game that was not shuffleboard planted a darts record — a third game
      would have been given `visits` at the moment its own sheet opened, and
      the boundary keeps an empty `visits` where it drops an empty `frames`. */
-  const ls = G().liveScorer;
+  const ls = gameOf(c.m).liveScorer;
   if (ls === 'rounds') { if (!c.leg.frames) c.leg.frames = []; }
   else if (ls === 'pool') { if (!c.leg.turns) c.leg.turns = []; }
   else if (ls === 'x01') { if (!c.leg.visits) c.leg.visits = { a: [], b: [] }; }
@@ -9249,8 +9890,8 @@ function joinLink(id, key) {
    words come first now, the link ends it, and parseJoinHash() below reads
    the ID leniently anyway. */
 function inviteMessage(withKey) {
-  const link = joinLink(state.league.id, withKey ? adminKeyFor(state.league.id) : '');
-  const words = 'Join ' + state.league.name + ' on League Night'
+  const link = joinLink(state.club.id, withKey ? adminKeyFor(state.club.id) : '');
+  const words = 'Join ' + state.club.name + ' on League Night'
     + (withKey ? ' — this link makes you an admin, so keep it to yourself.' : '.');
   return { link: link, words: words, text: words + '\n\n' + link };
 }
@@ -9259,7 +9900,7 @@ function renderInviteLinks() {
   const cloud = !!(entry && entry.cloud) && !!(window.lnCloud && window.lnCloud.on);
   $('inviteLinks').hidden = !cloud;
   if (!cloud) { $('qrWrap').hidden = true; return; }
-  $('inviteAdminWrap').hidden = !isOwner() || !adminKeyFor(state.league.id);
+  $('inviteAdminWrap').hidden = !isOwner() || !adminKeyFor(state.club.id);
   if (!isOwner()) $('inviteAdmin').checked = false;
   $('inviteShareBtn').textContent = navigator.share ? '↗ Share Link' : 'Copy Link';
   if (!$('qrWrap').hidden) drawQr();
@@ -9274,14 +9915,14 @@ $('inviteShareBtn').addEventListener('click', async () => {
   if (navigator.share) {
     /* `text` without the link: the sheet carries `url` itself, and a text
        that repeats it is what glued the two together. */
-    try { await navigator.share({ title: state.league.name, text: msg.words, url: msg.link }); return; }
+    try { await navigator.share({ title: state.club.name, text: msg.words, url: msg.link }); return; }
     catch (e) { if (e && e.name === 'AbortError') return; }
   }
   if (await copyText(msg.link)) toast('Link copied'); else toast('Could not copy');
 });
 $('inviteMailBtn').addEventListener('click', () => {
   const msg = inviteMessage($('inviteAdmin').checked);
-  location.href = 'mailto:?subject=' + encodeURIComponent('Join ' + state.league.name) + '&body=' + encodeURIComponent(msg.text);
+  location.href = 'mailto:?subject=' + encodeURIComponent('Join ' + state.club.name) + '&body=' + encodeURIComponent(msg.text);
 });
 $('inviteSmsBtn').addEventListener('click', () => {
   const msg = inviteMessage($('inviteAdmin').checked);
@@ -9345,9 +9986,18 @@ async function boot() {
     try {
       const p = await decodeShare(shareToken);
       shareMeta = { sharedAt: p.sharedAt, season: p.season || null };
-      state = normalizeLeague({ schema: SCHEMA, league: Object.assign({}, p.league, { id: SHARED_ID }),
-        players: p.players, teams: p.teams, seasons: p.seasons, matches: p.matches, brackets: p.brackets, tombstones: [] });
-      state.league.id = SHARED_ID;
+      /* EITHER SHAPE, handed straight to the boundary: a v1 link carries
+         `league` and migrateRaw turns it into a club with one league, a v2 one
+         carries both already. `schema: SCHEMA` is stamped on a payload that may
+         have been built by an older app — which is exactly why the migration is
+         gated on the SHAPE of what arrived and never on this number. */
+      const arrived = p.club
+        ? { schema: SCHEMA, club: Object.assign({}, p.club, { id: SHARED_ID }), leagues: p.leagues,
+            players: p.players, teams: p.teams, seasons: p.seasons, matches: p.matches, brackets: p.brackets, tombstones: [] }
+        : { schema: SCHEMA, league: Object.assign({}, p.league, { id: SHARED_ID }),
+            players: p.players, teams: p.teams, seasons: p.seasons, matches: p.matches, brackets: p.brackets, tombstones: [] };
+      state = normalizeLeague(arrived);
+      state.club.id = SHARED_ID;
     } catch (e) {
       /* A link that cannot be read falls back to this browser's OWN leagues. */
       viewOnly = false;
@@ -9376,11 +10026,11 @@ window.__lnTestHooks = {
   __plant: function (next) {
     if (next === null) { state = null; device = blankDevice(); render(); return; }
     state = normalizeLeague(next);
-    if (next && next.league && next.league.id) state.league.id = String(next.league.id);
-    const entry = device.leagues.find((l) => l.id === state.league.id);
-    if (entry) { entry.name = state.league.name; entry.game = state.league.game; }
-    else device.leagues.push({ id: state.league.id, name: state.league.name, game: state.league.game, role: 'owner', cloud: false });
-    device.current = state.league.id;
+    if (next && next.club && next.club.id) state.club.id = String(next.club.id);
+    const entry = device.leagues.find((l) => l.id === state.club.id);
+    if (entry) { entry.name = state.club.name; }
+    else device.leagues.push({ id: state.club.id, name: state.club.name, role: 'owner', cloud: false });
+    device.current = state.club.id;
     seasonPick = null;
     render();
   },
@@ -9398,7 +10048,7 @@ window.__lnTestHooks = {
   LEAGUE_ID_RE: LEAGUE_ID_RE, ADMIN_KEY_RE: ADMIN_KEY_RE,
   NAME_MAX: NAME_MAX, GAMES: GAMES, GAME_CONTRACT: GAME_CONTRACT, CHECKOUTS: CHECKOUTS, IMPOSSIBLE_VISITS: IMPOSSIBLE_VISITS,
   TIEBREAK_KEYS: TIEBREAK_KEYS, TIEBREAK_PRESETS: TIEBREAK_PRESETS, TOMBSTONE_KEEP_MS: TOMBSTONE_KEEP_MS,
-  blankLeague: blankLeague, normalizeLeague: normalizeLeague, defaultSettings: defaultSettings, blankDevice: blankDevice,
+  blankClub: blankClub, normalizeLeague: normalizeLeague, defaultSettings: defaultSettings, blankDevice: blankDevice,
   normalizeDevice: normalizeDevice, mergeLeague: mergeLeague, mergeList: mergeList, applyTombstones: applyTombstones,
   pruneTombstones: pruneTombstones, nextU: nextU, noteU: noteU, maxU: maxU,
   newLeagueId: newLeagueId, newAdminKey: newAdminKey, cleanCode: cleanCode,
@@ -9801,7 +10451,7 @@ async function onSignedIn() {
      two writes below: a plain setDoc replaces the document, and `current` —
      which is written from cloudOpen, on its own schedule — would be dropped by
      whichever of them happened to run last. */
-  const deviceCloud = window.lnDevice().leagues.filter((l) => l.cloud).map((l) => ({ id: l.id, name: l.name, game: l.game }));
+  const deviceCloud = window.lnDevice().leagues.filter((l) => l.cloud).map((l) => ({ id: l.id, name: l.name }));
   const merged = mine.filter((l) => l && !deviceCloud.some((d) => d.id === l.id)).concat(deviceCloud);
   await F.setDoc(userRef(), { leagues: merged, updatedAt: Date.now() }, { merge: true });
   /* Nothing on screen: open the league this account was last in rather than
@@ -9814,10 +10464,10 @@ async function onSignedIn() {
   if (cur && cur.cloud) { listenTo(cur.id); if (cur.dirty) window.cloudPush(); }
   window.lnRender();
 }
-async function noteUserLeague(id, name, game, remove) {
+async function noteUserLeague(id, name, remove) {
   const snap = await F.getDoc(userRef());
   let list = (snap.exists() && Array.isArray(snap.data().leagues)) ? snap.data().leagues.filter((l) => l && l.id !== id) : [];
-  if (!remove) list.push({ id: id, name: name, game: game });
+  if (!remove) list.push({ id: id, name: name });
   const patch = { leagues: list, updatedAt: Date.now() };
   /* Joining or sharing IS opening, so it is also the answer to "which one was
      I last in" — cloudOpen fires for a switch, and this for an arrival. */
@@ -9846,7 +10496,7 @@ async function adoptCloudLeague(id, data, makeCurrent) {
   const role = await roleIn(id, data);
   window.lnOwner(id, data.owner);
   window.lnSetup(id, data.setup === true);
-  window.lnRegisterCloud({ id: id, name: data.name, game: data.game, role: role, rev: Number(data.rev) || 0, state: data.state, current: !!makeCurrent });
+  window.lnRegisterCloud({ id: id, name: data.name, role: role, rev: Number(data.rev) || 0, state: data.state, current: !!makeCurrent });
 }
 
 /* ── Share: this device's league goes up, and this account owns it ───────── */
@@ -9855,11 +10505,11 @@ async function adoptCloudLeague(id, data, makeCurrent) {
    It is a speed bump against an accident and a bored afternoon, not a control
    — the control is the budget alert on the Firebase project, and the README
    says both of those things in the same words. */
-const LEAGUES_MAX = 20;
+const CLUBS_MAX = 20;
 function tooManyLeagues() {
   const n = (window.lnDevice().leagues || []).filter((l) => l.cloud).length;
-  if (n < LEAGUES_MAX) return false;
-  window.toast('That is ' + LEAGUES_MAX + ' shared leagues on this account — forget one first');
+  if (n < CLUBS_MAX) return false;
+  window.toast('That is ' + CLUBS_MAX + ' shared clubs on this account — forget one first');
   return true;
 }
 
@@ -9867,8 +10517,8 @@ async function shareLeague() {
   if (!(await requireSignIn())) return false;
   if (tooManyLeagues()) return false;
   const st = window.lnGet();
-  if (!st || !window.lnIsLeagueId(st.league.id)) { window.toast('The demo cannot be shared — create a league of your own.'); return false; }
-  const id = st.league.id;
+  if (!st || !window.lnIsLeagueId(st.club.id)) { window.toast('The demo cannot be shared — create a league of your own.'); return false; }
+  const id = st.club.id;
   let key = window.lnKey(id) || window.lnNewAdminKey();
   let rev = 0;
   try {
@@ -9888,13 +10538,13 @@ async function shareLeague() {
          first thing anybody wants to sort out, and nobody has played yet.
          Only on CREATE — the repair branch above must never flip a switch an
          admin has already set. */
-      await F.setDoc(leagueRef(id), { setup: true, state: forCloud(st), rev: 0, owner: user.uid, game: st.league.game,
-                                      name: st.league.name, schema: window.lnSchema(), updatedAt: Date.now() });
+      await F.setDoc(leagueRef(id), { setup: true, state: forCloud(st), rev: 0, owner: user.uid,
+                                      name: st.club.name, schema: window.lnSchema(), updatedAt: Date.now() });
       await F.setDoc(keyRef(id), { key: key });
     }
     const me = await F.getDoc(memberRef(id, user.uid));
     if (!me.exists()) await F.setDoc(memberRef(id, user.uid), { role: 'admin', name: myName(), joinedAt: Date.now() });
-    await noteUserLeague(id, st.league.name, st.league.game, false);
+    await noteUserLeague(id, st.club.name, false);
   } catch (e) { setSyncError(e); return false; }
   window.lnSetKey(id, key);
   window.lnRegisterCloud({ id: id, role: 'owner', rev: rev, current: true });
@@ -9917,7 +10567,7 @@ async function joinLeague(id, key) {
     const m = await F.getDoc(memberRef(id, user.uid));
     if (!m.exists() && data.owner !== user.uid) await F.setDoc(memberRef(id, user.uid), { role: 'viewer', name: myName(), joinedAt: Date.now() });
     await adoptCloudLeague(id, data, true);
-    await noteUserLeague(id, data.name, data.game, false);
+    await noteUserLeague(id, data.name, false);
   } catch (e) { setSyncError(e); return 'error'; }
   let claimed = 'viewer';
   if (key) claimed = await claimAdmin(key, id);
@@ -10109,7 +10759,7 @@ async function leaveLeague(id) {
      cheaper than relying on that. */
   try { await F.deleteDoc(requestRef(id, user.uid)); } catch (e) { /* there may be none */ }
   if (meDocLocal && meDocLocal.playerId) { try { await F.deleteDoc(rosterRef(id, meDocLocal.playerId)); } catch (e) { /* already gone */ } }
-  try { await F.deleteDoc(memberRef(id, user.uid)); await noteUserLeague(id, '', '', true); } catch (e) { /* best effort */ }
+  try { await F.deleteDoc(memberRef(id, user.uid)); await noteUserLeague(id, '', true); } catch (e) { /* best effort */ }
 }
 /* Deleting, as the owner: everything under the league and the league itself,
    in ONE batch — the rules read the pre-batch state, so the order inside does
@@ -10133,7 +10783,7 @@ async function deleteLeague(id) {
     batch.delete(claimRef(id));
     batch.delete(leagueRef(id));
     await batch.commit();
-    await noteUserLeague(id, '', '', true);
+    await noteUserLeague(id, '', true);
     return true;
   } catch (e) { setSyncError(e); return false; }
 }
@@ -10309,7 +10959,7 @@ async function pushNow() {
     if (Number(cloud.schema || 1) > window.lnSchema()) throw Object.assign(new Error('newer build'), { code: 'ln/newer' });
     const merged = window.lnMerge(mine, cloud.state);
     tx.update(leagueRef(id), { state: forCloud(merged), rev: cloud.rev + 1, updatedAt: Date.now(),
-                               name: merged.league.name, schema: window.lnSchema() });
+                               name: merged.club.name, schema: window.lnSchema() });
     return { merged: merged, rev: cloud.rev + 1 };
   });
   window.lnAdopt(id, out.merged, out.rev, seq);

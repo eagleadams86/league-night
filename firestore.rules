@@ -8,6 +8,12 @@ rules_version = '2';
 // rules are ever changed in the console, update this file to match. (Same
 // pattern as the golf-handicap, paptrack and financial-plan repos.)
 //
+// THE 2026-09-10 CLUB/LEAGUE SPLIT IS AN ADDITIVE DEPLOY: `game` became
+// optional, its immutability check went, and `validSize` gained a GUARDED
+// `leagues` cap. Every rule here is strictly more permissive than the one it
+// replaces, so a client still on the old build is refused nothing. Put it up
+// before the app all the same — that is the standing order and it costs nothing.
+//
 // PASTE THESE INTO THE CONSOLE BEFORE SIGNING IN FOR THE FIRST TIME. Firestore's
 // default rules for a new project either deny everything (sync silently fails)
 // or, in test mode, allow every signed-in user to read and write everything.
@@ -67,23 +73,37 @@ service cloud.firestore {
       //
       // `size()` on a non-list is an evaluation ERROR, which denies — so
       // `d.state is map` must stay ahead of this, and a hostile write missing
-      // one of the six keys is refused rather than let through.
+      // one of the six unguarded keys is refused rather than let through. The
+      // seventh, `leagues`, is guarded instead — see the line itself.
       function validSize(s) {
         return s.players.size()    <= 500
             && s.teams.size()      <= 250
             && s.seasons.size()    <= 100
             && s.matches.size()    <= 2000
             && s.brackets.size()   <= 200
-            && s.tombstones.size() <= 2000;
+            && s.tombstones.size() <= 2000
+            // `leagues` — the competitions this club runs — arrived with the
+            // club/league split. GUARDED, and that is not decoration: size() on
+            // a map without the key is an evaluation ERROR, which denies, so an
+            // unconditional clause here would refuse every write from a client
+            // that has not upgraded yet. 50 is per CLUB and is a different
+            // number from LEAGUES_MAX in the app, which is clubs per ACCOUNT.
+            && (!('leagues' in s) || s.leagues.size() <= 50);
       }
 
       // `hasAll` and NOT `hasOnly`, which is what lets a league written before
       // Team Setup existed still validate with no `setup` key at all.
       function validLeague(d) {
-        return d.keys().hasAll(['state', 'rev', 'owner', 'game', 'name', 'schema', 'updatedAt'])
+        return d.keys().hasAll(['state', 'rev', 'owner', 'name', 'schema', 'updatedAt'])
           && d.owner is string && d.rev is int && d.rev >= 0 && d.schema is int
           && d.name is string && d.name.size() <= 40
-          && d.game is string && d.game.size() <= 20
+          // `game` was required until the club/league split: one document was
+          // one group of people at ONE game. A club runs several, so the field
+          // has no single answer any more and new clubs are written without it.
+          // OPTIONAL rather than removed — `hasAll` and not `hasOnly` means
+          // every document written before the split still carries one and must
+          // still validate. Same treatment as `setup` below.
+          && (!('game' in d) || (d.game is string && d.game.size() <= 20))
           && d.state is map && d.updatedAt is number
           && (!('setup' in d) || d.setup is bool)
           && validSize(d.state);
@@ -95,7 +115,6 @@ service cloud.firestore {
                     && request.resource.data.owner == me() && request.resource.data.rev == 0;
       allow update: if signedIn() && validLeague(request.resource.data)
                     && request.resource.data.rev == resource.data.rev + 1
-                    && request.resource.data.game == resource.data.game
                     && (
                          // the owner: anything, and may hand ownership to an existing member
                          (resource.data.owner == me()
@@ -117,12 +136,15 @@ service cloud.firestore {
                          // their own membership, and CLAUDE.md records the trade.
                          //
                          // diff().affectedKeys() and not four `==` comparisons:
-                         // the document-level diff pins `owner`, `name`, `game`,
+                         // the document-level diff pins `owner`, `name`,
                          // `schema` AND `setup` in one expression (a member
                          // cannot flip their own gate), the state-level diff pins
-                         // `league` whole — settings included, because an unequal
-                         // nested map is a changed key — and refuses a new key
-                         // besides. Four list equalities would walk `matches`
+                         // `club` AND `leagues` whole — every league's settings
+                         // included, because an unequal nested map is a changed
+                         // key — and refuses a new key besides. The list below
+                         // is what a member MAY move; a league is not on it, so
+                         // creating, renaming or re-gaming one is denied here
+                         // with no clause of its own. Four list equalities would walk `matches`
                          // element by element and push a big league against the
                          // per-request expression budget, failing in a way
                          // nobody can read.
