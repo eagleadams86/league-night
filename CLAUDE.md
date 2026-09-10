@@ -490,7 +490,7 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
 ## Status
 
 **Per-league team membership (2026-09-10, the same day)** is the current shape:
-`player.teams = { [leagueId]: teamId }`, `SCHEMA` **9**, `EXPECTED` **416**, and **no
+`player.teams = { [leagueId]: teamId }`, `SCHEMA` **9**, `EXPECTED` **419**, and **no
 `firestore.rules` change at all**. The doubles demo club runs two teams leagues with the pairs
 shuffled between them. Read the first bullet of "What is new here" before touching the boundary,
 `sidesOf`, a sub pill or the copy window.
@@ -664,11 +664,25 @@ showed it.
 - **A control that is not RENDERED has an all-zero rectangle**, whose top of 0 reads as a second
   line the row has not got. The suite's phone probe filters `getClientRects().length` before it
   measures the header, because `#syncBtn` is hidden in every harness run (no cloud config).
-- **The first season adopts the matches that came before it, and only the first.**
-  `leagueMatches()` returns every league match while there are no seasons and only the chosen
-  season's once there is one, so a match added early vanished from the Matches tab and the table
-  the moment a season was started. It belongs to the league's first season; a later season takes
-  nothing.
+- **A MATCH PLAYED BEFORE A SEASON STAYS OUT OF IT** (2026-09-10; it used to be swept in, and
+  that was the wrong fix). `leagueMatches()` returned every league match while a league had no
+  seasons and only the chosen season's once it had one, so a match added early VANISHED the
+  moment a season started. The sweep hid the disappearance by taking the CATEGORY away — and a
+  pre-season friendly is a real category. Charles found it the day it bit him.
+  - `NO_SEASON` (`'~none'`, a tilde so it can never be a real id) is a pickable scope beside a
+    season id. `leagueMatches` has three answers now: no seasons at all → everything; NO_SEASON →
+    the matches in no season; a real id → that season's. A friendly is in no season's table BY
+    CONSTRUCTION — nothing returns it for a real season id.
+  - **It still counts for the PLAYERS who played it**, exactly as a cup match already did:
+    `legsIn(st, null, lg)` asks for the whole league rather than one season. "Doesn't count"
+    means the table. One rule, not two.
+  - The Matches picker offers **Friendlies** (only when the league has any); **Standings does
+    not**, because there is no table for matches that count for no table, and each picker stays
+    truthful about its own tab.
+  - `#mt_season` on the match window is how a match moves either way. **There was no way to move
+    a match between seasons at all before this**, which is also why the sweep was dangerous:
+    there would have been no way back out. A bracket match takes its season from its bracket and
+    is not offered the box.
 - **A forfeit deletes the legs, so it asks first when there are any.** Void keeps its legs and
   already asked; forfeit stores a score and none, and took them without a word.
 - **The owner is a field on the LEAGUE DOCUMENT and never on `state`** — a uid has no business in

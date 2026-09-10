@@ -81,6 +81,12 @@ club's ID can follow it, and anyone with the admin key can run it.
   the list of people who could fill a gap; it never decides who plays.
 - **Seasons and fixtures.** Start a season and generate a round robin — byes for an odd count, an
   optional double round, one round a week or any spacing — or add matches one at a time.
+- **Friendlies.** A match does not have to be in a season. Leave the season box on **No season**
+  and it is a friendly — a pre-season warm-up, a challenge between seasons, a one-off against
+  another pub. They show under **Friendlies** in the season picker on the Matches tab and are in
+  **no season's table**, but they still count for the **players** who played them, exactly as a
+  knockout match does. Nothing is moved for you: starting a season leaves whatever was already
+  recorded where it is, and a match can be moved either way at any time from its own window.
 - **Scoring.** Tap a match, add a leg (or a game), tap who won it. The match ends itself when the
   format says so (best of five, or a fixed count — and a fixed count plays every leg of itself
   whatever anyone was given on the wire). Optional figures per leg: at darts, darts thrown,
