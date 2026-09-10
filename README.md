@@ -290,8 +290,9 @@ throws darts still reads exactly one, as it always did.
 ## Accessibility and Paper
 
 Every view and window was audited with axe-core under Playwright at 1280px in Midnight and at
-375px in Light, the demo leagues, plus the privacy page, with no violations at WCAG 2.2 AA or
-axe's best-practice level (7 September 2026). Beyond what a tool can see: status is never
+375px in Light, the demo clubs, plus the privacy page, with no violations at WCAG 2.2 AA or
+axe's best-practice level (re-run 10 September 2026 across all five tabs and every dialog forced
+open — a closed dialog is invisible to axe, and an unnamed box inside one passes a whole-page run). Beyond what a tool can see: status is never
 carried by colour alone (a form tile is a letter, a chosen side a tick, a thrower a pill),
 every dialog closes on Escape and a click outside, the tab strip takes arrow keys and hands the
 next Tab to the 📌 beside it, and the

@@ -2223,7 +2223,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
     <p>Deletes every league on this device. A league you have shared stays in the cloud for its
       members and comes back when you sign in; a league that lives only here is gone for good. Your
       settings and your theme are kept. To delete one league, or to delete a shared league for
-      everyone, use the League tab.</p>
+      everyone, use the Club tab.</p>
     <div class="datarow">
       <button type="button" id="clearBtn" class="danger">Delete All Data</button>
     </div>
@@ -5834,7 +5834,7 @@ function renderMatches() {
     wrap.innerHTML = '<p class="empty">' + (sides.length < 2
       ? 'Add at least two ' + (isTeams() ? 'teams' : 'players') + ' on the Players tab first.'
       : !season && state.seasons.length ? 'No season yet.'
-      : !state.seasons.length ? 'Start a season on the League tab, then generate its fixtures here.'
+      : !seasonsSorted().length ? 'Start a season on the Club tab, then generate its fixtures here.'
       : 'No fixtures yet' + (canEdit() ? ' — generate a round robin, or add matches one at a time.' : '.')) + '</p>';
     return;
   }
@@ -7546,11 +7546,11 @@ const HELP = {
      larger than the number of racks it played, and this is where a reader
      comes to ask why. */
   standings: () => (helpGame().handicap.scope === 'match'
-    ? ['How the Table Is Ordered', `<p>Every side earns the league's points for a <strong>win, a draw or a loss</strong>, set on the League tab. Sides level on points are separated by the <strong>tiebreak order</strong> chosen there — by default rack difference, then racks for, then head-to-head.</p>
+    ? ['How the Table Is Ordered', `<p>Every side earns the league's points for a <strong>win, a draw or a loss</strong>, set on the Club tab. Sides level on points are separated by the <strong>tiebreak order</strong> chosen there — by default rack difference, then racks for, then head-to-head.</p>
     <p><strong>Racks given on the wire count in the score, so they count here too.</strong> A player on a wire of two has two racks in their "for" column for every match they played, on top of the ones they won — the number in the table and the number on the match card are the same number, and that is the point of it. A forfeit carries no wire: it is a result rather than a count of racks.</p>
     <p><strong>Head-to-head is worked out among the sides still tied</strong>, as a mini-table of the matches between them, rather than pair by pair: three sides who each beat one of the others would otherwise rank differently depending on the order they were looked at. Sides the order cannot separate share a rank, and the next rank skips.</p>
     <p>The <strong>Trend</strong> line is a side's points after each of its last ten matches, and Form is its last five results, oldest first.</p>`]
-    : ['How the Table Is Ordered', `<p>Every side earns the league's points for a <strong>win, a draw or a loss</strong>, set on the League tab. Sides level on points are separated by the <strong>tiebreak order</strong> chosen there — by default leg difference, then legs for, then head-to-head.</p>
+    : ['How the Table Is Ordered', `<p>Every side earns the league's points for a <strong>win, a draw or a loss</strong>, set on the Club tab. Sides level on points are separated by the <strong>tiebreak order</strong> chosen there — by default leg difference, then legs for, then head-to-head.</p>
     <p><strong>Head-to-head is worked out among the sides still tied</strong>, as a mini-table of the matches between them, rather than pair by pair: three sides who each beat one of the others would otherwise rank differently depending on the order they were looked at. Sides the order cannot separate share a rank, and the next rank skips.</p>
     <p>The <strong>Trend</strong> line is a side's points after each of its last ten matches, and Form is its last five results, oldest first.</p>`]),
   individual: () => (helpGame().name === 'Cornhole'
@@ -7724,7 +7724,7 @@ $('importFile').addEventListener('change', () => {
 /* ── Deleting a league ────────────────────────────────────────────────── */
 /* ONE window, two jobs, and the heading says which. From the Back Up window
    it is the family's Delete All Data: every league on THIS DEVICE goes, a
-   shared one staying in the cloud for its members. From the League tab it is
+   shared one staying in the cloud for its members. From the Club tab it is
    the owner deleting ONE league, for everyone. */
 const clearDialog = $('clearDialog');
 let clearMode = 'all';
@@ -10428,7 +10428,7 @@ function describeSyncError(e) {
     const detail = String((e && e.message) || '');
     if (/maximum allowed size|exceeds|too large|longer than|bytes/i.test(detail)) return {
       reason: 'This league has grown past what one cloud document can hold.',
-      fix: 'Back up first, then close an old season on the League tab to trim it — sync picks up again on the next change.' };
+      fix: 'Back up first, then close an old season on the Club tab to trim it — sync picks up again on the next change.' };
     return { reason: 'The cloud refused this copy of the league — that’s a fault in the app, not in what you entered.',
              fix: 'Nothing is lost: everything is still here and still saved. Reloading the page usually clears it.' };
   }
@@ -10458,7 +10458,7 @@ function updateUI() {
     btn.textContent = dirty ? '☁️ ' + who + ' · saved here, will sync' : '☁️ ' + who;
     btn.setAttribute('aria-label', 'Signed in as ' + who + (dirty ? ', changes waiting to sync' : ''));
     btn.title = 'Signed in with Google — tap to sign out';
-    privacyNote.textContent = '☁️ Signed in as ' + user.email + ' — shared leagues sync to everyone in them and still work offline; a league you have not shared stays on this device.';
+    privacyNote.textContent = '☁️ Signed in as ' + user.email + ' — shared clubs sync to everyone in them and still work offline; a club you have not shared stays on this device.';
   } else {
     btn.textContent = '☁️ Sign In to Share';
     btn.setAttribute('aria-label', 'Sign In to Share');
@@ -10492,7 +10492,7 @@ async function onSignedIn() {
       await adoptCloudLeague(l.id, doc.data(), false);
     } catch (e) { console.warn('could not fetch', l.id, e); }
   }
-  /* And this device's shared leagues onto the account. MERGE, here and in the
+  /* And this device's shared clubs onto the account. MERGE, here and in the
      two writes below: a plain setDoc replaces the document, and `current` —
      which is written from cloudOpen, on its own schedule — would be dropped by
      whichever of them happened to run last. */
@@ -10545,7 +10545,8 @@ async function adoptCloudLeague(id, data, makeCurrent) {
 }
 
 /* ── Share: this device's league goes up, and this account owns it ───────── */
-/* Twenty shared leagues per account. CLIENT-SIDE, and honestly so: it lives
+/* Twenty shared CLUBS per account (not leagues — a club runs as many of those
+   as it likes, capped at LEAGUES_MAX). CLIENT-SIDE, and honestly so: it lives
    in this browser and a determined account can step around it with a script.
    It is a speed bump against an accident and a bored afternoon, not a control
    — the control is the budget alert on the Firebase project, and the README
