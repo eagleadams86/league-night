@@ -120,6 +120,10 @@ club's ID can follow it, and anyone with the admin key can run it.
   a round nobody scored changes nothing. Under *exact 21* going over is announced — "Bust — The Bag
   Pit goes back to 11" — rather than points quietly leaving the board. Points per game, bags in the
   hole and the best round fall out of it.
+- **Ticking who threw.** In a team match every player figure comes from **who threw each game**,
+  not from who is on the team — a doubles game cannot say whose bag went in, so the app asks.
+  Each game carries a *"Us threw"* row: tick the names. Until you do, the game counts for the
+  team and for no player, and the tables **say so** rather than quietly showing noughts.
 - **Standings.** Points for a win, draw and loss; leg (or game) difference, legs for,
   head-to-head and wins as tiebreakers in the order you choose; form and a trend line per side;
   and in a team league an individual table of every player's own legs. The last three columns are
