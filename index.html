@@ -6050,10 +6050,23 @@ function renderIndividual(seasonId, wrap) {
       + '<td class="num">' + (r.legs ? Math.round(r.won / r.legs * 100) + '%' : '—') + '</td>'
       + cols.map((c) => '<td class="num">' + esc(c.fmt(r[c.key])) + '</td>').join('') + '</tr>').join('')
     + '</tbody></table>';
+  /* THE TABLE OF ZEROS HAS TO SAY WHY IT IS ZERO. Every figure here is worked
+     out from who THREW a leg (`leg.by`), never from who is on the team — in a
+     doubles game the app cannot know whose bag went in, so it asks. A scorer
+     who taps the winners and never ticks the names gets a table of noughts,
+     and the old note explained why three COLUMNS were em-dashes while saying
+     nothing about why the count itself was nought. Charles read it as the
+     stats being broken, which is exactly what it looked like. */
+  const named = legs.filter((l) => l.by && (l.by.a.length || l.by.b.length)).length;
+  const lead2 = legs.length && !named
+    ? 'No ' + unit.one + ' here says who threw it, so nobody is credited yet — open a match and tick the names under each ' + unit.one + '. '
+    : legs.length && named < legs.length
+    ? named + ' of ' + plural(legs.length, unit.one, unit.many) + ' say who threw them; the rest are credited to nobody. '
+    : '';
   /* The GAME's own figures, named by its own leaderboard columns and not by
      darts. This line has said "Dart figures" at every game since shuffleboard
      arrived, and a fourth game only made it wronger. */
-  $('standingsNote').textContent = 'Each player’s own ' + unit.many + ' across the team matches. '
+  $('standingsNote').textContent = lead2 + 'Each player’s own ' + unit.many + ' across the team matches. '
     + cols.map((c) => c.label).join(', ') + ' count only ' + unit.many + ' one person played alone.';
 }
 function tiebreakWords(keys) {
@@ -6454,7 +6467,16 @@ function openPlayer(id) {
   fillTeamFields(p);
   fillHcpFields(p);
   $('pl_active').checked = p.active;
-  $('playerStats').innerHTML = statsHtml(G().playerStats(legsIn(state, null, currentLeagueId()), p.id));
+  /* Same silence as the individual table, one window over: a player on nought
+     whose TEAM has played has to be told that nobody ticked the names, or the
+     tiles read as a broken app. */
+  const myLegs = legsIn(state, null, currentLeagueId());
+  const myStats = G().playerStats(myLegs, p.id);
+  $('playerStats').innerHTML = statsHtml(myStats)
+    + (!myStats.legs && myLegs.length && isTeams()
+       ? '<p class="hint" style="grid-column:1/-1;margin:0">No ' + esc(G().unit.one)
+         + ' yet says ' + esc(p.name) + ' threw it — tick the names under each ' + esc(G().unit.one)
+         + ' on a match, and their figures fill in.</p>' : '');
   $('playerWarn').textContent = '';
   openModal($('playerDialog'));
 }
@@ -7038,7 +7060,13 @@ function renderMatchDialog() {
         + (down.length ? down.map((p) => '<label class="checkline"><input type="checkbox" data-leg="' + i + '" data-by="' + side + '" data-pid="' + esc(p.id) + '"'
           + (leg.by[side].indexOf(p.id) !== -1 ? ' checked' : '') + (edit ? '' : ' disabled') + '><span>' + esc(p.name)
           + (teamIn(state, m, p) !== m[side] ? ' <span class="pill">sub</span>' : '') + '</span></label>').join('')
-          : '<span class="hint">nobody is down for this team</span>') + '</div>';
+          : '<span class="hint">nobody is down for this team</span>')
+        /* WHY THE TICK MATTERS, said where the tick is. Every player figure is
+           worked out from this and from nothing else, and a scorer who taps
+           only the winners gets a table of noughts with no idea why. */
+        + (down.length && !leg.by[side].length
+            ? '<span class="hint">Nobody ticked — this ' + esc(G().unit.one) + ' counts for the team, but for no player.</span>' : '')
+        + '</div>';
     };
     const stats = (side) => '<div class="legstats"><span class="label">' + esc(nameOf(m[side])) + '</span>'
       + fields.map((f) => '<label><span>' + esc(f.label) + '</span><input type="number" inputmode="numeric" min="' + f.min + '" max="' + f.max

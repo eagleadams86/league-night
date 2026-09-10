@@ -243,6 +243,17 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
   because `mergeLeague` normalizes each side alone and stripping it would lose a new player
   whenever the other copy's match carried the higher `u` — unknown ids are dropped where they
   are drawn, exactly as `leg.by` already does.
+- **A TABLE OF NOUGHTS HAS TO SAY WHY IT IS NOUGHT** (2026-09-10). Every player figure comes
+  from `leg.by` and from nothing else — a doubles game cannot say whose bag went in, so the app
+  asks. A scorer who taps the winners and never ticks the names therefore gets a table of
+  noughts, which is correct and looked exactly like a broken app: the individual table's note
+  explained why three COLUMNS were em-dashes while saying nothing about the count itself.
+  Charles reported it as "no player stats". Three places say it now, and each says it where the
+  reader is: the individual table's note leads with the cause and the fix, the player window
+  names the player, and the leg row says it beside the tick that would fix it. Once some legs
+  are ticked the note counts what is still missing rather than going quiet. **This is the
+  [[empty-state-must-not-explain-why]] rule INVERTED** — the reason here is certain, and
+  withholding it is what made the figures look wrong.
 - **A sub is a name on a card who is not on that team, and there is no other record of one.**
   Nothing downstream reads a lineup: `standings`, `matchScore` and `dartsPlayerStats` all key
   off the leg, so a sub is credited because `leg.by` names them and all the card does is let
@@ -490,7 +501,7 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
 ## Status
 
 **Per-league team membership (2026-09-10, the same day)** is the current shape:
-`player.teams = { [leagueId]: teamId }`, `SCHEMA` **9**, `EXPECTED` **419**, and **no
+`player.teams = { [leagueId]: teamId }`, `SCHEMA` **9**, `EXPECTED` **424**, and **no
 `firestore.rules` change at all**. The doubles demo club runs two teams leagues with the pairs
 shuffled between them. Read the first bullet of "What is new here" before touching the boundary,
 `sidesOf`, a sub pill or the copy window.

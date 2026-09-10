@@ -52,7 +52,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 419;
+const EXPECTED = 424;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -3146,6 +3146,97 @@ function define() {
   });
 
   /* ── The Club tab, and the picker that drives every game-scoped view ────── */
+  /* ── A table of noughts has to say why ──────────────────────────────────
+     Every player figure is worked out from who THREW a leg (`leg.by`) and from
+     nothing else — in a doubles game the app cannot know whose bag went in, so
+     it asks. A scorer who taps the winners and never ticks the names gets a
+     table of noughts, and it used to say nothing about it: the note explained
+     why three COLUMNS were em-dashes while the count itself sat at nought
+     unexplained. Charles read it as the stats being broken, which is exactly
+     what it looked like (2026-09-10). */
+  group('a team match nobody has been ticked onto');
+
+  const UNTICKED = () => ({
+    club: { id: 'LN-UNTICKED', name: 'Test', createdAt: '2026-01-01', u: 1 },
+    leagues: [{ id: 'lg-c', name: 'Test Cornhole', game: 'cornhole', createdAt: '2026-01-01', u: 2,
+                settings: { format: 'teams', teamSize: 2, legFormat: '21' } }],
+    teams: [{ id: 'tm-us', name: 'Us', u: 3 }, { id: 'tm-them', name: 'them', u: 4 }],
+    players: [{ id: 'up-me', name: 'Me', teams: { 'lg-c': 'tm-us' }, active: true, u: 5 },
+              { id: 'up-you', name: 'You', teams: { 'lg-c': 'tm-us' }, active: true, u: 6 },
+              { id: 'up-them', name: 'Them', teams: { 'lg-c': 'tm-them' }, active: true, u: 7 }],
+    seasons: [{ id: 'us-s', leagueId: 'lg-c', name: 'Autumn 2026', startsOn: '2026-01-02', status: 'active', u: 8 }],
+    /* Two matches, properly scored — and NOT ONE LEG SAYS WHO THREW IT. */
+    matches: [1, 2].map((n) => ({
+      id: 'um' + n, leagueId: 'lg-c', seasonId: 'us-s', bracketId: null, round: n, date: '2026-01-0' + n,
+      a: 'tm-us', b: 'tm-them', status: 'played', score: { a: 0, b: 0 },
+      legs: [1, 2, 3].map((k) => ({ w: k < 3 ? 'a' : 'b', by: { a: [], b: [] }, start: { a: 21, b: 21 } })), u: 10 + n })),
+    brackets: [], tombstones: [],
+  });
+
+  t('the TEAM table is right, and every player is on nought', () => {
+    /* The state Charles was looking at: the teams are 2 played, 2 won, and
+       every player is nought — because a figure comes from leg.by. */
+    const st = H.normalizeLeague(UNTICKED());
+    const lg = st.leagues[0].id;
+    const ms = st.matches;
+    const rows = H.standings(ms, ['tm-us', 'tm-them'], st.leagues[0].settings);
+    eq(rows.find((r) => r.sideId === 'tm-us').w, 2, 'Us won both');
+    const legs = H.legsIn(st, null, lg);
+    eq(legs.length, 6, 'the legs are all there');
+    st.players.forEach((p) => eq(H.GAMES.cornhole.playerStats(legs, p.id).legs, 0, p.name + ' is on nought'));
+  });
+  t('AND THE TABLE SAYS WHY IT IS NOUGHT', () => {
+    const D = W.document;
+    try {
+      H.__plant(UNTICKED());
+      W.setTab('standings');
+      D.querySelector('#stModeWrap [data-mode="players"]').click();
+      const note = D.getElementById('standingsNote').textContent;
+      ok(/says who threw it/.test(note), 'it names the cause: ' + note);
+      ok(/tick the names/.test(note), 'and what to do about it');
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+  t('the player window says it too, and names the player', () => {
+    const D = W.document;
+    try {
+      H.__plant(UNTICKED());
+      W.setTab('players');
+      W.openPlayer('up-me');
+      const hint = (D.querySelector('#playerStats .hint') || {}).textContent || '';
+      ok(/Me/.test(hint) && /tick the names/.test(hint), hint || '(no hint at all)');
+      D.getElementById('playerDialog').close();
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+  t('and the leg row says it where the tick actually is', () => {
+    const D = W.document;
+    try {
+      H.__plant(UNTICKED());
+      W.openMatch('um1');
+      const hint = [...D.querySelectorAll('#legsWrap .who .hint')].map((x) => x.textContent).join(' | ');
+      ok(/Nobody ticked/.test(hint), hint || '(no hint at all)');
+      ok(/counts for the team, but for no player/.test(hint), 'and says exactly what it costs');
+      D.getElementById('matchDialog').close();
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+  t('ticking the names fills the figures in, and the warning goes', () => {
+    const D = W.document;
+    try {
+      H.__plant(UNTICKED());
+      W.openMatch('um1');
+      [...D.querySelectorAll('#legsWrap [data-by]')].filter((x) => x.dataset.leg === '0')
+        .forEach((x) => { x.checked = true; x.dispatchEvent(new W.Event('change', { bubbles: true })); });
+      D.getElementById('matchDialog').close();
+      const st = H.__state();
+      const legs = H.legsIn(st, null, st.leagues[0].id);
+      eq(H.GAMES.cornhole.playerStats(legs, 'up-me').legs, 1, 'Me played one now');
+      eq(H.GAMES.cornhole.playerStats(legs, 'up-them').legs, 1, 'and so did Them');
+      W.setTab('standings');
+      D.querySelector('#stModeWrap [data-mode="players"]').click();
+      const note = D.getElementById('standingsNote').textContent;
+      ok(/1 of 6 games say who threw them/.test(note), 'and the note counts what is still missing: ' + note);
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+
   group('the Club tab: two leagues, one roster');
   const TWOFIX = () => ({
     club: { id: 'LN-UIFIXTURE', name: 'The Feathers', createdAt: '2026-01-01', u: 1 },
