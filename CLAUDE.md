@@ -61,7 +61,9 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
     league does not wipe everybody's figure). ABSENT rather than empty, `avail`'s rule one level
     up. It also dissolved `copyPlan.sameGame`: the darts-60-becomes-a-shuffleboard-10 failure is
     fixed at the root rather than guarded against, because no figure changes game. `bothTeams`
-    went with it — teams are the CLUB's while `format` is each league's, so they always travel.
+    went with it — the team RECORD is the CLUB's while `format` is each league's, so teams always
+    travel. (Since the per-league membership change the same day, WHO IS IN a team is each
+    league's answer; the copy takes one league's pairings — see the first bullet.)
   - **ANYTHING HOLDING ONE SPECIFIC MATCH RESOLVES ITS GAME FROM THE MATCH, NEVER FROM `G()`.**
     `G()` now means "the game of the league in the picker". Reach a pool match while the picker
     sits on darts — through Find, a bracket, or a stale pick after a merge — and the sheet would
@@ -86,6 +88,59 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
     Strictly more permissive than what it replaced, so the ordering was free; paste first anyway.
     The Team Setup member clause needed no change and gets `leagues` protection for free, because
     `hasOnly(['players','teams','tombstones'])` is key-agnostic.
+- **A TEAM is the club's; WHO IS IN IT is each league's** (2026-09-10, the same day as the
+  split and reversing one of its decisions). `player.teamId` became `player.teams`, a map of
+  `{ [leagueId]: teamId }`. `SCHEMA` **9**. The team RECORD did not change at all — one "The
+  Anchor", one name, one history across every game — which is what makes the rest cheap:
+  - **`firestore.rules` DID NOT CHANGE, and that is the design earning its keep.** Membership
+    rides inside `players[]`, which the Team Setup clause already whitelists; putting it on
+    `state.leagues[]` would have been denied outright and a new top-level list would have needed
+    a genuinely-widening deploy. The request queue needed nothing either: **the only team thing a
+    request carries is a RENAME**, and a name is club-level — so `requestVerdict` only loosened
+    to "a team you are in in ANY league" (`inAnyTeam`). First change since the cloud went on that
+    needed nothing pasted into the console.
+  - **THE VALUE IS CHECKED AND THE KEY IS NOT, and a reader will want to make them match.**
+    A `teamId` naming no team is dropped, as it always was — `mergeList` only ever ADDS teams and
+    the one way a team leaves is a tombstone, so a missing team genuinely is no team. A **league**
+    arrives on one side before the other every time somebody makes one, so an unknown league key
+    SURVIVES: `mergeLeague` normalizes each side alone, and dropping it would wipe everybody's
+    cornhole pairing and let `mergeList` commit that if those player records carried the higher
+    `u`. Unknown leagues are dropped where they are DRAWN — the `m.lineup` rule, not the `lgRef`
+    one. `PLAYER_TEAMS_MAX` is **64 and deliberately NOT `LEAGUES_MAX`**: a device holding the
+    maximum leagues plus one that has not arrived yet must not have the not-yet-arrived entry be
+    the one dropped, which is the exact loss the survival rule exists to prevent.
+  - **The emptiness test runs AFTER the value filter**, or a player whose only team was just
+    tombstoned carries `teams: {}` into every backup for ever. Keys are written **club's leagues
+    first, in the club's own order**, so two devices serialise byte for byte.
+  - **The migration stamps the old club-wide team under EVERY league, singles ones included.**
+    `format` is per league and MUTABLE, so a migration that read it would produce different data
+    on two devices depending on when each ran. It also keeps `copyPlan`'s promise that a club
+    which gains a team league later finds its teams already there — and it is why ~38 old-shape
+    fixtures in the suite still work untouched.
+  - **`normalizeLeague`'s empty-leagues fallback now DERIVES its id** from the club's, as
+    `blankClub` and `migrateRaw` do. It minted a random one, which left the migration with
+    nowhere to stamp a membership on a state whose leagues were lost.
+  - **`sidesOf`'s teams branch is the teams with somebody in THAT league** — derived, no stored
+    field. It **does not look at `active`** and never has: a team whose every player has retired
+    is still a side, or the last retirement would drop it out of the fixture generator
+    mid-season. `sidesForSeason` still brings back any side that PLAYED.
+  - **A SUB IS PER LEAGUE NOW.** "A name on a card who is not on that team" is a league's
+    answer, so `lineupFor`, `lineupRows` and both sub pills take `teamIn(state, m, p)` — the
+    MATCH's league, never `teamOf`'s picked one.
+  - **The team editor FREEZES the league it is arranging** on `teamCtx = { id, lg }` at open, so
+    a picker that moved cannot redirect a tick, and its legend names that league.
+  - **`copyPlayers` decides ONCE which of a player's memberships travels** — the source league
+    whose GAME matches the new club's, if it is played in teams, else the source's first
+    teams-format league — and hands `copyPlan.teamFrom` to the builder. Preferring a
+    teams-format league matters because the migration stamped memberships under singles leagues
+    too, and those are leftovers. Re-deriving it in the builder is how a team gets minted that
+    nobody joins.
+  - **Two live bugs from the split died here**: `playerChanged` wrote
+    `p.teamId = isTeams() && … : null`, so editing anybody with a SINGLES league picked wiped
+    their team with nothing on screen to see; and `csvMatches`/`searchApp` called
+    `sideName(st, id)` with no league, so in any club whose FIRST league is singles every
+    teams-league match in the export and in Find was named "—". `mtLineup`'s cap read `S()` for a
+    specific match and now reads `settingsOf(m)`.
 - **A league is ONE Firestore document that many Google accounts can read and a few can
   manage.** Every sibling with sync stores one private document per account; this app has a
   League ID (the read capability — anyone signed in who knows it can open the league) and an
@@ -423,8 +478,13 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
 
 ## Status
 
-**The club/league split (2026-09-10)** is the current shape: `state.club` + `state.leagues[]`,
-`SCHEMA` **8**, `EXPECTED` **385**. **`firestore.rules` in the repo is AHEAD of the console until
+**Per-league team membership (2026-09-10, the same day)** is the current shape:
+`player.teams = { [leagueId]: teamId }`, `SCHEMA` **9**, `EXPECTED` **414**, and **no
+`firestore.rules` change at all**. The doubles demo club runs two teams leagues with the pairs
+shuffled between them. Read the first bullet of "What is new here" before touching the boundary,
+`sidesOf`, a sub pill or the copy window.
+
+**The club/league split (2026-09-10)** is what it sits on: `state.club` + `state.leagues[]`. **`firestore.rules` in the repo is AHEAD of the console until
 Charles pastes it** — the change is strictly more permissive than what it replaces, so nothing
 breaks while it is un-pasted, but a club created without a `game` field cannot be written until it
 is. The five demos are five CLUBS named for their people, and the first
