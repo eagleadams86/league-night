@@ -14,6 +14,78 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
 
 ## What is new here, and why
 
+- **A CLUB is the people; a LEAGUE is one competition at one game** (2026-09-10). `state.league`
+  became `state.club` and holds only the roster's owner-facing name; the game and every setting
+  moved onto `state.leagues[]`, one entry per competition. `SCHEMA` went to **8**. What a reader
+  needs before touching any of it:
+  - **The Firestore collection is still `leagues/{id}` and the ID prefix is still `LN-`.** That is
+    a LEGACY NAME for what is now a club, kept on purpose: renaming the path would orphan every
+    real cloud document and there is no server-side migration available here. Same call as
+    `leg.frames` still holding rounds at cornhole. `normalizeLeague` and `mergeLeague` keep their
+    names for the same reason (and `mergeLeague` is `window.lnMerge`, read by the sync module).
+  - **`state.league` → `state.club` was not cosmetic.** `state.league` beside a new
+    `state.leagues[]` is a lethal ambiguity in a 10,000-line file, and the rename is what stops it.
+  - **THE MIGRATION IS GATED ON SHAPE, NEVER ON `schema < 8`.** `boot()` stamps `schema: SCHEMA`
+    onto a share payload built by an OLDER app before handing it to the boundary, `__plant` passes
+    raws with no schema at all, and the suite's fixtures carry schema 1 — a number gate would skip
+    every one of them and redden a hundred literals. `migrateRaw` gates each half on the thing it
+    converts (`!Array.isArray(raw.leagues) && raw.league`, and per player `p.hcps == null &&
+    p.hcp != null`), which is also why every old-shape fixture in the suite still works, as a
+    migration fixture. It never mutates its argument.
+  - **THE MIGRATED LEAGUE'S ID IS DERIVED FROM THE CLUB'S AND NEVER MINTED** — `firstLeagueId()`,
+    shared with `blankClub`. `uid()` is random, so two devices migrating the same old cloud state
+    would mint two different ids, `mergeList` would keep both, and the club would silently split
+    its matches across two leagues that are the same league, with nothing on screen and no way
+    back. Derived, both devices converge.
+  - **`mergeLeague` normalizes BOTH sides with the UNION of their leagues visible, and this one
+    loses data without it.** It normalizes each side alone, so a copy that has not yet received a
+    new cornhole league would re-point that league's matches at `leagues[0]` (darts), `frames()`
+    would find darts has no `rounds`, and every round record on those legs would be DELETED — then
+    committed by `mergeList` if that side carried the higher `u`. `gamesIn()` reads both raws'
+    leagues first and hands the union to both calls as `opts.knownGames`. **`lgRef` KEEPS an id
+    the union recognises rather than repairing it**, and that ordering is the whole fix: the
+    repair happens before any game is resolved, so a union consulted only afterwards comes too
+    late. A test named for it goes red without either half.
+  - **`match.leagueId` is stored and is the source of truth**, not derived by walking to the
+    season — orphan matches exist and the first-season-adopts-them rule had to survive, per league.
+    A match inside a season or a bracket takes THAT one's league whatever it claims: the two cannot
+    disagree, and a fixture that drifted would be drawn on one table and folded by another game's
+    rules. A dangling id lands on `leagues[0]` and the match is never dropped.
+  - **A club always has at least one league.** `blankClub` mints one, `normalizeLeague` mints one
+    if the list comes out empty, `applyTombstones` keeps the newest survivor when another device's
+    tombstone would take the last, and the delete refuses the last outright. Every `leagues[0]`
+    fallback in the file leans on this, and it is what lets `currentLeague()` promise never to
+    return null — which is what kept 69 `G()` and 19 `S()` call sites unchanged.
+  - **`player.hcp` became `player.hcps`, one figure per GAME**, each clamped to ITS OWN game's
+    range, keyed on `GAMES` and not on the club's own leagues (so deleting and recreating a darts
+    league does not wipe everybody's figure). ABSENT rather than empty, `avail`'s rule one level
+    up. It also dissolved `copyPlan.sameGame`: the darts-60-becomes-a-shuffleboard-10 failure is
+    fixed at the root rather than guarded against, because no figure changes game. `bothTeams`
+    went with it — teams are the CLUB's while `format` is each league's, so they always travel.
+  - **ANYTHING HOLDING ONE SPECIFIC MATCH RESOLVES ITS GAME FROM THE MATCH, NEVER FROM `G()`.**
+    `G()` now means "the game of the league in the picker". Reach a pool match while the picker
+    sits on darts — through Find, a bracket, or a stale pick after a merge — and the sheet would
+    fold a rack under the x01 rules, with nothing on screen to say so and the leg STORED.
+    `gameOf(m)`, `settingsOf(m)`, `hcpIn(m, p)` and `matchFormatFor(m)` read the match's own
+    league; `newLeg`, `spotFor` and `openLive`'s record-planting all use them, because those
+    WRITE. Belt and braces: `openMatch` and `openLive` move `leaguePick` to the match's league, so
+    the picker can never disagree with what is on screen.
+  - **`leaguePick` is VIEW state beside `seasonPick`** — never in `state`, so it rides into no
+    backup and no share link. Changing league clears the season pick, because a season id belongs
+    to one league.
+  - **`legsIn(st, seasonId, lg)`'s third argument is NOT optional**, and a null `seasonId` means
+    "this league, every season" and never "every league" — folding a rack into a darts player's
+    average is a figure that changed with nothing on screen to say so. Same for `sidesOf`,
+    `sideName` and `leagueMatches`, whose no-seasons fallback is now PER LEAGUE.
+  - **`CLUBS_MAX` (20, per account) and `LEAGUES_MAX` (50, per club) are different numbers.** They
+    were one constant before the split. The second mirrors `validSize` in `firestore.rules`, and a
+    test pins the two files against each other.
+  - **The rules deploy was ADDITIVE**: `game` became optional (the `setup` treatment), its
+    immutability line went, and `validSize` gained a **guarded** `leagues` cap — guarded because
+    `size()` on a missing key is an evaluation error, which would deny every un-upgraded client.
+    Strictly more permissive than what it replaced, so the ordering was free; paste first anyway.
+    The Team Setup member clause needed no change and gets `leagues` protection for free, because
+    `hasOnly(['players','teams','tombstones'])` is key-agnostic.
 - **A league is ONE Firestore document that many Google accounts can read and a few can
   manage.** Every sibling with sync stores one private document per account; this app has a
   League ID (the read capability — anyone signed in who knows it can open the league) and an
@@ -143,8 +215,10 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
 - **The availability toggles are the one block in the app a viewer may use.** They must never
   carry `.no-edit`, which `html[data-readonly] .no-edit` hides: what a player says about their
   own night is theirs to say and never enters the league.
-- **The same players, in another league** (2026-09-08). One league is one game, so the same
-  friends at two games are two leagues, and *Create a League* copies a roster across. `copyPlan`
+- **The same players, in another CLUB** (2026-09-08, re-aimed 2026-09-10). It was built because
+  one league was one game; since the split, the same friends at another game is another LEAGUE in
+  the club they are already in, and this window is only for a genuinely different group who
+  overlap. *Create a Club* copies a roster across. `copyPlan`
   decides and `copyPlayers` builds — **and the split is load-bearing**: the live note in the
   window runs `copyPlan` on every tick, so the sentence on screen IS the plan the button
   executes and cannot promise eight players while seven arrive. Both expect NORMALIZED states,
@@ -163,10 +237,14 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
     carries `avail` and every field a later allowlist adds. `avail` is ABSENT rather than null —
     its keys are the source league's match nights, they annotate nothing in the new league, and
     they would spend its `AVAIL_MAX` budget before anybody answered for a night it plays.
-  - **`hcp` travels only between two leagues playing the same game.** `int()` clamps rather than
-    refuses, so a darts 60 carried across would land as a shuffleboard head start of **10** — the
-    maximum, a real advantage nobody was given, and indistinguishable afterwards from a setting.
-    The suite's test is named for it.
+  - **`hcps` travels WHOLE, game by game** (since the split; it used to travel only between two
+    leagues at the same game). `int()` clamps rather than refuses, so one shared figure carried
+    across would have landed a darts 60 as a shuffleboard head start of **10** — the maximum, a
+    real advantage nobody was given and indistinguishable afterwards from a setting. Keying by
+    game made that impossible rather than guarded-against; the suite's test is still named for it.
+    Shallow-COPIED, never shared, and applied AFTER `touch()` so the key lands where the boundary
+    puts it — this output is never normalized on the way out and `eq` compares with
+    `JSON.stringify`, where a reordered object is a different object.
   - **`copyPlayers` does NOT normalize on the way out.** `saveLocal` stringifies `state` exactly
     as it is, so the output has to be boundary-clean already — and a defensive normalize would
     turn the test that proves it into a test of nothing.
@@ -345,16 +423,27 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
 
 ## Status
 
+**The club/league split (2026-09-10)** is the current shape: `state.club` + `state.leagues[]`,
+`SCHEMA` **8**, `EXPECTED` **385**. **`firestore.rules` in the repo is AHEAD of the console until
+Charles pastes it** — the change is strictly more permissive than what it replaces, so nothing
+breaks while it is un-pasted, but a club created without a `game` field cannot be written until it
+is. The five demos are five CLUBS named for their people, and the first
+(`LN-DEMODEMO`, *The Anchor*) runs **two leagues at once** — Tuesday Singles at darts and
+Wednesday Board at shuffleboard, on one roster, with Hannah and Nia carrying a figure at each.
+The golden fold of all five was byte-identical to the previous build apart from the intended
+`hcp` → `hcps` rename. Read the first bullet of "What is new here" before touching the boundary,
+the merge or anything that reads `G()`.
+
 **Cornhole (2026-09-09)** is the fourth entry in `GAMES` and the fifth demo league
 (`LN-DEMOCORN`, four teams of two, a lineup card, a sub, the last round scored round by round).
-SCHEMA went to **7** for `leg.bust` and `leg.marg`; `EXPECTED` is **362**. It is the first game
+SCHEMA went to **7** for `leg.bust` and `leg.marg` (it is 8 since the club/league split). It is the first game
 that shares another game's scorer — see the `rounds` bullet above before touching `roundState`,
 `frames()` or `renderLiveRounds`.
 
 **8-ball (2026-09-09)** is the third entry in `GAMES` and the fourth demo league (`LN-DEMOPOOL`,
 singles, two players on the wire, the last round scored rack by rack). SCHEMA went to **6** for
 `leg.turns` and `match.spot`. The pure `poolState`/`poolShot`/`poolUndo`/`poolLegStats` fold sits
-beside the other two and is pinned the same way; `EXPECTED` is **340**. It is the only game whose
+beside the other two and is pinned the same way. It is the only game whose
 handicap is a match-level one — see the `handicap.scope` bullet above before touching
 `matchScore`, `matchDone` or `spotFor`.
 
@@ -491,8 +580,9 @@ showed it.
   score and no legs; voids keep their legs and count for nothing.
 - **`__plant` in the test hooks updates the device entry's name** — the header picker reads the
   device record, not `state`, and a test that plants a hostile league name reads the picker.
-- **The demo is five leagues** (darts singles, darts teams, shuffleboard, 8-ball, cornhole) with ids that are NOT valid League IDs (they carry
-  an O), so they can never be pushed to the cloud. `buildDemoSingles` trims bracket legs to the
+- **The demo is five CLUBS**, named for their people (darts singles — which also runs a second,
+  shuffleboard league — darts teams, shuffleboard, 8-ball, cornhole), with ids that are NOT valid
+  League IDs (they carry an O), so they can never be pushed to the cloud. `buildDemoSingles` trims bracket legs to the
   bracket's best of three after `demoPlay`, which played them to the league's best of five.
 - **`tests.html` reads its markup from `</head>`**, not `<body>` — a CSS comment in the head says
   `<body>` first.
