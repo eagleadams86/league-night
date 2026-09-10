@@ -135,6 +135,17 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
     teams-format league matters because the migration stamped memberships under singles leagues
     too, and those are leftovers. Re-deriving it in the builder is how a team gets minted that
     nobody joins.
+  - **DELETING A LEAGUE was promised before it existed** (fixed 2026-09-10, PR #14). The boundary
+    half shipped with the split — `'league'` in the tombstone kinds, and `applyTombstones`'
+    carefully-commented keep-the-last-league rule — and the BUTTON never did, so `HELP.leagues`
+    described a feature the app did not have and nothing could ever produce that tombstone.
+    `#lr_delete` sits at the foot of the League Rules card, not on a Leagues row: a row you press
+    to SELECT is one slip away from the wrong league. It refuses while the league holds a season,
+    a fixture or a tournament — the season rule one level up — and the refusal NAMES what is in
+    the way (`listWords`). Hidden entirely at one league, the `lr_dOutRow` rule, and the handler
+    still refuses because another device can delete one between a render and a press. It clears
+    that league's entry from every player's `teams` and touches them, so the clearing wins the
+    merge on a device that has not seen the tombstone.
   - **Two live bugs from the split died here**: `playerChanged` wrote
     `p.teamId = isTeams() && … : null`, so editing anybody with a SINGLES league picked wiped
     their team with nothing on screen to see; and `csvMatches`/`searchApp` called
@@ -479,7 +490,7 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
 ## Status
 
 **Per-league team membership (2026-09-10, the same day)** is the current shape:
-`player.teams = { [leagueId]: teamId }`, `SCHEMA` **9**, `EXPECTED` **414**, and **no
+`player.teams = { [leagueId]: teamId }`, `SCHEMA` **9**, `EXPECTED` **416**, and **no
 `firestore.rules` change at all**. The doubles demo club runs two teams leagues with the pairs
 shuffled between them. Read the first bullet of "What is new here" before touching the boundary,
 `sidesOf`, a sub pill or the copy window.

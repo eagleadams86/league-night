@@ -1679,6 +1679,14 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
         <div class="field wide"><label for="lr_tiebreak">Order the table by</label><select id="lr_tiebreak"></select></div>
       </div>
       <label class="checkline" id="lr_dOutRow"><input type="checkbox" id="lr_dOut"><span>Double-out — a leg must finish on a double or the bull</span></label>
+      <!-- Deleting the league this card is editing. On the card and not on a
+           row, because the card is already the one thing on screen that says
+           which league you are looking at — and a delete on a row you press to
+           SELECT is a delete one slip away from the wrong league. -->
+      <div class="row-actions" id="lr_actions">
+        <button type="button" class="danger no-print no-edit" id="lr_delete">Delete This League…</button>
+        <span class="spacer"></span>
+      </div>
     </div>
 
     <div class="card">
@@ -5678,6 +5686,10 @@ function formPills(form) {
     + '</span>';
 }
 const plural = (n, one, many) => n + ' ' + (n === 1 ? one : (many || one + 's'));
+/* "a", "a and b", "a, b and c" — an Oxford-comma-free list, for a refusal that
+   names what is in the way rather than saying "it is not empty". */
+const listWords = (xs) => (xs.length < 3 ? xs.join(' and ')
+  : xs.slice(0, -1).join(', ') + ' and ' + xs[xs.length - 1]);
 
 /* ── Pinning the tab row ───────────────────────────────────────────────────
    The CSS is up in "Pinning the tab row"; this is the one measurement it reads
@@ -6261,6 +6273,12 @@ function renderClubTab() {
   /* Seasons — OF THE PICKED LEAGUE. A season belongs to one competition, so a
      club running two games has two lists and never one mixed one. */
   const seasons = seasonsSorted();
+  /* HIDDEN WHEN IT COULD NEVER WORK, the `lr_dOutRow` rule: a club with one
+     league always keeps it, and a control that can never apply is one more
+     thing to read past. The handler still refuses — another device can delete
+     a league between this render and the press. An ADMIN's, like every other
+     league setting on this card; the club-level deletes are the owner's. */
+  $('lr_delete').hidden = !canEdit() || state.leagues.length < 2;
   $('addSeasonBtn').hidden = !canEdit();
   $('seasonsWrap').innerHTML = seasons.length ? '<div class="plist">' + seasons.map((sn) => {
     const n = state.matches.filter((m) => m.seasonId === sn.id && !m.bracketId).length;
@@ -6677,6 +6695,51 @@ $('seasonDelete').addEventListener('click', () => {
   $('seasonDialog').close();
   save(); render();
   toast(s.name + ' deleted');
+});
+
+/* Deleting a league. The SEASON's rule one level up: a league that holds
+   anything stays, because deleting it would take that with it, and the refusal
+   names what is in the way rather than leaving a reader to guess.
+
+   AND A CLUB ALWAYS KEEPS ONE. Every `leagues[0]` fallback in the file leans on
+   that, and it is what lets currentLeague() promise never to return null. */
+function leagueHolds(id) {
+  return { seasons: state.seasons.filter((x) => x.leagueId === id).length,
+           matches: state.matches.filter((m) => m.leagueId === id).length,
+           brackets: state.brackets.filter((b) => b.leagueId === id).length };
+}
+$('lr_delete').addEventListener('click', () => {
+  if (!canEdit()) return;
+  const L = currentLeague();
+  if (!L) return;
+  if (state.leagues.length < 2) { toast('A club keeps at least one league — rename this one instead.'); return; }
+  const held = leagueHolds(L.id);
+  /* Named in the order a reader would meet them, and only the ones that apply:
+     "has 2 seasons and 12 matches" beats "is not empty". */
+  const blocking = [held.seasons ? plural(held.seasons, 'season') : '',
+                    held.matches ? plural(held.matches, 'match', 'matches') : '',
+                    held.brackets ? plural(held.brackets, 'tournament') : ''].filter(Boolean);
+  if (blocking.length) {
+    toast(L.name + ' has ' + listWords(blocking) + ' and cannot be deleted.');
+    return;
+  }
+  if (!confirm('Delete ' + L.name + '?\n\nIt has no seasons, fixtures or tournaments. '
+             + 'Anyone in a team in it comes out of it. There is no undo.')) return;
+  /* Everybody's membership OF THIS LEAGUE goes with it, and each of them is
+     touched — teamDelete's rule one level up. The stamp is what makes the
+     clearing win the merge on a device that has not seen the tombstone yet. */
+  state.players.forEach((p) => {
+    if (!p.teams || p.teams[L.id] == null) return;
+    const next = {};
+    Object.keys(p.teams).forEach((k) => { if (k !== L.id) next[k] = p.teams[k]; });
+    if (Object.keys(next).length) p.teams = next; else delete p.teams;
+    touch(p);
+  });
+  state.leagues = state.leagues.filter((x) => x.id !== L.id);
+  state.tombstones.push({ id: L.id, kind: 'league', at: nextU() });
+  clearPicks();
+  save(); render();
+  toast(L.name + ' deleted');
 });
 
 /* ── Generating the fixtures ──────────────────────────────────────────── */
@@ -7863,7 +7926,8 @@ const HELP = {
   leagues: ['What a League Is', `<p>Each league here is a competition at one game, played by the people on this club's roster. Pick one to see its rules, its seasons and its table — the Standings, Matches and Tournament tabs all follow whichever is showing.</p>
     <p><strong>A league's game is fixed when it is created and cannot change.</strong> That is not stubbornness: every result already recorded was folded under that game's rules — a darts leg counts down from 501, a rack of 8-ball counts balls, a board game counts up to a target — so a league that changed game would be re-scoring its own history. To play a different game, add another league.</p>
     <p>Its <em>name</em>, its format and its rules can all change, on the card below, until its first match is recorded.</p>
-    <p>A league can be deleted while it is empty. Once it holds a season or a match it stays, because deleting it would take those with it; and a club always keeps at least one.</p>`],
+    <p><strong>Delete This League</strong> is at the foot of the League Rules card. A league can go while it is <strong>empty</strong>; once it holds a season, a fixture or a tournament it stays, because deleting it would take those with it, and the refusal says what is in the way. A club always keeps at least one, so the button is not there at all when you only have one.</p>
+    <p>Anyone in a team in that league comes out of it. Their teams in your other leagues are untouched — a line-up belongs to the league it was set in.</p>`],
   leg: () => (helpGame().name === 'Cornhole'
     ? ['What a Game Is', `<p>A <strong>game</strong> is a race to 21, played in <strong>rounds</strong>. A round is four bags each, and only the <strong>difference</strong> counts: a bag in the hole is 3, a bag on the board is 1, and whoever comes out ahead scores the gap. So exactly one side scores a round, and the most it can be worth is 12.</p>
     <p>The league picks how a game ends. <strong>First to 21</strong> takes the round that carries a side to 21 or past it. <strong>Exact 21</strong> sends a side that would go over back to <strong>11</strong> instead. <strong>Win by 2</strong> plays on until somebody is two clear. Whichever it is, a game already played remembers the rule it was played under.</p>

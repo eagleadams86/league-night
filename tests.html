@@ -52,7 +52,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 414;
+const EXPECTED = 416;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -1024,6 +1024,56 @@ function define() {
     ok(body && !/p\.active/.test(body), 'the note filters on the pairing alone');
     const save = (src.slice(src.indexOf("$('nlSave').addEventListener")).match(/[\s\S]*?\n\}\);/) || [''])[0];
     ok(/teamFor\(p, fromLg\.id\)/.test(save) && !/p\.active/.test(save), 'and so does the save');
+  });
+
+  t('DELETING A LEAGUE: empty goes, holding anything stays, and the last one has no button', () => {
+    /* The help window promised all three of these before any of them existed —
+       the boundary half shipped (a `league` tombstone kind, applyTombstones'
+       keep-the-last rule) and the button never did. */
+    const D = W.document;
+    try {
+      H.__plant(TEAMY());
+      W.setTab('club');
+      ok(!D.getElementById('lr_delete').hidden, 'two leagues, so it is offered');
+      /* one of them holds a season */
+      const withSeason = Object.assign(TEAMY(), {
+        seasons: [{ id: 'sn', leagueId: 'lg-c', name: 'Winter', startsOn: '2026-01-02', status: 'active', u: 10 }] });
+      H.__plant(withSeason);
+      W.setTab('club');
+      D.getElementById('lrLeague').value = 'lg-c';
+      D.getElementById('lrLeague').dispatchEvent(new W.Event('change', { bubbles: true }));
+      D.getElementById('lr_delete').click();
+      eq(H.__state().leagues.length, 2, 'a league holding a season stays');
+      ok(/1 season/.test(D.getElementById('toast').textContent),
+         'and the refusal NAMES what is in the way: ' + D.getElementById('toast').textContent);
+      /* the last one is not offered at all */
+      const one = Object.assign(TEAMY(), { leagues: [TEAMY().leagues[0]] });
+      H.__plant(one);
+      W.setTab('club');
+      ok(D.getElementById('lr_delete').hidden, 'a club keeps its last league, so there is no button to press');
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+  t('a deleted league takes its LINE-UPS with it, and leaves the other leagues alone', () => {
+    const D = W.document;
+    const realConfirm = W.confirm;
+    try {
+      W.confirm = () => true;
+      H.__plant(TEAMY());
+      W.setTab('club');
+      D.getElementById('lrLeague').value = 'lg-c';
+      D.getElementById('lrLeague').dispatchEvent(new W.Event('change', { bubbles: true }));
+      D.getElementById('lr_delete').click();
+      const st = H.__state();
+      eq(st.leagues.map((L) => L.id), ['lg-d'], 'it went');
+      eq(st.tombstones.filter((t) => t.kind === 'league').map((t) => t.id), ['lg-c'],
+         'and left a tombstone, so the delete travels');
+      st.players.forEach((p) => {
+        ok(!p.teams || p.teams['lg-c'] == null, p.name + ' is out of it');
+        eq(p.teams['lg-d'], TEAMY().players.find((x) => x.id === p.id).teams['lg-d'],
+           'and their DARTS team is untouched — a line-up belongs to the league it was set in');
+      });
+      eq(st.teams.length, 2, 'the teams themselves are the club’s and stay');
+    } finally { W.confirm = realConfirm; H.__plant(FIXTURE); W.setTab('standings'); }
   });
 
   group('a club that runs several leagues at once');
