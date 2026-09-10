@@ -52,7 +52,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 398;
+const EXPECTED = 414;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -640,9 +640,9 @@ function define() {
       seasons: [{ id: 's', name: 'S', secret: 4 }], matches: [{ id: 'm', a: 'p', b: 'q', secret: 5, legs: [{ w: 'a', secret: 6 }] }], brackets: [{ id: 'b', secret: 7 }] });
     eq(Object.keys(out.club).sort(), ['createdAt', 'id', 'name', 'u']);
     eq(Object.keys(out.leagues[0]).sort(), ['createdAt', 'game', 'id', 'name', 'settings', 'u']);
-    /* `hcps` is ABSENT rather than empty — a key with nothing in it would ride
-       into every backup and Firestore document for ever. */
-    eq(Object.keys(out.players[0]).sort(), ['active', 'id', 'name', 'teamId', 'u']);
+    /* `teams` and `hcps` are both ABSENT rather than empty — a key with nothing
+       in it would ride into every backup and Firestore document for ever. */
+    eq(Object.keys(out.players[0]).sort(), ['active', 'id', 'name', 'u']);
     eq(Object.keys(out.teams[0]).sort(), ['id', 'name', 'u']);
     eq(Object.keys(out.seasons[0]).sort(), ['id', 'leagueId', 'name', 'startsOn', 'status', 'u']);
     eq(Object.keys(out.matches[0]).sort(), ['a', 'b', 'bracketId', 'date', 'id', 'leagueId', 'legs', 'round', 'score', 'seasonId', 'slot', 'status', 'u', 'venue']);
@@ -847,6 +847,185 @@ function define() {
     eq(st.matches[0].legs[0].frames.length, 2, 'with its records intact');
   });
 
+  /* ── A player's team is a league's answer, 2026-09-10 ───────────────────
+     The club/league split left teams club-level on purpose. This reverses that
+     one decision: the team RECORD is still the club's — one "The Anchor", one
+     history — and who is IN it is each league's. */
+  group('per-league teams: the same friends, paired differently at each game');
+
+  const TEAMY = () => ({
+    club: { id: 'LN-PAIRINGS', name: 'The Feathers', createdAt: '2026-01-01', u: 1 },
+    leagues: [{ id: 'lg-d', name: 'Tuesday Darts', game: 'darts', createdAt: '2026-01-01', u: 2,
+                settings: { format: 'teams', teamSize: 2 } },
+              { id: 'lg-c', name: 'Saturday Bags', game: 'cornhole', createdAt: '2026-02-01', u: 3,
+                settings: { format: 'teams', teamSize: 2 } }],
+    teams: [{ id: 'tm-a', name: 'The Anchor', u: 4 }, { id: 'tm-c', name: 'The Crown', u: 5 }],
+    /* Ann and Bob are a pair at darts; Ann and Cal are a pair at cornhole. */
+    players: [{ id: 'pp-ann', name: 'Ann', teams: { 'lg-d': 'tm-a', 'lg-c': 'tm-a' }, active: true, u: 6 },
+              { id: 'pp-bob', name: 'Bob', teams: { 'lg-d': 'tm-a', 'lg-c': 'tm-c' }, active: true, u: 7 },
+              { id: 'pp-cal', name: 'Cal', teams: { 'lg-d': 'tm-c', 'lg-c': 'tm-a' }, active: true, u: 8 },
+              { id: 'pp-dee', name: 'Dee', teams: { 'lg-d': 'tm-c', 'lg-c': 'tm-c' }, active: true, u: 9 }],
+    seasons: [], matches: [], brackets: [], tombstones: [],
+  });
+
+  t('one roster, two leagues, two different pairings', () => {
+    const st = H.normalizeLeague(TEAMY());
+    const at = (lg) => st.players.map((p) => p.name + '=' + (st.teams.find((t) => t.id === p.teams[lg]) || {}).name);
+    eq(at('lg-d'), ['Ann=The Anchor', 'Bob=The Anchor', 'Cal=The Crown', 'Dee=The Crown']);
+    eq(at('lg-c'), ['Ann=The Anchor', 'Bob=The Crown', 'Cal=The Anchor', 'Dee=The Crown']);
+  });
+  t('the TEAM is still the club’s — one record, one name, one history', () => {
+    const st = H.normalizeLeague(TEAMY());
+    eq(st.teams.map((t) => t.id), ['tm-a', 'tm-c'], 'two teams, not four');
+    eq(Object.keys(st.teams[0]).sort(), ['id', 'name', 'u'], 'and the record gained nothing');
+  });
+  t('`teams` is ABSENT rather than empty, and its keys are in the club’s league order', () => {
+    const st = H.normalizeLeague(Object.assign(TEAMY(), {
+      players: [{ id: 'pp-x', name: 'Nobody', active: true },
+                /* written cornhole-first on purpose */
+                { id: 'pp-y', name: 'Both', teams: { 'lg-c': 'tm-c', 'lg-d': 'tm-a' }, active: true }] }));
+    ok(!('teams' in st.players[0]), 'nobody in a team gains no key');
+    eq(Object.keys(st.players[1].teams), ['lg-d', 'lg-c'],
+       'the club’s own league order, so two devices serialise byte for byte');
+    eq(Object.keys(st.players[1]), ['id', 'name', 'active', 'u', 'teams'], 'and the field order is pinned too');
+  });
+  t('a team that no longer exists is no team — and the key goes ABSENT, not empty', () => {
+    const raw = TEAMY();
+    raw.teams = [{ id: 'tm-a', name: 'The Anchor', u: 4 }];
+    const st = H.normalizeLeague(raw);
+    eq(st.players.find((p) => p.id === 'pp-ann').teams, { 'lg-d': 'tm-a', 'lg-c': 'tm-a' }, 'the real one stays');
+    ok(!('teams' in st.players.find((p) => p.id === 'pp-dee')),
+       'somebody whose ONLY team went comes out with no key at all — an empty object would ride into every backup for ever');
+  });
+  t('A MEMBERSHIP WHOSE LEAGUE THIS COPY HAS NEVER SEEN SURVIVES', () => {
+    /* The VALUE is checked and the KEY is not, and a reader will want to make
+       them match. They must not. mergeList only ever ADDS teams — the one way
+       a team leaves is a tombstone, and a tombstoned team genuinely is no team.
+       A LEAGUE arrives on one side before the other every time somebody makes
+       one, so dropping an unknown key drops a real pairing. */
+    const raw = TEAMY();
+    raw.leagues = [raw.leagues[0]];                       /* the cornhole league has not arrived */
+    const st = H.normalizeLeague(raw);
+    eq(st.players.find((p) => p.id === 'pp-bob').teams, { 'lg-d': 'tm-a', 'lg-c': 'tm-c' },
+       'the cornhole pairing is still there, waiting for the league');
+  });
+  t('AND A MERGE WITH A COPY THAT HAS NOT SEEN THE LEAGUE KEEPS EVERY PAIRING', () => {
+    /* THE data-loss test. normalizeLeague runs on each side ALONE, so the side
+       without the cornhole league would drop everybody's cornhole team — and
+       mergeList would commit that if its player records carried the higher `u`.
+       Red without the surviving-unknown-key rule above. */
+    const ahead = TEAMY();
+    const behind = JSON.parse(JSON.stringify(ahead));
+    behind.leagues = [behind.leagues[0]];
+    behind.players.forEach((p) => { p.u = 9e12; });        /* and its players are NEWER */
+    const bags = (st) => st.players.map((p) => p.name + '=' + ((p.teams || {})['lg-c'] || '-')).join(',');
+    eq(bags(H.mergeLeague(behind, ahead)), 'Ann=tm-a,Bob=tm-c,Cal=tm-a,Dee=tm-c', 'merged one way');
+    eq(bags(H.mergeLeague(ahead, behind)), 'Ann=tm-a,Bob=tm-c,Cal=tm-a,Dee=tm-c', 'and the other');
+  });
+  t('the map is capped, and by its OWN number and not LEAGUES_MAX', () => {
+    /* A device holding the maximum leagues plus one that has not ARRIVED yet
+       must not have the not-yet-arrived entry be the one dropped — which is
+       exactly the loss the survival rule exists to prevent. Headroom. */
+    ok(H.PLAYER_TEAMS_MAX > H.LEAGUES_MAX, 'headroom over the league cap');
+    const many = {};
+    for (let i = 0; i < H.PLAYER_TEAMS_MAX + 20; i++) many['lg-x' + i] = 'tm-a';
+    const raw = TEAMY();
+    raw.players = [{ id: 'pp-ann', name: 'Ann', teams: many, active: true }];
+    eq(Object.keys(H.normalizeLeague(raw).players[0].teams).length, H.PLAYER_TEAMS_MAX);
+  });
+  t('a key naming no league is kept; a VALUE naming no team is not', () => {
+    const raw = TEAMY();
+    raw.players = [{ id: 'pp-ann', name: 'Ann', teams: { 'lg-d': 'tm-a', 'lg-gone': 'tm-c', 'lg-c': 'no-such-team' }, active: true }];
+    const got = H.normalizeLeague(raw).players[0].teams;
+    eq(got['lg-gone'], 'tm-c', 'the unknown LEAGUE survives');
+    ok(!('lg-c' in got), 'the unknown TEAM does not');
+  });
+
+  group('per-league teams: the migration, and what a side is now');
+
+  t('an old club-wide team lands under EVERY league, and no figure moves', () => {
+    /* `format` is per league AND mutable, so a migration that stamped only the
+       teams-format ones would produce different data on two devices depending
+       on when each ran it — and it would quietly break the copy window's
+       promise that "a club that gains a team league later finds its teams
+       already there". */
+    const raw = TEAMY();
+    raw.leagues[1].settings.format = 'singles';
+    raw.players = raw.players.map((p) => { const q = Object.assign({}, p); delete q.teams; q.teamId = 'tm-a'; return q; });
+    const st = H.normalizeLeague(raw);
+    st.players.forEach((p) => eq(p.teams, { 'lg-d': 'tm-a', 'lg-c': 'tm-a' }, p.name + ' is in it at BOTH, singles included'));
+    ok(!('teamId' in st.players[0]), 'and the old key is gone, not carried alongside');
+  });
+  t('the migration is gated on shape, is idempotent, and never touches its argument', () => {
+    const raw = TEAMY();
+    raw.schema = H.SCHEMA;                                 /* boot() stamps today's number onto old payloads */
+    raw.players = raw.players.map((p) => { const q = Object.assign({}, p); delete q.teams; q.teamId = 'tm-a'; return q; });
+    const before = JSON.stringify(raw);
+    const once = H.normalizeLeague(raw);
+    eq(once.players[0].teams['lg-d'], 'tm-a', 'a payload stamped with today’s schema still migrates');
+    eq(JSON.stringify(raw), before, 'and the argument is untouched');
+    eq(JSON.stringify(H.normalizeLeague(once)), JSON.stringify(once), 'running it twice changes nothing');
+  });
+  t('a half-migrated state finishes the job', () => {
+    /* setupState can genuinely produce one: the cloud's old-shape copy with a
+       new-shape list swapped in. */
+    const raw = TEAMY();
+    raw.players[0] = { id: 'pp-ann', name: 'Ann', teamId: 'tm-c', active: true, u: 6 };
+    const st = H.normalizeLeague(raw);
+    eq(st.players.find((p) => p.id === 'pp-ann').teams, { 'lg-d': 'tm-c', 'lg-c': 'tm-c' }, 'the old one migrated');
+    eq(st.players.find((p) => p.id === 'pp-bob').teams, { 'lg-d': 'tm-a', 'lg-c': 'tm-c' }, 'the new one was left alone');
+  });
+  t('a state whose leagues are gone still keeps its memberships', () => {
+    /* normalizeLeague's empty-leagues fallback DERIVES its id from the club's,
+       as blankClub and migrateRaw both do. A random one here would leave the
+       migration with no id to stamp — and two devices with two clubs. */
+    const st = H.normalizeLeague({ club: { id: 'LN-NOLEAGUES' }, leagues: [],
+      teams: [{ id: 'tm-a', name: 'The Anchor' }],
+      players: [{ id: 'x1', name: 'Ann', teamId: 'tm-a', active: true }] });
+    eq(st.leagues.length, 1);
+    eq(st.leagues[0].id, H.normalizeLeague({ club: { id: 'LN-NOLEAGUES' } }).leagues[0].id, 'derived, so both agree');
+    eq(st.players[0].teams[st.leagues[0].id], 'tm-a', 'and the membership landed on it');
+  });
+  t('a team is a SIDE in a league only when somebody is in it THERE', () => {
+    const raw = TEAMY();
+    /* nobody is in The Crown at cornhole */
+    raw.players.forEach((p) => { if (p.teams['lg-c'] === 'tm-c') p.teams['lg-c'] = 'tm-a'; });
+    const st = H.normalizeLeague(raw);
+    eq(H.sidesOf(st, 'lg-d').slice().sort(), ['tm-a', 'tm-c'], 'both at darts');
+    eq(H.sidesOf(st, 'lg-c'), ['tm-a'], 'and only the one anybody plays for at cornhole');
+  });
+  t('a team of ALL-RETIRED members is still a side', () => {
+    /* The teams branch has never looked at `active`, and it must not start —
+       the last retirement in a team would silently drop it from the fixture
+       generator mid-season. */
+    const raw = TEAMY();
+    raw.players.forEach((p) => { if (p.teams['lg-d'] === 'tm-c') p.active = false; });
+    eq(H.sidesOf(H.normalizeLeague(raw), 'lg-d').slice().sort(), ['tm-a', 'tm-c']);
+  });
+  t('and a team that EMPTIED but played keeps its row', () => {
+    const raw = TEAMY();
+    raw.seasons = [{ id: 'sn', leagueId: 'lg-d', name: 'Winter', startsOn: '2026-01-02', status: 'active', u: 10 }];
+    raw.matches = [{ id: 'mm', leagueId: 'lg-d', seasonId: 'sn', a: 'tm-a', b: 'tm-c', status: 'played',
+                     score: { a: 2, b: 1 }, legs: [{ w: 'a' }, { w: 'a' }, { w: 'b' }], u: 11 }];
+    raw.players.forEach((p) => { if (p.teams['lg-d'] === 'tm-c') delete p.teams['lg-d']; });
+    const st = H.normalizeLeague(raw);
+    ok(H.sidesOf(st, 'lg-d').indexOf('tm-c') === -1, 'it is no longer offered a fixture');
+    ok([...new Set([].concat(H.sidesOf(st, 'lg-d'), ['tm-a', 'tm-c']))].indexOf('tm-c') !== -1,
+       'but sidesForSeason’s "any side that played" brings it back to the table');
+  });
+
+  t('the "same teams" note counts what the BUTTON copies, retired included', () => {
+    /* It counted only the ACTIVE ones and promised three players while four
+       arrived. Retiring somebody does not take them out of their team, so the
+       note has to count them — the family's rule is that the sentence on
+       screen IS the plan the button runs. */
+    const src = stripComments(APP_SRC);
+    const body = (src.slice(src.indexOf('function nlTeamsNote')).match(/[\s\S]*?\n\}/) || [''])[0];
+    ok(body && !/p\.active/.test(body), 'the note filters on the pairing alone');
+    const save = (src.slice(src.indexOf("$('nlSave').addEventListener")).match(/[\s\S]*?\n\}\);/) || [''])[0];
+    ok(/teamFor\(p, fromLg\.id\)/.test(save) && !/p\.active/.test(save), 'and so does the save');
+  });
+
   group('a club that runs several leagues at once');
   const TWO = () => H.normalizeLeague({
     club: { id: 'LN-TWOGAMES', name: 'The Anchor', createdAt: '2026-01-01', u: 1 },
@@ -978,7 +1157,7 @@ function define() {
     eq(frames(H.mergeLeague(withLeague, behind)), 1, 'and the other');
   });
   t('a season, a match and a bracket each carry a leagueId, and the SCHEMA says so', () => {
-    eq(H.SCHEMA, 8);
+    eq(H.SCHEMA, 9);
     const st = TWO();
     ok(st.seasons.every((x) => x.leagueId) && st.matches.every((m) => m.leagueId), 'every one of them');
   });
@@ -1353,7 +1532,11 @@ function define() {
   t('the winner buttons commit on click, the stat boxes on change — never input', () => {
     const src = stripComments(APP_SRC);
     ok(/\$\('legsWrap'\)\.addEventListener\('change'/.test(src) && !/\$\('legsWrap'\)\.addEventListener\('input'/.test(src));
-    ok(/\['pl_name', 'pl_team', 'pl_active'\]\.forEach\(\(id\) => \$\(id\)\.addEventListener\('change'/.test(src), 'the player editor too');
+    ok(/\['pl_name', 'pl_active'\]\.forEach\(\(id\) => \$\(id\)\.addEventListener\('change'/.test(src), 'the player editor too');
+    /* The TEAM selects are rebuilt per open too — one per league played in
+       teams — so they are delegated for the same reason the handicap boxes are. */
+    ok(/\$\('pl_teams'\)\.addEventListener\('change', \(e\) => \{ if \(e\.target\.dataset\.league\) playerChanged\(\); \}\);/.test(src),
+       'and the per-league team selects are DELEGATED, because they are rebuilt');
     /* The handicap boxes are REBUILT per open — one per game the club plays —
        so their listener is delegated on the container. A static list of ids
        would leave every rebuilt field unwired, with nothing on screen to see. */
@@ -1464,7 +1647,7 @@ function define() {
     const d = H.buildDemoTeams();
     eq(d.club.id, H.DEMO_TEAMS_ID); eq(d.leagues[0].settings.format, 'teams'); eq(d.leagues[0].settings.matchFormat.mode, 'fixed');
     eq(d.teams.length, 6); eq(d.players.length, 12);
-    ok(d.players.every((p) => p.teamId));
+    ok(d.players.every((p) => p.teams && p.teams[d.leagues[0].id]), 'everybody is in a team IN THAT LEAGUE');
     ok(d.matches.some((m) => m.legs.some((l) => l.by.a.length === 2)), 'a doubles leg with two throwers');
     ok(d.matches.some((m) => H.matchScore(m).a === H.matchScore(m).b && m.status === 'played'), 'a drawn match, which a fixed count allows');
     ok(d.brackets.length === 1);
@@ -1825,8 +2008,8 @@ function define() {
   });
 
   group('the live scorer');
-  t('a new leg remembers who throws first and the double-out rule, and SCHEMA is 8', () => {
-    eq(H.SCHEMA, 8);
+  t('a new leg remembers who throws first and the double-out rule, and SCHEMA is 9', () => {
+    eq(H.SCHEMA, 9);
     const out = H.normalizeLeague({ league: { id: 'L' }, matches: [{ id: 'm', a: 'x', b: 'y', legs: [{ first: 'b', dOut: false }, {}] }] });
     eq(out.matches[0].legs.map((l) => [l.first, l.dOut]), [['b', false], ['a', true]]);
   });
@@ -2413,7 +2596,7 @@ function define() {
     const teamFix = JSON.parse(JSON.stringify(PLFX));
     teamFix.league.settings.format = 'teams';
     teamFix.teams = [{ id: 'pl-t1', name: 'Cues' }, { id: 'pl-t2', name: 'Chalk' }];
-    teamFix.players[1].teamId = 'pl-t2';
+    teamFix.players[1].teamId = 'pl-t2';   /* raw, old-shape — migrateRaw converts it */
     teamFix.matches[0].a = 'pl-t1'; teamFix.matches[0].b = 'pl-t2';
     try {
       H.__plant(teamFix);
@@ -2903,9 +3086,9 @@ function define() {
     const anyone = H.cornholePlayerStats(H.legsIn(d, null, d.leagues[0].id), d.players[0].id);
     ok(anyone.ppg != null && anyone.high != null, 'so a player has real figures of their own');
     const sub = d.matches.find((m) => m.lineup && m.lineup.a.some(
-      (id) => !d.players.some((p) => p.id === id && p.teamId === m.a)));
+      (id) => !d.players.some((p) => p.id === id && (p.teams || {})[d.leagues[0].id] === m.a)));
     ok(sub, 'and one night has a sub on the card');
-    ok(sub.legs.some((l) => l.by.a.some((id) => !d.players.some((p) => p.id === id && p.teamId === sub.a))),
+    ok(sub.legs.some((l) => l.by.a.some((id) => !d.players.some((p) => p.id === id && (p.teams || {})[d.leagues[0].id] === sub.a))),
        'who actually played a game, because that is the only record of a sub there is');
     ok(d.matches.flatMap((m) => m.legs).every((l) => l.bust === 11), 'every game carries the rule it was played under');
     ok(d.brackets.length === 1 && d.brackets[0].entrants.length >= 4, 'a knockout seeded from the table');
@@ -3551,12 +3734,13 @@ function define() {
   t('a team is rewritten through the SAME map, so two team-mates land on ONE new team', () => {
     const out = H.copyPlayers(CPSRC(), CPDST('darts', 'teams'), CPALL);
     const byName = (nm) => out.state.players.find((p) => p.name === nm);
-    const teamOf = (nm) => out.state.teams.find((t) => t.id === byName(nm).teamId);
+    const dstLg = out.state.leagues[0].id;
+    const teamOf = (nm) => out.state.teams.find((t) => t.id === (byName(nm).teams || {})[dstLg]);
     eq(out.state.teams.length, 2);
     ok(teamOf('Ada') && teamOf('Ada') === teamOf('Ben'), 'Ada and Ben share their new team');
     ok(teamOf('Cleo') !== teamOf('Ada'), 'and Cleo is on the other one');
     eq([teamOf('Ada').name, teamOf('Cleo').name], ['The Anchor', 'The Crown'], 'by name, still');
-    eq(byName('Eve').teamId, null, 'somebody on no team stays on none');
+    ok(!byName('Eve').teams, 'somebody on no team stays on none — absent, not null');
     eq(out.state.teams.map((t) => t.id).filter((id) => id === 'ct1' || id === 'ct2'), [], 'with new ids');
   });
   t('teams always travel, because they are the CLUB’s and not a league’s', () => {
@@ -3567,7 +3751,7 @@ function define() {
        dropping people's teams on the way in and telling nobody. */
     const singles = H.copyPlayers(CPSRC(), CPDST('darts', 'singles'), CPALL);
     eq(singles.teams, 2, 'the teams come even when the first league is singles');
-    ok(singles.state.players.filter((p) => p.teamId !== null).length > 0, 'and nobody is stripped of theirs');
+    ok(singles.state.players.filter((p) => p.teams).length > 0, 'and nobody is stripped of theirs');
     const fromSingles = H.copyPlayers(cpLeague({ id: 'LN-CPS2', format: 'singles',
       players: [{ id: 'x1', name: 'Ada' }] }), CPDST('darts', 'teams'), ['x1']);
     eq(fromSingles.teams, 0, 'and a club with no teams still has none to give');
@@ -3610,7 +3794,9 @@ function define() {
   });
   t('a copied player and team carry exactly the allowlisted fields', () => {
     const out = H.copyPlayers(CPSRC(), CPDST('darts', 'teams'), CPALL);
-    eq(Object.keys(out.state.players[0]).sort(), ['active', 'hcps', 'id', 'name', 'teamId', 'u']);
+    eq(Object.keys(out.state.players[0]).sort(), ['active', 'hcps', 'id', 'name', 'teams', 'u']);
+    eq(Object.keys(out.state.players[0]), ['id', 'name', 'active', 'u', 'teams', 'hcps'],
+       'in the BOUNDARY\u2019s own key order — this output is never normalized on the way out');
     eq(Object.keys(out.state.teams[0]).sort(), ['id', 'name', 'u']);
   });
   t('the result is boundary-clean already, so normalizeLeague changes nothing', () => {
@@ -3686,7 +3872,7 @@ function define() {
     const out = H.copyPlayers(CPSRC(), dst, ['cp1', 'cp3']);
     eq(out.teams, 1, 'only The Crown is new');
     eq(out.state.teams.length, 2);
-    eq(out.state.players.find((p) => p.name === 'Ada').teamId, 'here', 'and Ada joins the one already here');
+    eq(out.state.players.find((p) => p.name === 'Ada').teams[out.state.leagues[0].id], 'here', 'and Ada joins the one already here');
   });
 
   /* ── The create-league window ─────────────────────────────────────────────
@@ -3854,7 +4040,7 @@ function define() {
          league — so a club whose first league is singles still has its teams,
          ready for the team league it may add later. */
       eq(st.teams.map((t) => t.name).sort(), ['The Anchor', 'The Crown'], 'the teams came with them');
-      ok(st.players.filter((p) => p.teamId !== null).length > 0, 'and nobody was stripped of theirs');
+      ok(st.players.filter((p) => p.teams).length > 0, 'and nobody was stripped of theirs');
       eq(st.players.filter((p) => ['cp1', 'cp2', 'cp3', 'cp4'].indexOf(p.id) !== -1), [], 'every id new');
       ok(/Sunday Boards created — 4 players and 2 teams brought over/.test(W.document.getElementById('toast').textContent),
          W.document.getElementById('toast').textContent);
@@ -4256,8 +4442,8 @@ function define() {
     const before = { table: table(base), players: figures(base) };
     const withCards = H.normalizeLeague(JSON.parse(JSON.stringify(Object.assign({}, base, {
       matches: base.matches.map((m) => Object.assign({}, m, {
-        lineup: { a: base.players.filter((p) => p.teamId === m.a).map((p) => p.id),
-                  b: base.players.filter((p) => p.teamId === m.b).map((p) => p.id) },
+        lineup: { a: base.players.filter((p) => (p.teams || {})[base.leagues[0].id] === m.a).map((p) => p.id),
+                  b: base.players.filter((p) => (p.teams || {})[base.leagues[0].id] === m.b).map((p) => p.id) },
       })),
     }))));
     ok(withCards.matches.every((m) => m.lineup), 'the fixture really did get lineups');
@@ -4549,7 +4735,7 @@ function define() {
     const cloud = H.normalizeLeague(teamsFixture());
     const stale = JSON.parse(JSON.stringify(cloud));
     stale.teams.push({ id: 'tc', name: 'C', u: 9e12 });
-    stale.players[0] = Object.assign({}, stale.players[0], { teamId: 'tc', u: 9e12 });
+    stale.players[0] = Object.assign({}, stale.players[0], { teams: { [cloud.leagues[0].id]: 'tc' }, u: 9e12 });
     const out = H.setupState(stale, cloud);
     eq(JSON.stringify(out.matches), JSON.stringify(cloud.matches), 'the matches are the cloud’s own');
     eq(JSON.stringify(out.seasons), JSON.stringify(cloud.seasons), 'and the seasons');
@@ -4557,7 +4743,7 @@ function define() {
     eq(JSON.stringify(out.club), JSON.stringify(cloud.club), 'and the club object');
     eq(JSON.stringify(out.leagues), JSON.stringify(cloud.leagues), 'and every league, settings included');
     ok(out.teams.some((x) => x.id === 'tc'), 'the new team came through');
-    eq(out.players.find((x) => x.id === 'p1').teamId, 'tc', 'and so did the move');
+    eq(out.players.find((x) => x.id === 'p1').teams[cloud.leagues[0].id], 'tc', 'and so did the move');
   });
 
   t('a member’s stale copy cannot resurrect a match', () => {
@@ -4625,10 +4811,11 @@ function define() {
       D.querySelector('#teamsWrap .prow').click();
       const other = [...D.querySelectorAll('#tm_members [data-member]')].find((b) => b.disabled);
       ok(other, 'there is somebody else on the list');
-      const before = H.__state().players.find((p) => p.id === other.dataset.member).teamId;
+      const lgId = H.__state().leagues[0].id;
+      const before = (H.__state().players.find((p) => p.id === other.dataset.member).teams || {})[lgId];
       other.checked = !other.checked;
       other.dispatchEvent(new W.Event('change', { bubbles: true }));
-      eq(H.__state().players.find((p) => p.id === other.dataset.member).teamId, before,
+      eq((H.__state().players.find((p) => p.id === other.dataset.member).teams || {})[lgId], before,
         'the guard behind the disabled control refuses it, in the addSave idiom');
       D.getElementById('teamDialog').close();
     } finally { restore(); }

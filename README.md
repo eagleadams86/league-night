@@ -14,8 +14,9 @@ club's ID can follow it, and anyone with the admin key can run it.
 > darts on 8 September, American 8-ball on 9 September and cornhole the same day.** On
 > **10 September the people came apart from the game**: a **club** is the roster, and inside it a
 > **league** is one competition at one game, so the same friends play darts on a Tuesday and
-> shuffleboard on a Wednesday under one ID and one invite. Anything made before that opens as a
-> club with one league in it, with no figure moved and nothing to re-enter.
+> shuffleboard on a Wednesday under one ID and one invite. **A team's line-up came apart from it
+> the same day** — one "The Anchor", with different people in it in each league. Anything made
+> before either change opens with no figure moved and nothing to re-enter.
 > The Firebase project is `league-night-dff31`; the console steps that made it are under
 > *Setting up the cloud* below.
 
@@ -42,7 +43,8 @@ club's ID can follow it, and anyone with the admin key can run it.
   people who happen to overlap — the same friends at another game is another league inside the club
   you already have. *Create a Club* offers **The Same Players**: pick one of your clubs, tick who
   should come, and they are on the roster before you have added a single fixture. Names travel, and
-  the **teams** they are in. **Handicaps come across whole, game by game** — a figure is filed under
+  the **teams** they are in — taking the pairings from the source's first league played in teams.
+  **Handicaps come across whole, game by game** — a figure is filed under
   the game it was given at, so a darts 60 arrives as a darts 60 and only a darts league reads it.
   Anyone retired in the old club arrives playing in the new one, and a line under the list says
   exactly what is about to happen before you press Create.
@@ -53,6 +55,12 @@ club's ID can follow it, and anyone with the admin key can run it.
   demo clubs to see everything working. **The first demo runs two leagues at once** on one roster,
   darts and shuffleboard, which is the club/league split with something in it. A device can hold
   several clubs; switch between them in the header.
+- **Teams, and who is in them.** A **team** is the club's — one "The Anchor", one name, one
+  history across every game it plays. **Who is in it is each league's answer**, so the same four
+  friends pair up one way at darts and another at cornhole, on one roster. The Teams card carries
+  a league picker and shows one at a time; a new league played in teams starts with everybody
+  unpaired and offers to copy another league's pairings if they happen to match. A team only turns
+  up in a league's fixtures once somebody is in it there.
 - **Players and teams.** Add, rename, retire; a per-player handicap applies to every singles
   match they play — a team match never carries one. At darts it comes off the starting score (a
   deduction of 40 makes a 501 leg a 461 one); at shuffleboard it is a **head start** off the
@@ -65,7 +73,7 @@ club's ID can follow it, and anyone with the admin key can run it.
   for and against. Teams hold up to eight players.
 - **Subs, and who can make the night.** Every match has a card: who is actually throwing for
   each team tonight. Until somebody sets it the app assumes the team's own players. Anyone on a
-  card who is not on that team is a sub — the app keeps no other record of one, and needs none:
+  card who is not on that team *in that league* is a sub — the app keeps no other record of one:
   a sub's legs count for the team they stood in for *and* for their own record, because every
   figure is worked out from who threw the leg. Players say for themselves whether they can make
   a night — playing, can't make it, or happy to stand in for another team — and an admin can
@@ -278,6 +286,12 @@ empty; once it holds a season or a match it stays, and a club always keeps at le
 start and a pool wire are three different things, and nobody would want one number standing for
 all three. The player window shows one box per game the club actually plays — so a club that only
 throws darts still reads exactly one, as it always did.
+
+**Teams are per player, per league.** The same asymmetry, one step over: a handicap belongs to a
+GAME (two darts leagues share one) and a line-up belongs to a LEAGUE (two darts leagues can pair
+people up differently). The player window shows one team box per league played in teams. A **sub**
+is a name on a card who is not on that team *in that league*, so the same person can be a regular
+at darts and a stand-in at cornhole.
 
 ## What is coming
 
