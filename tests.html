@@ -52,7 +52,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 416;
+const EXPECTED = 419;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -4359,7 +4359,13 @@ function define() {
     } finally { H.__plant(FIXTURE); W.setTab('standings'); }
   });
 
-  t('the first season takes the matches that came before it', () => {
+  t('A MATCH PLAYED BEFORE A SEASON STAYS OUT OF IT, and stays visible', () => {
+    /* The first season used to SWEEP these in, and that was the wrong fix for
+       a real bug: leagueMatches() showed every match while a league had no
+       seasons and only the picked season's once it had one, so a match added
+       earlier simply VANISHED. Sweeping hid the disappearance by taking away
+       the category — and a pre-season friendly is a real category. Charles
+       found it the day it bit him (2026-09-10). */
     const D = W.document;
     try {
       H.__plant({ league: { id: 'LN-NOSEASON', name: 'No Season', game: 'darts', settings: FIXTURE.league.settings },
@@ -4373,16 +4379,78 @@ function define() {
       D.getElementById('ad_date').value = '2026-01-01';
       D.getElementById('addSave').click();
       const st = H.__state();
-      eq(st.matches[0].seasonId, st.seasons[0].id, 'and the first season adopted it rather than hiding it');
+      eq(st.matches[0].seasonId, null, 'the season did NOT take it');
+      ok(/stayed out of it, as friendlies/.test(D.getElementById('toast').textContent),
+         'and the toast says so rather than leaving it to be discovered: ' + D.getElementById('toast').textContent);
+      /* It counts for no table. The rows are there — a season with no matches
+         still lists everybody — but the RESULT is not in them: Ann won that
+         match 2–0 and is on nought like everybody else. */
+      D.getElementById('tab-standings').click();
+      const pts = [...D.querySelectorAll('#standingsTable tbody tr')]
+        .map((tr) => tr.querySelector('.rowbtn').textContent.trim() + '=' + tr.querySelectorAll('td')[3].textContent.trim());
+      eq(pts, ['Ann=0', 'Bob=0'], 'Ann won it 2–0 and it moved no figure: ' + JSON.stringify(pts));
+      /* …and it has NOT vanished, which is the bug the sweep was hiding. */
       D.getElementById('tab-matches').click();
-      eq(D.querySelectorAll('#matchesWrap .mrow').length, 1, 'still on the tab');
-      eq(D.querySelectorAll('#standingsTable tbody tr').length, 2, 'and still in the table');
-      /* Only the FIRST: a second season leaves the matches where they are. */
+      const sel = D.getElementById('mtSeason');
+      ok([...sel.options].some((o) => o.textContent === 'Friendlies'), 'the picker offers Friendlies');
+      sel.value = H.NO_SEASON;
+      sel.dispatchEvent(new W.Event('change', { bubbles: true }));
+      eq(D.querySelectorAll('#matchesWrap .mrow').length, 1, 'and there it is');
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+  t('a friendly counts for the PLAYERS who played it, exactly as a cup match does', () => {
+    /* "Doesn't count" means the table. A knockout leg is out of the league
+       table and in your average already; a friendly behaving the same keeps
+       one rule instead of two. */
+    const st = H.normalizeLeague({
+      league: { id: 'LN-FRIENDLY', name: 'F', game: 'darts', settings: FIXTURE.league.settings },
+      players: [{ id: 'p1', name: 'Ann' }, { id: 'p2', name: 'Bob' }],
+      seasons: [{ id: 's1', name: 'Winter', startsOn: '2026-01-02', status: 'active' }],
+      matches: [{ id: 'm1', seasonId: 's1', a: 'p1', b: 'p2', status: 'played',
+                  legs: [{ w: 'a', by: { a: ['p1'], b: ['p2'] }, a: { darts: 15 } }] },
+                { id: 'm2', seasonId: null, a: 'p1', b: 'p2', status: 'played',
+                  legs: [{ w: 'a', by: { a: ['p1'], b: ['p2'] }, a: { darts: 21 } }] }] });
+    const lg = st.leagues[0].id;
+    eq(H.legsIn(st, 's1', lg).length, 1, 'the season sees only its own');
+    eq(H.legsIn(st, null, lg).length, 2, 'the player sees both — the whole league, every scope');
+  });
+  t('a friendly is in NO season’s table, and a second season takes nothing either', () => {
+    const D = W.document;
+    try {
+      H.__plant({ league: { id: 'LN-TWOSEAS', name: 'Two', game: 'darts', settings: FIXTURE.league.settings },
+        players: [{ id: 'p1', name: 'Ann' }, { id: 'p2', name: 'Bob' }], teams: [], brackets: [], tombstones: [],
+        seasons: [{ id: 's1', name: 'One', startsOn: '2026-01-01', status: 'active' }],
+        matches: [{ id: 'm1', seasonId: null, round: 1, date: '2026-01-01', a: 'p1', b: 'p2', status: 'played',
+                    legs: [{ w: 'a' }, { w: 'a' }] }] });
       W.openAdd('season');
-      D.getElementById('ad_name').value = 'Season Two';
+      D.getElementById('ad_name').value = 'Two';
       D.getElementById('ad_date').value = '2026-06-01';
       D.getElementById('addSave').click();
-      eq(H.__state().matches[0].seasonId, st.seasons[0].id, 'a later season takes nothing');
+      eq(H.__state().matches[0].seasonId, null, 'a later season takes nothing either');
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+  t('and a match can be MOVED between a season and the friendlies', () => {
+    /* There was no way to move a match between seasons at all, which is also
+       why the sweep was dangerous: there would have been no way back out. */
+    const D = W.document;
+    try {
+      H.__plant({ league: { id: 'LN-MOVEIT', name: 'Move', game: 'darts', settings: FIXTURE.league.settings },
+        players: [{ id: 'p1', name: 'Ann' }, { id: 'p2', name: 'Bob' }], teams: [], brackets: [], tombstones: [],
+        seasons: [{ id: 's1', name: 'Winter', startsOn: '2026-01-01', status: 'active' }],
+        matches: [{ id: 'm1', seasonId: 's1', round: 1, date: '2026-01-05', a: 'p1', b: 'p2', status: 'played',
+                    legs: [{ w: 'a' }, { w: 'a' }] }] });
+      W.openMatch('m1');
+      const sel = D.getElementById('mt_season');
+      ok(!D.getElementById('mt_seasonWrap').hidden, 'the box is there');
+      eq(sel.value, 's1', 'showing the season it is in');
+      sel.value = H.NO_SEASON;
+      sel.dispatchEvent(new W.Event('change', { bubbles: true }));
+      eq(H.__state().matches[0].seasonId, null, 'and it is a friendly now');
+      W.openMatch('m1');
+      D.getElementById('mt_season').value = 's1';
+      D.getElementById('mt_season').dispatchEvent(new W.Event('change', { bubbles: true }));
+      eq(H.__state().matches[0].seasonId, 's1', 'and back again');
+      D.getElementById('matchDialog').close();
     } finally { H.__plant(FIXTURE); W.setTab('standings'); }
   });
 

@@ -1691,6 +1691,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
 
     <div class="card">
       <h2>Seasons
+        <button class="tile-help" type="button" data-help="seasons" aria-label="What a season is, and what a friendly is">i</button>
         <span class="spacer"></span>
         <button type="button" class="btn-small no-print no-edit" id="addSeasonBtn">＋ Start a Season</button>
       </h2>
@@ -2066,9 +2067,14 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
   <div class="row" style="margin-top:var(--sp-5)">
     <button type="button" class="primary" id="addLegBtn">＋ Add leg</button>
   </div>
-  <div class="grid2" style="margin-top:var(--sp-6)">
+  <div class="grid3" style="margin-top:var(--sp-6)">
     <div class="field"><label for="mt_date">Date</label><input type="date" id="mt_date"></div>
     <div class="field"><label for="mt_venue">Venue</label><input type="text" id="mt_venue" maxlength="40" autocomplete="off" placeholder="optional"></div>
+    <!-- Which season it belongs to, or none. There was no way to move a match
+         between seasons at all before this, which is also why the first season
+         used to SWEEP the matches that came before it: there would have been
+         no way back out. -->
+    <div class="field" id="mt_seasonWrap"><label for="mt_season">Season</label><select id="mt_season"></select></div>
   </div>
   <div class="row" id="mtForfeitRow" hidden>
     <span class="hint">Forfeit:</span>
@@ -5526,7 +5532,11 @@ document.querySelectorAll('.tab, .tabbar button').forEach((b) =>
    like a sort order: they live beside the tab, never in `state`, so they ride
    into no backup and no link. */
 const $ = (id) => document.getElementById(id);
-let seasonPick = null;          /* season id chosen in a picker, or null for "the current one" */
+/* "No season" as a PICKABLE value. A tilde so it can never collide with a real
+   season id — ID_RE is letters, digits, _ and -, and nothing else. `null` still
+   means "whichever season is current", which is a different question. */
+const NO_SEASON = '~none';
+let seasonPick = null;          /* a season id, NO_SEASON, or null for "the current one" */
 let leaguePick = null;          /* league id chosen in a picker, or null for "the first one" */
 /* SWAPPING THE CLUB ON SCREEN CLEARS BOTH PICKS. A league id belongs to one
    club exactly as a season id belongs to one league, and currentLeague()'s
@@ -5631,8 +5641,24 @@ function currentSeason() {
 function leagueMatches(seasonId, lg) {
   const id = lg === undefined ? currentLeagueId() : lg;
   const seasoned = state.seasons.some((s) => s.leagueId === id);
+  /* THREE ANSWERS, and the middle one is the friendlies. A league with no
+     seasons at all shows everything, because there is nothing to pick between;
+     NO_SEASON shows the matches that belong to no season — pre-season,
+     between-season, a one-off challenge — and a real id shows that season's.
+
+     A friendly is NOT in any season's table by construction: nothing here
+     returns it for a real season id. It still counts for the PLAYERS who
+     played it, exactly as a cup match does, because legsIn() asked for the
+     whole league rather than one season. */
   return state.matches.filter((m) => !m.bracketId && m.leagueId === id
-    && (seasoned ? m.seasonId === seasonId : true));
+    && (!seasoned ? true : seasonId === NO_SEASON ? !m.seasonId : m.seasonId === seasonId));
+}
+/* Whether this league has any match belonging to no season. What decides
+   whether the pickers offer Friendlies at all — an option for a bucket nobody
+   has put anything in is one more thing to read past. */
+function hasFriendlies(lg) {
+  const id = lg === undefined ? currentLeagueId() : lg;
+  return state.matches.some((m) => !m.bracketId && m.leagueId === id && !m.seasonId);
 }
 /* The sides a season's table lists: every active side, plus any side that
    played in it and has since retired — a result counted is a result shown. */
@@ -5901,13 +5927,22 @@ function fillTeamLeaguePicker(sel) {
   sel.innerHTML = all.map((L) => '<option value="' + esc(L.id) + '"' + (cur && L.id === cur.id ? ' selected' : '') + '>'
     + esc(L.name) + '</option>').join('');
 }
-function fillSeasonPicker(sel) {
+/* `opts.friendlies` adds the no-season bucket. The MATCHES tab offers it; the
+   STANDINGS tab does not, because there is no table for matches that count for
+   no table — and a picker that offers a view with nothing in it is worse than
+   one that does not. Each picker stays truthful about its OWN tab: Standings
+   falls back to a real season and says so in its box. */
+function fillSeasonPicker(sel, opts) {
+  const o = opts || {};
   const all = seasonsSorted();
+  const friendly = o.friendlies && hasFriendlies();
   const cur = currentSeason();
+  const picked = (friendly && seasonPick === NO_SEASON) ? NO_SEASON : (cur ? cur.id : '');
   const wrap = sel.closest('.pickwrap') || sel;
-  wrap.hidden = all.length < 2;
-  sel.innerHTML = all.map((s) => '<option value="' + esc(s.id) + '"' + (cur && s.id === cur.id ? ' selected' : '') + '>'
-    + esc(s.name) + (s.status === 'done' ? ' (closed)' : '') + '</option>').join('');
+  wrap.hidden = all.length + (friendly ? 1 : 0) < 2;
+  sel.innerHTML = all.map((s) => '<option value="' + esc(s.id) + '"' + (s.id === picked ? ' selected' : '') + '>'
+    + esc(s.name) + (s.status === 'done' ? ' (closed)' : '') + '</option>').join('')
+    + (friendly ? '<option value="' + NO_SEASON + '"' + (picked === NO_SEASON ? ' selected' : '') + '>Friendlies</option>' : '');
 }
 
 function renderStandings() {
@@ -6048,22 +6083,28 @@ function matchRow(m) {
     + (!decided && canEdit() ? '<span class="mgo">Score</span>' : '') + '</span></button>';
 }
 function renderMatches() {
-  const season = currentSeason();
+  /* FRIENDLIES ARE A SCOPE, not a season. `onFriendlies` is what the picker is
+     showing, and it is only ever true when there is something to show. */
+  const onFriendlies = seasonPick === NO_SEASON && hasFriendlies();
+  const season = onFriendlies ? null : currentSeason();
   fillLeaguePicker($('mtLeague'));
-  fillSeasonPicker($('mtSeason'));
-  const seasonId = season ? season.id : null;
+  fillSeasonPicker($('mtSeason'), { friendlies: true });
+  const seasonId = onFriendlies ? NO_SEASON : (season ? season.id : null);
   const wrap = $('matchesWrap');
-  const matches = (state.seasons.length && !season) ? [] : leagueMatches(seasonId);
+  const matches = (!onFriendlies && seasonsSorted().length && !season) ? [] : leagueMatches(seasonId);
   const sides = sidesOf(state, currentLeagueId());
   /* Offered until something has been PLAYED: an unplayed set can be drawn
-     again with different dates or a double round, and the window says so. */
+     again with different dates or a double round, and the window says so.
+     Never for the friendlies — a round robin belongs to a season. */
   const anyPlayed = matches.some((m) => m.status !== 'scheduled' || m.legs.length);
-  $('scheduleBtn').hidden = !canEdit() || !season || anyPlayed || sides.length < 2;
-  $('addMatchBtn').hidden = !canEdit() || sides.length < 2 || (state.seasons.length > 0 && !season);
+  $('scheduleBtn').hidden = !canEdit() || onFriendlies || !season || anyPlayed || sides.length < 2;
+  /* A match can always be added: into the season showing, or as a friendly. */
+  $('addMatchBtn').hidden = !canEdit() || sides.length < 2;
   if (!matches.length) {
     wrap.innerHTML = '<p class="empty">' + (sides.length < 2
       ? 'Add at least two ' + (isTeams() ? 'teams' : 'players') + ' on the Players tab first.'
-      : !season && state.seasons.length ? 'No season yet.'
+      : onFriendlies ? 'No friendlies in this league.'
+      : !season && seasonsSorted().length ? 'No season yet.'
       : !seasonsSorted().length ? 'Start a season on the Club tab, then generate its fixtures here.'
       : 'No fixtures yet' + (canEdit() ? ' — generate a round robin, or add matches one at a time.' : '.')) + '</p>';
     return;
@@ -6368,22 +6409,22 @@ $('addSave').addEventListener('click', () => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { $('addWarn').textContent = 'Pick the date it starts.'; $('ad_date').focus(); return; }
     const lgId = currentLeagueId();
     const sn = touch({ id: uid(), leagueId: lgId, name: name, startsOn: date, status: 'active' });
-    /* THE FIRST SEASON TAKES THE MATCHES THAT CAME BEFORE IT — the first
-       season OF THIS LEAGUE, and only that league's loose matches. With no
-       seasons at all, leagueMatches() returns every one of the league's
-       matches; the moment one exists it returns only that season's, so a match
-       added earlier — which has no season, because there was none to give it —
-       dropped off the Matches tab and out of the table with nothing said. It
-       was played in this league, and this is the league's first season. Only
-       the first: after that a match belongs to whichever season it was added
-       under. Scoped per league, or starting a season in a brand new pool
-       league would swallow the darts league's loose fixtures. */
-    const seasoned = state.seasons.some((x) => x.leagueId === lgId);
-    const orphans = seasoned ? [] : state.matches.filter((m) => !m.bracketId && !m.seasonId && m.leagueId === lgId);
+    /* THE FIRST SEASON USED TO TAKE THE MATCHES THAT CAME BEFORE IT, and that
+       was the wrong fix for a real bug (2026-09-10). leagueMatches() showed
+       every match while a league had no seasons and only the picked season's
+       once it had one, so a match added earlier simply VANISHED the moment a
+       season started. Sweeping it in hid the disappearance by taking away the
+       category — and there is a real category here: a pre-season friendly, a
+       between-season challenge, a one-off that was never meant to count.
+
+       Nothing is swept now. Those matches stay in no season, the pickers offer
+       them as Friendlies, and they are in no season's table. Charles asked for
+       this the day the sweep bit him. */
+    const loose = state.matches.filter((m) => !m.bracketId && !m.seasonId && m.leagueId === lgId).length;
     state.seasons.push(sn);
-    orphans.forEach((m) => { m.seasonId = sn.id; touch(m); });
     seasonPick = sn.id;
-    if (orphans.length) note = ' — ' + plural(orphans.length, 'match', 'matches') + ' already on record moved into it';
+    if (loose) note = ' — ' + plural(loose, 'match', 'matches')
+      + ' already on record stayed out of it, as friendlies';
   }
   save();
   render();
@@ -6813,9 +6854,15 @@ function openAddMatch() {
   const opts = sides.map((id) => '<option value="' + esc(id) + '">' + esc(nameOf(id)) + '</option>').join('');
   $('am_a').innerHTML = opts; $('am_b').innerHTML = opts;
   if (sides.length > 1) $('am_b').value = sides[1];
-  $('am_seasonWrap').hidden = !state.seasons.length;
-  $('am_season').innerHTML = seasonsSorted().map((s) => '<option value="' + esc(s.id) + '">' + esc(s.name) + '</option>').join('');
-  if (season) $('am_season').value = season.id;
+  /* ALWAYS OFFERED once the league has a season, and "no season" is one of the
+     answers. Without it there was no way to record a friendly at all: the box
+     hid the moment a season existed, so every match was forced into one. */
+  const seasons = seasonsSorted();
+  $('am_seasonWrap').hidden = !seasons.length;
+  $('am_season').innerHTML = seasons.map((s) => '<option value="' + esc(s.id) + '">' + esc(s.name) + '</option>').join('')
+    + '<option value="' + NO_SEASON + '">No season — a friendly</option>';
+  $('am_season').value = (seasonPick === NO_SEASON && hasFriendlies()) ? NO_SEASON
+    : season ? season.id : NO_SEASON;
   $('am_date').value = todayISO();
   const inSeason = leagueMatches(season ? season.id : null);
   $('am_round').value = String(inSeason.reduce((a, m) => Math.max(a, m.round), 0) + 1);
@@ -6828,12 +6875,14 @@ $('addMatchSave').addEventListener('click', () => {
   const date = $('am_date').value;
   if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) { $('addMatchWarn').textContent = 'That date is not a date.'; return; }
   const seasons = seasonsSorted();
-  const seasonId = seasons.length ? $('am_season').value : null;
+  const pickedSeason = seasons.length ? $('am_season').value : NO_SEASON;
+  const seasonId = pickedSeason === NO_SEASON ? null : pickedSeason;
   const m = touch({ id: uid(), leagueId: currentLeagueId(), seasonId: seasonId, bracketId: null, slot: null,
     round: Math.max(0, Math.min(999, Math.round(Number($('am_round').value) || 0))), date: date || null, venue: '',
     a: a, b: b, status: 'scheduled', score: { a: 0, b: 0 }, legs: [] });
   state.matches.push(m);
-  if (seasonId) seasonPick = seasonId;
+  /* Land the reader where the match they just made actually IS. */
+  seasonPick = seasonId || NO_SEASON;
   save(); render();
   $('addMatchDialog').close();
   openMatch(m.id);
@@ -6939,6 +6988,14 @@ function renderMatchDialog() {
   $('mt_date').disabled = !edit;
   $('mt_venue').value = m.venue || '';
   $('mt_venue').disabled = !edit;
+  /* A BRACKET match takes its season from its bracket and has no say — the
+     box is not offered rather than offered and ignored. */
+  const mSeasons = seasonsSorted(m.leagueId);
+  $('mt_seasonWrap').hidden = !!m.bracketId || !mSeasons.length;
+  $('mt_season').innerHTML = mSeasons.map((x) => '<option value="' + esc(x.id) + '">' + esc(x.name) + '</option>').join('')
+    + '<option value="' + NO_SEASON + '">No season — a friendly</option>';
+  $('mt_season').value = m.seasonId || NO_SEASON;
+  $('mt_season').disabled = !edit;
   $('mtScore').innerHTML = '<span class="mside' + (s.a > s.b && done ? ' won' : '') + '">' + esc(nameOf(m.a)) + '</span>'
     + '<span class="big">' + s.a + '<span class="dash">–</span>' + s.b + '</span>'
     + '<span class="mside' + (s.b > s.a && done ? ' won' : '') + '">' + esc(nameOf(m.b)) + '</span>';
@@ -7277,6 +7334,20 @@ $('legsWrap').addEventListener('change', (e) => {
     }
     touch(m); save(); render();
   }
+});
+$('mt_season').addEventListener('change', () => {
+  const m = curMatch();
+  if (!m || !canEdit()) return;
+  const v = $('mt_season').value;
+  const next = v === NO_SEASON ? null : v;
+  if ((m.seasonId || null) === next) return;
+  m.seasonId = next;
+  touch(m);
+  /* Follow the match to where it went, or the reader is left on a list it is
+     no longer in — the same rule the Add Match window follows. */
+  seasonPick = next || NO_SEASON;
+  save(); render();
+  toast(next ? 'Moved into ' + (state.seasons.find((x) => x.id === next) || {}).name : 'Now a friendly — it counts for no table');
 });
 $('mt_date').addEventListener('change', () => {
   const m = curMatch();
@@ -7923,6 +7994,10 @@ const HELP = {
   sameTeams: ['The Same Pairings', `<p>A new league starts with everyone unpaired, because that is usually the point — the new competition's teams are meant to be different ones.</p>
     <p>When they are not, pick a league here and <strong>every pairing in it comes across</strong>: the same people in the same teams, and the new league takes that league's team size too. Nothing is chosen for you, so pressing Enter on the name alone creates an unpaired league.</p>
     <p>It is a copy, not a link. Moving somebody between teams afterwards changes only the league you moved them in.</p>`],
+  seasons: ['Seasons, and Friendlies', `<p>A <strong>season</strong> is a set of fixtures with a table of its own. A league can run as many as you like, one after another, and each is ranked separately.</p>
+    <p>A match does <strong>not</strong> have to be in one. A pre-season warm-up, a challenge between seasons, a one-off against another pub — leave the season box on <strong>No season</strong> and it is a <strong>friendly</strong>. Friendlies show under <strong>Friendlies</strong> in the season picker on the Matches tab, and they are in <strong>no season's table</strong>.</p>
+    <p>They still count for the <strong>players</strong> who played them — an average, a 180, a best leg — exactly as a knockout match does. The table is what a friendly stays out of, not the record.</p>
+    <p>Nothing is moved for you: starting a season leaves whatever was already recorded where it is. A match can be moved either way at any time from its own window.</p>`],
   leagues: ['What a League Is', `<p>Each league here is a competition at one game, played by the people on this club's roster. Pick one to see its rules, its seasons and its table — the Standings, Matches and Tournament tabs all follow whichever is showing.</p>
     <p><strong>A league's game is fixed when it is created and cannot change.</strong> That is not stubbornness: every result already recorded was folded under that game's rules — a darts leg counts down from 501, a rack of 8-ball counts balls, a board game counts up to a target — so a league that changed game would be re-scoring its own history. To play a different game, add another league.</p>
     <p>Its <em>name</em>, its format and its rules can all change, on the card below, until its first match is recorded.</p>
@@ -10554,7 +10629,7 @@ window.__lnTestHooks = {
      windows that ask it can be tested without a second load. */
   __viewOnly: function (on) { viewOnly = !!on; window.lnViewOnly = viewOnly; render(); },
   SCHEMA: SCHEMA, ID_RE: ID_RE, DEVICE_KEY: DEVICE_KEY, LEAGUE_KEY: LEAGUE_KEY, THEME_KEY: THEME_KEY, TAB_KEY: TAB_KEY,
-  TABS: TABS, SHARE_FORMAT: SHARE_FORMAT, SHARE_PAYLOAD_V: SHARE_PAYLOAD_V, SHARED_ID: SHARED_ID,
+  TABS: TABS, NO_SEASON: NO_SEASON, SHARE_FORMAT: SHARE_FORMAT, SHARE_PAYLOAD_V: SHARE_PAYLOAD_V, SHARED_ID: SHARED_ID,
   DEMO_ID: DEMO_ID, DEMO_TEAMS_ID: DEMO_TEAMS_ID, DEMO_BOARD_ID: DEMO_BOARD_ID, DEMO_POOL_ID: DEMO_POOL_ID,
   DEMO_CORN_ID: DEMO_CORN_ID,
   LEAGUE_ID_RE: LEAGUE_ID_RE, ADMIN_KEY_RE: ADMIN_KEY_RE,
