@@ -1,7 +1,7 @@
 # League Night — rules for Claude sessions
 
-A league tracker for darts, table shuffleboard and pool, and later other pub and club games
-(cornhole, bowling, golf). Players or teams, a season schedule, standings, live scoring and
+A league tracker for darts, table shuffleboard, pool and cornhole, and later other pub and club
+games (bowling, golf). Players or teams, a season schedule, standings, live scoring and
 knock-out tournaments — shared with everyone in the league. Deployed via GitHub Pages:
 https://eagleadams86.github.io/league-night/
 
@@ -228,6 +228,48 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
     so an empty darts record survives the boundary to this day and reads as scored live. It also
     carries the running total, so no stored visit can pot balls a side has not got, a `won` that
     does not clear the group is dropped, and nothing after the rack ended is kept.
+- **What the FOURTH game cost: SHARING a scorer** (2026-09-09). A round of cornhole *is* a frame
+  of shuffleboard — one side scores it, by the difference, counting up to a target — so the two
+  share `roundState`/`roundScore`/`roundUndo`/`roundLegStats` rather than the fold being copied.
+  Everything that differs lives in **`rounds`**, a sub-object on the game in the same spirit as
+  `handicap`, and each game's `rounds` carries its own BOUND copy of the four (`bindRounds()` runs
+  just after the `GAMES` literal), so **no call site passes the rules and none can pass the wrong
+  ones**. `frameState` and its three siblings survive as shuffleboard-bound wrappers with unchanged
+  signatures and unchanged return KEYS — the suite compares with `JSON.stringify`, where a
+  reordered object is a different object, which is why the token key is a computed key in the
+  literal and not an assignment after it. A golden-value capture of the whole shuffleboard demo,
+  taken on `main` before the refactor, came back byte-identical after.
+  - **`rounds` is NOT a twelfth `GAME_CONTRACT` key.** Darts and 8-ball have no round scorer and
+    the contract test asserts every game supplies every key. It gets its own check instead.
+  - **`fit` is the rule that does not transfer, and nobody would rederive it.** At shuffleboard
+    `h * 4 <= t` is *arithmetic* — every counted weight is worth 1 to 4. Cornhole scores by
+    CANCELLATION, so two bags in the hole (6) against one in and one on (4) nets 2 with `h = 2`,
+    and the sum is simply false. Carrying it across refuses a round that was really played, and
+    the pad's backspace clamp would have *silently lowered* the count. Readers test `=== true`.
+  - **THE TWO 4s.** At shuffleboard the token's VALUE and its COUNT are both 4; at cornhole they
+    are 3 and 4. `liveHang >= n` and `int(x.h, 0, n, 0)` are the COUNT; every `* 4` and `/ 4` is
+    the VALUE. They coincided at one game, which is why nothing told them apart.
+  - **`hammer` became `next`, and the sense is INVERTED between the two games.** At shuffleboard
+    the side the sheet points at holds the last weight, which is worth having; at cornhole it
+    throws first, and the last bag is the other side's. The wrapper aliases `next` back to
+    `hammer` for shuffleboard's readers, and the cornhole demo's bias runs the other way.
+  - **`HELP` forks on the GAME'S IDENTITY, never on `liveScorer`.** Two games share a sheet now,
+    so forking on the scorer would have handed cornhole shuffleboard's five explanations — hangers,
+    weights and a hammer, at a game played with bags — word for word, with nothing on screen to see.
+    A test asserts every game has its own body in every forked topic.
+  - **A margin of 1 is NOT the same as no margin.** Targets differ whenever anyone has a head
+    start, so a side can win while BEHIND on points (targets of 5 and 15, and 5–12 is a win). The
+    guard short-circuits on a falsy `marg` and never compares when it is absent.
+  - **A record belongs to a game that has a scorer for it.** `frames()` now needs the game's
+    `rounds`, and darts has none — so it DROPS a round record on a darts leg rather than reaching
+    for shuffleboard's numbers. A darts leg used to keep one, and `legIsLive` then read true.
+  - **`leg.frames` is still the stored key at cornhole**, holding rounds. Renaming a stored key is
+    a migration for no gain; it is written down so it reads as a decision rather than drift.
+  - **A bust is a figure that changed and must be SHOWN.** `sbCommit` toasts it from a
+    before/after compare, the way `liveCommit` does at darts.
+  - **The demo alternates SINGLES and DOUBLES games**, as `demoPlay` already did for the darts
+    pairs league. A pure-doubles demo would credit played and won and nothing else — every figure
+    column an em-dash for everybody — and teach a reader the app is broken.
   - **`handicap.pill` exists because the standings table used to sniff the LABEL.** It drew a
     minus when `label.split(' ')[0]` was "start". A second game whose label was not would have
     been drawn wrong with nothing on screen to see. A game says how its own figure reads.
@@ -302,6 +344,12 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
   not free (held by something outside these repos); 8024 is the first past the family band.
 
 ## Status
+
+**Cornhole (2026-09-09)** is the fourth entry in `GAMES` and the fifth demo league
+(`LN-DEMOCORN`, four teams of two, a lineup card, a sub, the last round scored round by round).
+SCHEMA went to **7** for `leg.bust` and `leg.marg`; `EXPECTED` is **362**. It is the first game
+that shares another game's scorer — see the `rounds` bullet above before touching `roundState`,
+`frames()` or `renderLiveRounds`.
 
 **8-ball (2026-09-09)** is the third entry in `GAMES` and the fourth demo league (`LN-DEMOPOOL`,
 singles, two players on the wire, the last round scored rack by rack). SCHEMA went to **6** for
@@ -443,7 +491,7 @@ showed it.
   score and no legs; voids keep their legs and count for nothing.
 - **`__plant` in the test hooks updates the device entry's name** — the header picker reads the
   device record, not `state`, and a test that plants a hostile league name reads the picker.
-- **The demo is four leagues** (darts singles, darts teams, shuffleboard, 8-ball) with ids that are NOT valid League IDs (they carry
+- **The demo is five leagues** (darts singles, darts teams, shuffleboard, 8-ball, cornhole) with ids that are NOT valid League IDs (they carry
   an O), so they can never be pushed to the cloud. `buildDemoSingles` trims bracket legs to the
   bracket's best of three after `demoPlay`, which played them to the league's best of five.
 - **`tests.html` reads its markup from `</head>`**, not `<body>` — a CSS comment in the head says
