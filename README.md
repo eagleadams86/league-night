@@ -279,8 +279,13 @@ exactly as it did before, picker and all hidden.
 
 **A league's game never changes.** Every result already recorded was folded under that game's
 rules, so a league that changed game would be re-scoring its own history. Its name, its format and
-its rules can all change until its first match is recorded. A league can be deleted while it is
-empty; once it holds a season or a match it stays, and a club always keeps at least one.
+its rules can all change until its first match is recorded.
+
+**Delete This League** is at the foot of the League Rules card. A league can go while it is
+**empty**; once it holds a season, a fixture or a tournament it stays, and the refusal says what
+is in the way. A club always keeps at least one, so with a single league the button is not there.
+Anyone in a team in that league comes out of it, and their teams in your other leagues are
+untouched.
 
 **Handicaps are per player, per game.** A darts start deduction, a shuffleboard or cornhole head
 start and a pool wire are three different things, and nobody would want one number standing for
