@@ -1440,7 +1440,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
     <label class="sr-only" for="leagueSel" id="leagueSelLabel">Club</label>
     <select class="no-print" id="leagueSel" title="Switch between the clubs on this device"></select>
     <button class="no-print" id="dataBtn" title="Back up, restore or delete a league"><span aria-hidden="true">⇩</span> Back Up</button>
-    <button class="no-print" id="shareBtn" title="Create a read-only link to show someone this league"><span aria-hidden="true">↗</span> Share</button>
+    <button class="no-print" id="shareBtn" title="Create a read-only link to show someone this club"><span aria-hidden="true">↗</span> Share</button>
     <label class="sr-only" for="themeSel">Theme</label>
     <!-- Alphabetical: Auto, Dark, Light, Midnight, Sepia. Auto carries
          `selected` so the picker never reads one theme while the boot script
@@ -1701,9 +1701,9 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
       <h2>Invite
         <button class="tile-help" type="button" data-help="invite" aria-label="How sharing a league works">i</button>
         <span class="spacer"></span>
-        <button type="button" class="btn-small no-print" id="shareLeagueBtn" hidden>↑ Share This League</button>
+        <button type="button" class="btn-small no-print" id="shareLeagueBtn" hidden>↑ Share This Club</button>
       </h2>
-      <div class="field"><label for="leagueIdBox">League ID</label>
+      <div class="field"><label for="leagueIdBox">Club ID</label>
         <span class="row"><input type="text" id="leagueIdBox" readonly class="code" aria-describedby="inviteNote">
           <button type="button" class="btn-small no-print" id="copyIdBtn">Copy</button></span></div>
       <!-- ── The Admin Key, carried by the password manager ───────────────
@@ -1764,7 +1764,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
       <h2>Members
         <button class="tile-help" type="button" data-help="claim" aria-label="How saying which player you are works">i</button>
       </h2>
-      <p class="lede">Everyone who has joined with the League ID. The owner decides who may run the league.</p>
+      <p class="lede">Everyone who has joined with the Club ID. The owner decides who may run the club.</p>
       <div id="membersWrap"></div>
       <div class="field" id="meLinkWrap" hidden style="margin-top:var(--sp-5)"><label for="meLink">That’s me on the roster</label>
         <select id="meLink"></select></div>
@@ -1785,7 +1785,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
     </div>
 
     <div class="card" id="deviceCard">
-      <h2>This League on This Device
+      <h2>This Club on This Device
         <button class="tile-help" type="button" data-help="device" aria-label="What Forget and Delete do">i</button>
       </h2>
       <p class="hint" id="sizeMeter"></p>
@@ -1806,7 +1806,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
      it. -->
 <footer>
   <div class="footnotes">
-    <p class="privacy" id="privacyNote">🔒 Private — a league is stored in this browser until you sign in
+    <p class="privacy" id="privacyNote">🔒 Private — a club is stored in this browser until you sign in
       and share it. No account is required to use the app.</p>
     <p class="privacy privacy-links"><a href="privacy.html">Privacy policy</a> &middot;
       <a href="https://github.com/eagleadams86/league-night" target="_blank" rel="noopener noreferrer">How it works</a></p>
@@ -1877,10 +1877,10 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
      manager that saved a league's keys offers them back here. -->
 <dialog id="joinDialog" aria-labelledby="joinTitle">
   <h2 id="joinTitle">Join a Club</h2>
-  <p>Enter the League ID you were sent. Add the Admin Key if you are to run the league; leave it blank
+  <p>Enter the Club ID you were sent. Add the Admin Key if you are to run the club; leave it blank
     to follow. You will be asked to sign in to Google.</p>
   <form id="joinForm" autocomplete="on">
-    <div class="field"><label for="jn_id">League ID</label>
+    <div class="field"><label for="jn_id">Club ID</label>
       <input type="text" id="jn_id" class="code" name="league-id" autocomplete="username" maxlength="40"
              spellcheck="false" autocapitalize="characters" autocorrect="off" placeholder="LN-XXXXXXXX"></div>
     <div class="field"><label for="jn_key">Admin Key <span class="hint">(optional)</span></label>
@@ -2201,7 +2201,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
 
 <dialog id="dataDialog" aria-labelledby="dataTitle">
   <h2 id="dataTitle">Back Up &amp; Restore</h2>
-  <p>One JSON file holding everything in <strong id="dataLeagueName">this league</strong> — a copy you keep,
+  <p>One JSON file holding everything in <strong id="dataLeagueName">this club</strong> — a copy you keep,
     independent of this browser and of the cloud.</p>
   <div class="datarow">
     <button type="button" id="exportBtn"><span aria-hidden="true">⬇︎</span> Download Backup (JSON)</button>
@@ -2247,7 +2247,7 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
   <h2 id="shareDialogTitle">Share a Read-Only Link</h2>
   <p>Anyone opening this link sees the league as it is right now, with no way to change it and no
     sign-in. Everything travels <em>inside</em> the link itself — nothing is uploaded, and it
-    carries no League ID, so it is a picture of the league and not a way in.</p>
+    carries no Club ID, so it is a picture of the club and not a way in.</p>
   <div class="share-choices">
   <fieldset class="formpanel">
     <legend>How Much</legend>
@@ -2813,13 +2813,25 @@ function newLeagueEntity(opts) {
    what lets currentLeague() promise never to return null. */
 function blankClub(opts) {
   const o = opts || {};
+  const id = o.id || newLeagueId();
   return {
     schema: SCHEMA,
-    club: { id: o.id || newLeagueId(), name: String(o.name || 'My Club').slice(0, NAME_MAX),
+    club: { id: id, name: String(o.name || 'My Club').slice(0, NAME_MAX),
             createdAt: todayISO(), u: 0 },
-    leagues: [newLeagueEntity({ game: o.game, name: o.leagueName })],
+    /* THE FIRST LEAGUE'S ID IS DERIVED FROM THE CLUB'S, never minted — the same
+       rule migrateRaw follows, and for the same reason: a derived id is the
+       same on every device that computes it, so nothing can end up holding two
+       ids for one league. It also makes a demo built twice byte-identical,
+       which is what the suite's determinism test reads. */
+    leagues: [newLeagueEntity({ id: firstLeagueId(id), game: o.game, name: o.leagueName })],
     players: [], teams: [], seasons: [], matches: [], brackets: [], tombstones: [],
   };
+}
+/* The id a club's FIRST league gets, derived from the club's own. Shared by
+   blankClub and migrateRaw so a club created new and a club migrated from the
+   old shape name their first league identically. */
+function firstLeagueId(clubId) {
+  return 'lg-' + (String(clubId == null ? '' : clubId).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 56) || 'club');
 }
 
 /* ── The allowlist ─────────────────────────────────────────────────────────
@@ -2857,7 +2869,7 @@ function migrateRaw(raw) {
   const L = raw.league;
   const old = !Array.isArray(raw.leagues) && L && typeof L === 'object';
   if (old) {
-    const lgId = 'lg-' + (String(L.id == null ? '' : L.id).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 56) || 'club');
+    const lgId = firstLeagueId(L.id);
     const stamp = (list) => (Array.isArray(list) ? list : []).map((e) =>
       (e && typeof e === 'object') ? Object.assign({}, e, { leagueId: lgId }) : e);
     out = Object.assign({}, raw, {
@@ -2982,6 +2994,7 @@ function normalizeLeague(raw, opts) {
   if (!out.leagues.length) out.leagues = [newLeagueEntity({})];
   const leagueIds = new Set(out.leagues.map((L) => L.id));
   const firstLeague = out.leagues[0].id;
+  const known = (opts && opts.knownGames) || null;
   /* THE GAME A MATCH'S LEGS ARE VALIDATED AGAINST. `opts.knownGames` is the
      union of both sides' leagues during a merge and is used for RESOLUTION
      ONLY — never stored, never listed. Without it, a copy that has not yet
@@ -2989,7 +3002,6 @@ function normalizeLeague(raw, opts) {
      finds no `rounds` on darts, and every round record on those legs is DELETED
      — committed by mergeList if that side carried the higher `u`. See
      mergeLeague. */
-  const known = (opts && opts.knownGames) || null;
   const gameOfLeague = (id) => {
     const L = out.leagues.find((x) => x.id === id);
     if (L) return GAMES[L.game];
@@ -3038,8 +3050,22 @@ function normalizeLeague(raw, opts) {
   /* A season belongs to ONE league, and so plays one game. A leagueId naming
      no league lands on the first one rather than becoming null: unlike a team
      or a season, a league is what says which game this is, and nothing can be
-     folded or drawn without one. */
-  const lgRef = (v) => { const id = ref(v); return id && leagueIds.has(id) ? id : firstLeague; };
+     folded or drawn without one.
+
+     AN ID `opts.knownGames` RECOGNISES IS KEPT AS IT IS, and that is what makes
+     the merge safe. mergeLeague normalizes each side ALONE, so the side that
+     has not yet received a new cornhole league would otherwise have its id
+     REWRITTEN to leagues[0] here — and the rewrite happens before any game is
+     resolved, so a union map consulted afterwards would come too late to save
+     the records. The league is real; it is simply on the other side, and the
+     merge is about to bring it in. */
+  const lgRef = (v) => {
+    const id = ref(v);
+    if (!id) return firstLeague;
+    if (leagueIds.has(id)) return id;
+    if (known && known.has(id)) return id;
+    return firstLeague;
+  };
   out.seasons = list(raw.seasons).map((s) => ({
     id: fixId(s.id), leagueId: lgRef(s.leagueId), name: str(s.name, NAME_MAX),
     startsOn: isoDate(s.startsOn) || todayISO(),
@@ -3513,12 +3539,16 @@ function copyPlayers(src, dst, ids) {
   /* `hcps` is COPIED WHOLE, and shallow-copied rather than shared: two clubs
      pointing at one object is a change in one showing up in the other. Absent
      stays absent — the allowlist's rule, and an empty map here would be the
-     one record in the app claiming a handicap nobody gave. */
+     one record in the app claiming a handicap nobody gave.
+
+     APPLIED AFTER touch(), so the key lands where the boundary puts it — after
+     `u`. This output is never normalized on the way out, and the suite compares
+     with JSON.stringify, where a reordered object is a DIFFERENT object. */
   const withHcps = (o, hcps) => {
     if (hcps && Object.keys(hcps).length) o.hcps = Object.assign({}, hcps);
     return o;
   };
-  const players = plan.take.map((p) => touch(withHcps({
+  const players = plan.take.map((p) => withHcps(touch({
     id: uid(),
     name: p.name,
     /* Through the SAME map the teams were minted into — the family's rule that
@@ -3529,7 +3559,7 @@ function copyPlayers(src, dst, ids) {
     /* Retired is a fact about the club they stopped playing in. Somebody
        ticked on purpose is here to play. */
     active: true,
-  }, p.hcps)));
+  }), p.hcps));
   /* NOT re-normalized on the way out. saveLocal stringifies `state` exactly as
      it is, so this has to be boundary-clean already — and a defensive
      normalize here would turn the test that proves it into a test of nothing. */
@@ -4953,7 +4983,7 @@ function openLeague(id) {
   device.current = id;
   state = st;
   noteU(maxU(state));
-  seasonPick = null;
+  clearPicks();
   saveLocal();
   render();
   if (typeof window.cloudOpen === 'function') window.cloudOpen(id);
@@ -4968,7 +4998,7 @@ function adoptLeague(st, role, cloud) {
   device.current = st.club.id;
   state = st;
   noteU(maxU(state));
-  seasonPick = null;
+  clearPicks();
   save();
   render();
 }
@@ -4982,7 +5012,7 @@ function forgetLeague(id) {
     state = device.current ? loadLeague(device.current) : null;
     if (state) noteU(maxU(state));
   }
-  seasonPick = null;
+  clearPicks();
   saveLocal();
   render();
   if (typeof window.cloudOpen === 'function') window.cloudOpen(device.current);
@@ -5312,6 +5342,11 @@ document.querySelectorAll('.tab, .tabbar button').forEach((b) =>
 const $ = (id) => document.getElementById(id);
 let seasonPick = null;          /* season id chosen in a picker, or null for "the current one" */
 let leaguePick = null;          /* league id chosen in a picker, or null for "the first one" */
+/* SWAPPING THE CLUB ON SCREEN CLEARS BOTH PICKS. A league id belongs to one
+   club exactly as a season id belongs to one league, and currentLeague()'s
+   graceful fallback would hide a stale one rather than fix it — two clubs whose
+   leagues happened to share an id would open on the wrong one. */
+function clearPicks() { seasonPick = null; leaguePick = null; }
 let standingsMode = 'sides';    /* 'sides' or 'players' — the individual table in a team league */
 
 /* THE LEAGUE EVERY VIEW IS LOOKING AT. Mirrors currentSeason() one level up,
@@ -7155,7 +7190,17 @@ function rulesChanged(e) {
   touch(lg);
   save(); render();
 }
-document.querySelectorAll('#rulesCard input, #rulesCard select').forEach((el) => el.addEventListener('change', rulesChanged));
+/* NOT `#rulesCard select` wholesale: `lrLeague` is a PICKER sitting in this
+   card, not a rule. Wired to rulesChanged as well, it fired FIRST (registered
+   first), its render() rebuilt the select and put the old league back in it,
+   and the picker's own handler then read `e.target.value` off a control that
+   had already been reset — so choosing a league silently did nothing, and a
+   season started straight afterwards landed in the league you had just left.
+   The same trap as the league name box one level up, and found the same way:
+   by driving the real controls rather than calling the handler. */
+document.querySelectorAll('#rulesCard input, #rulesCard select').forEach((el) => {
+  if (el.id !== 'lrLeague') el.addEventListener('change', rulesChanged);
+});
 /* The CLUB's name, on its own card and its own listener for the same reason
    `lr_name` has one: render() would put the old value back. */
 $('cl_name').addEventListener('change', () => {
@@ -7253,7 +7298,7 @@ $('scheduleBtn').addEventListener('click', openSchedule);
 $('addMatchBtn').addEventListener('click', openAddMatch);
 $('addBracketBtn').addEventListener('click', openBracketDialog);
 $('copyIdBtn').addEventListener('click', async () => {
-  if (await copyText(state.club.id)) toast('League ID copied'); else { $('leagueIdBox').select(); toast('Press ⌘C to copy'); }
+  if (await copyText(state.club.id)) toast('Club ID copied'); else { $('leagueIdBox').select(); toast('Press ⌘C to copy'); }
 });
 $('trimBtn').addEventListener('click', () => {
   if (!canEdit()) return;
@@ -7559,7 +7604,7 @@ const HELP = {
     <p>Tap a match with both sides known to score it. Changing an earlier result after later matches were played marks those results as no longer fitting, rather than quietly moving sides around.</p>`],
   invite: ['Sharing a Club', `<p>The <strong>Club ID</strong> is how others find this club: anyone who signs in to Google and enters it can follow every league in it — the tables, the fixtures, the tournaments. The <strong>Admin Key</strong> is separate and lets someone run the club — enter it once and your account becomes an admin.</p>
     <p>One ID covers the whole club, however many leagues it runs. Both keys are kept by your browser's password manager, never by the app's sync or backups. Removing a member takes them off the list; anyone who still has the ID can rejoin as a viewer, so a club that must be closed to someone is a new club with a new ID.</p>`],
-  device: ['This League on This Device', `<p>A league is kept in this browser, and once shared, in the cloud too. <strong>Forget</strong> removes only this device's copy. <strong>Delete</strong> removes the league itself, for everyone, and only its owner can.</p>
+  device: ['This Club on This Device', `<p>A club is kept in this browser, and once shared, in the cloud too. <strong>Forget</strong> removes only this device's copy. <strong>Delete</strong> removes the league itself, for everyone, and only its owner can.</p>
     <p>The size line is how much of the space one league may hold is used. A season of leg-by-leg scoring is a small fraction of it; a league that grows past the warning can close old seasons to trim them.</p>`],
   lineup: ['Subs and the Card', `<p>The <strong>card</strong> is who is actually throwing for each team tonight. Until somebody sets it, the app assumes the team's own players. Anyone on a card who is not on that team is a <strong>sub</strong> — the app keeps no other record of one, and needs none.</p>
     <p>A sub's legs count for the <strong>team</strong> they stood in for and for the <strong>sub's own record</strong>, because every figure is worked out from who threw the leg rather than from who the team is. Nothing on the card moves a result by itself: it decides who can be ticked as having thrown.</p>
@@ -7668,7 +7713,7 @@ $('importFile').addEventListener('change', () => {
     const known = device.leagues.find((l) => l.id === incoming.club.id);
     if (known && known.cloud && known.role === 'viewer') { toast('You follow ' + known.name + ' — only an admin can restore a backup into it.'); return; }
     const what = incoming.club.name + ': ' + plural(incoming.players.length, 'player') + ', ' + plural(incoming.matches.length, 'match', 'matches');
-    if (!confirm((known ? 'Replace ' + known.name + ' on this device with the backup?\n\n' : 'Add this league to this device?\n\n') + what)) return;
+    if (!confirm((known ? 'Replace ' + known.name + ' on this device with the backup?\n\n' : 'Add this club to this device?\n\n') + what)) return;
     adoptLeague(incoming, known ? known.role : 'owner', known ? known.cloud : false);
     $('dataDialog').close();
     toast('Backup restored');
@@ -7974,9 +8019,9 @@ $('main').addEventListener('click', (e) => {
 });
 
 /* Registered together at the foot, as in every sibling. */
-['leagueDialog', 'addDialog', 'playerDialog', 'teamDialog', 'seasonDialog', 'scheduleDialog', 'addMatchDialog',
- 'matchDialog', 'sideDialog', 'bracketDialog', 'dataDialog', 'clearDialog', 'shareDialog', 'helpDialog',
- 'searchDialog', 'assignDialog'].forEach((id) => closeOnBackdropClick($(id)));
+['leagueDialog', 'newLeagueDialog', 'addDialog', 'playerDialog', 'teamDialog', 'seasonDialog', 'scheduleDialog',
+ 'addMatchDialog', 'matchDialog', 'sideDialog', 'bracketDialog', 'dataDialog', 'clearDialog', 'shareDialog',
+ 'helpDialog', 'searchDialog', 'assignDialog'].forEach((id) => closeOnBackdropClick($(id)));
 
 /* ═══════════════════════════════ The demo ═══════════════════════════════════
    THE SAMPLE DATA IS THE DEMO, and a feature is not finished until it reaches
@@ -8614,7 +8659,7 @@ function loadDemo() {
   adoptLeague(teams, 'owner', false);
   adoptLeague(singles, 'owner', false);
   setTab('standings');
-  toast('Five demo leagues loaded — switch between them in the header');
+  toast('Five demo clubs loaded — switch between them in the header');
 }
 
 
@@ -8850,9 +8895,9 @@ function renderInvite() {
   $('inviteNote').textContent = demo ? 'The demo lives on this device and cannot be shared.'
     : !on ? 'This league lives on this device. Sharing arrives once the cloud side is set up.'
     : !cloud ? 'This league lives on this device. Share it and anyone signed in to Google who enters the ID can follow it.'
-    : owner ? 'Anyone signed in with the League ID can follow the league. Give someone the Admin Key too and they can run it with you.'
+    : owner ? 'Anyone signed in with the Club ID can follow the club. Give someone the Admin Key too and they can run it with you.'
     : admin ? 'You are an admin: you can score matches, run seasons and tournaments. Only the owner changes who is a member.'
-    : 'You are following this league. Its owner can give you the Admin Key if you should be running it too.';
+    : 'You are following this club. Its owner can give you the Admin Key if you should be running it too.';
   $('membersCard').hidden = !on || !cloud;
   renderMembers();
   renderInviteLinks();
@@ -9138,7 +9183,7 @@ $('membersWrap').addEventListener('click', async (e) => {
   const role = e.target.closest('[data-role]');
   if (role) {
     const m = members.find((x) => x.uid === role.dataset.uid);
-    if (m && await window.lnCloud.setRole(m.uid, role.dataset.role)) toast(m.name + (role.dataset.role === 'admin' ? ' can run the league now' : ' is a viewer now'));
+    if (m && await window.lnCloud.setRole(m.uid, role.dataset.role)) toast(m.name + (role.dataset.role === 'admin' ? ' can run the club now' : ' is a viewer now'));
     return;
   }
   const own = e.target.closest('[data-owner]');
@@ -9153,7 +9198,7 @@ $('membersWrap').addEventListener('click', async (e) => {
   if (rem) {
     const m = members.find((x) => x.uid === rem.dataset.remove);
     if (!m) return;
-    if (!confirm('Remove ' + m.name + '?\n\nThey come off the list. Anyone who still has the League ID can rejoin as a viewer — a league that must be closed to someone is a new league.')) return;
+    if (!confirm('Remove ' + m.name + '?\n\nThey come off the list. Anyone who still has the Club ID can rejoin as a viewer — a club that must be closed to someone is a new club.')) return;
     if (await window.lnCloud.removeMember(m.uid)) toast(m.name + ' removed');
   }
 });
@@ -9165,7 +9210,7 @@ $('meLink').addEventListener('change', async () => {
 });
 $('shareLeagueBtn').addEventListener('click', async () => {
   if (!window.lnCloud || !state) return;
-  if (!confirm('Share ' + state.club.name + '?\n\nIt goes up to the cloud under your Google account. Anyone signed in who has its League ID can follow it; anyone you give the Admin Key to can run it.')) return;
+  if (!confirm('Share ' + state.club.name + '?\n\nIt goes up to the cloud under your Google account. Anyone signed in who has its Club ID can follow it; anyone you give the Admin Key to can run it.')) return;
   $('shareLeagueBtn').disabled = true;
   try { await window.lnCloud.share(); } finally { $('shareLeagueBtn').disabled = false; }
 });
@@ -9195,8 +9240,8 @@ $('keyClaimBtn').addEventListener('click', async (e) => {
   $('keyClaimBtn').disabled = true;
   try {
     const r = await window.lnCloud.claim(key);
-    if (r === 'admin') toast('You can run this league now');
-    else if (r === 'bad-key') toast('That is not this league’s Admin Key');
+    if (r === 'admin') toast('You can run this club now');
+    else if (r === 'bad-key') toast('That is not this club’s Admin Key');
   } finally { $('keyClaimBtn').disabled = false; }
 });
 $('keyForm').addEventListener('submit', (e) => e.preventDefault());
@@ -9213,7 +9258,7 @@ $('joinForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!window.lnCloud) return;
   const id = 'LN-' + cleanCode($('jn_id').value, 'LN');
-  if (!LEAGUE_ID_RE.test(id)) { $('joinWarn').textContent = 'A League ID is LN- and eight letters or numbers, like LN-7KQ4M2XR.'; $('jn_id').focus(); return; }
+  if (!LEAGUE_ID_RE.test(id)) { $('joinWarn').textContent = 'A Club ID is LN- and eight letters or numbers, like LN-7KQ4M2XR.'; $('jn_id').focus(); return; }
   const key = cleanCode($('jn_key').value);
   if (key && !ADMIN_KEY_RE.test(key)) { $('joinWarn').textContent = 'An Admin Key is sixteen letters and numbers — leave it blank to follow the league.'; $('jn_key').focus(); return; }
   $('joinSave').disabled = true;
@@ -9225,7 +9270,7 @@ $('joinForm').addEventListener('submit', async (e) => {
     if (r === 'error') { $('joinWarn').textContent = 'Could not join — see the note at the foot of the page.'; return; }
     $('joinDialog').close();
     setTab('standings');
-    toast(r === 'admin' ? 'Joined as an admin' : r === 'bad-key' ? 'Joined as a viewer — that key was not the league’s' : 'Joined — you are following this league');
+    toast(r === 'admin' ? 'Joined as an admin' : r === 'bad-key' ? 'Joined as a viewer — that key was not the club’s' : 'Joined — you are following this league');
   } finally { $('joinSave').disabled = false; }
 });
 $('joinCancel').addEventListener('click', () => $('joinDialog').close());
@@ -10031,7 +10076,7 @@ window.__lnTestHooks = {
     if (entry) { entry.name = state.club.name; }
     else device.leagues.push({ id: state.club.id, name: state.club.name, role: 'owner', cloud: false });
     device.current = state.club.id;
-    seasonPick = null;
+    clearPicks();
     render();
   },
   __state: function () { return state; },
@@ -10418,7 +10463,7 @@ function updateUI() {
     btn.textContent = '☁️ Sign In to Share';
     btn.setAttribute('aria-label', 'Sign In to Share');
     btn.title = 'Sign in with Google to share a league or join one';
-    privacyNote.textContent = '🔒 Private — a league is stored in this browser until you sign in and share it. No account is required to use the app.';
+    privacyNote.textContent = '🔒 Private — a club is stored in this browser until you sign in and share it. No account is required to use the app.';
   }
   window.lnCloudUser(user ? { uid: user.uid, name: user.displayName || user.email || '', email: user.email || '' } : null);
 }
@@ -10895,7 +10940,7 @@ function listenTo(id) {
     const role = s.exists() && s.data().role === 'admin' ? 'admin' : 'viewer';
     if (entry.role !== role) {
       window.lnSetRole(id, role);
-      window.toast(role === 'admin' ? 'You are an admin of this league now' : 'You are a viewer of this league now');
+      window.toast(role === 'admin' ? 'You are an admin of this club now' : 'You are a viewer of this club now');
       /* An account promoted mid-session has a queue to listen to, and one
          demoted must stop before its listener is refused. */
       setTimeout(() => relistenTo(id), 0);
