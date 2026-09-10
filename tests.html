@@ -52,7 +52,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 340;
+const EXPECTED = 362;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -1569,8 +1569,8 @@ function define() {
   });
 
   group('the live scorer');
-  t('a new leg remembers who throws first and the double-out rule, and SCHEMA is 6', () => {
-    eq(H.SCHEMA, 6);
+  t('a new leg remembers who throws first and the double-out rule, and SCHEMA is 7', () => {
+    eq(H.SCHEMA, 7);
     const out = H.normalizeLeague({ league: { id: 'L' }, matches: [{ id: 'm', a: 'x', b: 'y', legs: [{ first: 'b', dOut: false }, {}] }] });
     eq(out.matches[0].legs.map((l) => [l.first, l.dOut]), [['b', false], ['a', true]]);
   });
@@ -1745,12 +1745,21 @@ function define() {
        + 'each field is pinned to its own range, and here the pair still agrees');
   });
   t('a leg carries whichever record its game keeps, and never both', () => {
-    const keys = (leg) => Object.keys(H.normalizeLeague({ league: { id: 'L' },
+    const keys = (leg, game) => Object.keys(H.normalizeLeague({ league: { id: 'L', game: game || 'shuffleboard' },
       matches: [{ id: 'm', a: 'p', b: 'q', legs: [leg] }] }).matches[0].legs[0]).sort();
     eq(keys({ w: 'a' }), ['by', 'dOut', 'first', 'start', 'w'], 'a leg nobody scored live carries neither');
     ok(keys({ w: 'a', frames: [{ s: 'a', t: 3 }] }).includes('frames'));
     ok(!keys({ w: 'a', frames: [] }).includes('frames'), 'an EMPTY record is no record — a key is written only when it has a value');
     ok(!keys({ w: 'a', visits: { a: [], b: [] } }).includes('frames'));
+    /* A RECORD BELONGS TO A GAME THAT HAS A SCORER FOR IT. A darts leg used to
+       keep a round record it could never have made — legIsLive() then read
+       true and swapped that leg's Details boxes for a summary of something
+       nothing had written to. The same bug openLive()'s named branches fix,
+       one level down in the boundary. */
+    ok(!keys({ w: 'a', frames: [{ s: 'a', t: 3 }] }, 'darts').includes('frames'),
+       'and darts, which has no round scorer, keeps no round record');
+    ok(keys({ w: 'a', frames: [{ s: 'a', t: 3 }] }, 'cornhole').includes('frames'),
+       'while cornhole, which shares that scorer, does');
   });
   t('the typed figures of a shuffleboard game are its own, and are capped', () => {
     const out = H.normalizeLeague({ league: { id: 'L', game: 'shuffleboard' },
@@ -1913,12 +1922,13 @@ function define() {
     eq(JSON.stringify(d), JSON.stringify(H.buildDemoShuffle()), 'and it is the same every time');
   });
   t('every game a demo is built on is a game the registry has', () => {
-    [H.buildDemoSingles(), H.buildDemoTeams(), H.buildDemoShuffle(), H.buildDemoPool()].forEach((d) => {
+    [H.buildDemoSingles(), H.buildDemoTeams(), H.buildDemoShuffle(), H.buildDemoPool(), H.buildDemoCornhole()].forEach((d) => {
       ok(H.GAMES[d.league.game], d.league.game);
       ok(H.isDemoId(d.league.id), d.league.id);
       [].concat(d.players, d.seasons, d.matches, d.brackets).forEach((e) => ok(/^demo-/.test(e.id), e.id));
     });
-    eq(new Set([H.DEMO_ID, H.DEMO_TEAMS_ID, H.DEMO_BOARD_ID, H.DEMO_POOL_ID]).size, 4, 'and four different leagues');
+    eq(new Set([H.DEMO_ID, H.DEMO_TEAMS_ID, H.DEMO_BOARD_ID, H.DEMO_POOL_ID, H.DEMO_CORN_ID]).size, 5,
+       'and five different leagues');
   });
 
   group('8-ball: the third game, and the first head start the engine had to learn');
@@ -1955,8 +1965,9 @@ function define() {
       const sc = H.GAMES[g].handicap.scope;
       ok(sc === 'leg' || sc === 'match', g + ' declares no handicap scope: ' + sc);
     });
-    eq([H.GAMES.darts.handicap.scope, H.GAMES.shuffleboard.handicap.scope, H.GAMES.pool.handicap.scope],
-       ['leg', 'leg', 'match']);
+    eq([H.GAMES.darts.handicap.scope, H.GAMES.shuffleboard.handicap.scope,
+        H.GAMES.pool.handicap.scope, H.GAMES.cornhole.handicap.scope],
+       ['leg', 'leg', 'match', 'leg']);
     eq(H.GAMES.pool.handicap.apply(0, 2), 2, 'a match-scope apply answers the racks a side starts on');
     eq(H.GAMES.pool.handicap.pill(2), '+2');
   });
@@ -2331,6 +2342,318 @@ function define() {
     ok(played.every((m) => { const s = H.matchScore(m); return Math.max(s.a, s.b) <= 3; }),
        'and none of them ran past the three racks its format allows — the wire is frozen BEFORE the racks are played');
     eq(JSON.stringify(d), JSON.stringify(H.buildDemoPool()), 'and it is the same every time');
+  });
+
+  group('cornhole: a fourth game, and the first the engine was SHARED for');
+  /* A cornhole league of two teams, playing the bust format, with a match
+     still to play. Its id carries no LN- code shape, like the others here. */
+  const CHFX = {
+    league: { id: 'LN-CHFIX', name: 'Bag Fixture', game: 'cornhole', createdAt: '2026-01-01',
+      settings: { format: 'singles', teamSize: 2, legFormat: '21bust', dOut: true,
+                  matchFormat: { mode: 'bestOf', n: 3 }, points: { win: 2, draw: 1, loss: 0 },
+                  tiebreak: ['pts', 'legDiff', 'legsFor', 'h2h', 'name'] } },
+    players: [{ id: 'ch-ann', name: 'Ann', teamId: null, hcp: null, active: true },
+              { id: 'ch-bo', name: 'Bo', teamId: null, hcp: 6, active: true }],
+    teams: [], seasons: [{ id: 'ch-s1', name: 'Bag Season', startsOn: '2026-01-05', status: 'active' }],
+    matches: [{ id: 'ch-m1', seasonId: 'ch-s1', bracketId: null, slot: null, round: 1, date: '2026-01-05',
+                venue: '', a: 'ch-ann', b: 'ch-bo', status: 'scheduled', score: { a: 0, b: 0 }, legs: [] }],
+    brackets: [], tombstones: [],
+  };
+  const CH = () => H.GAMES.cornhole.rounds;
+  const SB = () => H.GAMES.shuffleboard.rounds;
+  /* A cornhole game, ready for rounds. `extra` carries the ending rules the
+     format would have frozen on. */
+  const chLeg = (ta, tb, first, extra) => Object.assign(
+    { w: null, by: { a: ['ch-ann'], b: ['ch-bo'] }, start: { a: ta, b: tb },
+      first: first || 'a', frames: [] }, extra || {});
+  const rounds = (leg, list) => list.reduce((cur, f) => {
+    const next = CH().score(cur, f[0], f[1], f[2] || 0);
+    ok(!next.error, 'round ' + JSON.stringify(f) + ': ' + next.error);
+    return next.error ? cur : next;
+  }, leg);
+
+  t('every game that scores in rounds says how its own rounds work', () => {
+    /* The `rounds` object is deliberately NOT a twelfth contract key — darts
+       and 8-ball have no round scorer — so it needs a check of its own, the
+       same shape as the one handicap.scope gets. */
+    Object.keys(H.GAMES).forEach((g) => {
+      const R = H.GAMES[g].rounds;
+      if (!R) { ok(H.GAMES[g].liveScorer !== 'rounds', g + ' opens the round sheet with no rules for it'); return; }
+      ['max', 'tokenValue', 'tokenMax', 'tokenKey', 'whyMax', 'tokenLabel', 'firstLabel', 'firstPill'].forEach(
+        (k) => ok(R[k] != null, g + ' rounds lacks ' + k));
+      ok(R.first === 'alternate' || R.first === 'scorer', g + ' declares no first-throw rule: ' + R.first);
+      ok(R.fit === true || R.fit === false, g + ' does not say whether its two figures constrain each other');
+      ok(R.word.one && R.word.many && R.token.one && R.token.many, g + ' rounds has no words');
+      eq(R.quick.length, 4, g + ' quick row must fill its four cells');
+      ['state', 'score', 'undo', 'legStats'].forEach((k) => ok(typeof R[k] === 'function', g + ' rounds is not bound: ' + k));
+      eq(R.max, R.tokenMax * R.tokenValue, g + ': the most a round is worth IS every token at its best');
+    });
+    ok(SB() !== CH(), 'and the two games hold genuinely different rules, not one shared object');
+    eq([SB().max, SB().tokenValue, SB().fit, SB().first], [16, 4, true, 'alternate']);
+    eq([CH().max, CH().tokenValue, CH().fit, CH().first], [12, 3, false, 'scorer']);
+  });
+  t('a round scores for ONE side, by the difference, and counts up to 21', () => {
+    const leg = rounds(chLeg(21, 21), [['a', 4], ['b', 3], ['a', 6, 2]]);
+    const st = CH().state(leg);
+    eq([st.pts.a, st.pts.b], [10, 3]);
+    eq([st.fw.a, st.fw.b], [2, 1], 'rounds won');
+    eq([st.hole.a, st.hole.b], [2, 0], 'and the token is under the GAME’s own key, never `hang`');
+    eq(st.winner, null); eq(st.frames, 3);
+  });
+  t('WHOEVER SCORED throws first next, and a round nobody scored changes nothing', () => {
+    /* The inverse of shuffleboard's rule, and the reason `first` is a key on
+       the game rather than an assumption in the fold. */
+    let leg = chLeg(21, 21, 'a');
+    eq(CH().state(leg).next, 'a', 'round one is the only one anybody chooses');
+    leg = rounds(leg, [['b', 3]]);
+    eq(CH().state(leg).next, 'b', 'Bo scored, so Bo throws first');
+    leg = rounds(leg, [['b', 2]]);
+    eq(CH().state(leg).next, 'b', 'and again — it does not alternate');
+    leg = CH().score(leg, null, 0, 0);
+    eq(CH().state(leg).next, 'b', 'a round nobody scored changes nothing, because nobody scored it');
+    leg = rounds(leg, [['a', 4]]);
+    eq(CH().state(leg).next, 'a');
+  });
+  t('shuffleboard still alternates, and a blank frame still moves the hammer on', () => {
+    /* The same closed form, the other branch — pinned here beside its opposite
+       so a change to one can never quietly become a change to both. */
+    let leg = { w: null, by: { a: [], b: [] }, start: { a: 15, b: 15 }, first: 'a', frames: [] };
+    eq(SB().state(leg).next, 'a');
+    leg = SB().score(leg, 'b', 3, 0);
+    eq(SB().state(leg).next, 'b', 'parity of the rounds PLAYED, not who scored');
+    leg = SB().score(leg, null, 0, 0);
+    eq(SB().state(leg).next, 'a', 'and a frame nobody scored still changes hands');
+  });
+  t('a round is refused when it is not a round, and says why in the GAME’s words', () => {
+    const leg = chLeg(21, 21);
+    ok(/between 1 and 12/.test(CH().score(leg, 'a', 13, 0).error), 'four bags, the best of them in the hole');
+    ok(/four bags, and the best of them in the hole/.test(CH().score(leg, 'a', 13, 0).error));
+    ok(/between 1 and 12/.test(CH().score(leg, 'a', 0, 0).error), 'a side that scored is a side that scored');
+    ok(/at most four in the hole/.test(CH().score(leg, 'a', 8, 5).error));
+    ok(/between 1 and 16/.test(SB().score({ start: { a: 15, b: 15 }, first: 'a', frames: [] }, 'a', 17, 0).error),
+       'and shuffleboard still says sixteen, in its own');
+  });
+  t('under CANCELLATION the two figures do not constrain each other', () => {
+    /* THE RULE THAT DOES NOT TRANSFER. At shuffleboard a hanger is four points
+       OF the total, so h of them cannot fit inside a smaller one. At cornhole
+       the net is a difference — two bags in the hole against one in and one on
+       nets 2 — so the same sum is simply false, and refusing would refuse a
+       round that was really played. */
+    ok(!CH().score(chLeg(21, 21), 'a', 2, 2).error, 'a net of 2 with two in the hole is a real round');
+    ok(!CH().score(chLeg(21, 21), 'a', 1, 4).error, 'and so is a net of 1 with four');
+    ok(/cannot fit in a frame of 3/.test(SB().score({ start: { a: 15, b: 15 }, first: 'a', frames: [] }, 'a', 3, 1).error),
+       'while shuffleboard still refuses it, because there it is arithmetic');
+  });
+  t('EXACT 21: a round that would carry a side past the target sends them back', () => {
+    const leg = rounds(chLeg(21, 21, 'a', { bust: 11 }), [['a', 10], ['a', 8]]);
+    eq(CH().state(leg).pts.a, 18);
+    const over = CH().score(leg, 'a', 6, 0);
+    const st = CH().state(over);
+    eq(st.pts.a, 11, '24 is past 21, so back to 11');
+    eq(st.busts.a, 1, 'and the sheet has something to say about it');
+    eq(st.winner, null, 'busting is not winning');
+    const exact = CH().score(leg, 'a', 3, 0);
+    eq(CH().state(exact).winner, 'a', 'while exactly 21 wins it');
+  });
+  t('without the bust rule a game is still won by REACHING or passing the target', () => {
+    const leg = rounds(chLeg(21, 21, 'a'), [['a', 10], ['a', 8], ['a', 6]]);
+    const st = CH().state(leg);
+    eq([st.winner, st.pts.a], ['a', 24], 'the score stands as it fell');
+    eq(st.busts.a, 0, 'and nothing was sent back');
+  });
+  t('WIN BY 2: reaching the target is not enough while the lead is one', () => {
+    const leg = rounds(chLeg(21, 21, 'a', { marg: 2 }), [['a', 12], ['b', 12], ['b', 8], ['a', 9]]);
+    const st = CH().state(leg);
+    eq([st.pts.a, st.pts.b], [21, 20]);
+    eq(st.winner, null, '21–20 is not a win when the league plays to two clear');
+    eq(CH().state(rounds(leg, [['a', 1]])).winner, 'a', 'and 22–20 is');
+  });
+  t('a MARGIN is never assumed, because a side can win from behind', () => {
+    /* The reason the guard short-circuits instead of defaulting to 1. Targets
+       differ the moment anybody has a head start: a head start of 10 on a game
+       to 15 gives targets of 5 and 15, and 5–12 is a win. A default of 1
+       would stop declaring that winner in a league already playing. */
+    const behind = { w: null, by: { a: [], b: [] }, start: { a: 5, b: 15 }, first: 'b', frames: [
+      { s: 'b', t: 4 }, { s: 'b', t: 4 }, { s: 'b', t: 4 }, { s: 'a', t: 5 }] };
+    const st = SB().state(behind);
+    eq([st.winner, st.pts.a, st.pts.b], ['a', 5, 12], 'reaching your OWN target wins it, behind or not');
+    const withMarg = SB().state(Object.assign({}, behind, { marg: 2 }));
+    eq(withMarg.winner, null, 'and only a league that asked for a margin gets one');
+  });
+  t('undo takes back the last round, whoever scored it', () => {
+    const leg = rounds(chLeg(21, 21), [['a', 4], ['b', 3]]);
+    const back = CH().undo(leg);
+    eq(back.frames.length, 1);
+    eq(CH().state(back).pts, { a: 4, b: 0 });
+    eq(CH().undo(CH().undo(back)).frames, [], 'and undoing an empty game is not an error');
+  });
+  t('a side’s figures for a game: points, rounds, in the hole and the best of them', () => {
+    const leg = rounds(chLeg(21, 21), [['a', 4, 1], ['b', 3], ['a', 9, 3], ['a', 8, 2]]);
+    const s = CH().legStats(leg, 'a');
+    eq([s.points, s.fw, s.hole, s.high], [21, 3, 6, 9]);
+    eq(s.won, true, '21 reaches 21');
+    eq(CH().legStats(chLeg(21, 21), 'a').high, null,
+       'and a side that won no round has NO best round, which is not a best round of 0');
+    ok(!('hang' in s), 'and nothing here is called a hanger');
+  });
+  t('the record survives the allowlist, and a hostile one does not', () => {
+    const out = H.normalizeLeague({ league: { id: 'L', game: 'cornhole' },
+      matches: [{ id: 'm', a: 'p', b: 'q', legs: [{ w: 'a', start: { a: 21, b: 21 },
+        frames: [{ s: 'a', t: 4, h: 1 }, { s: 'z', t: 9, h: 2 }, { s: 'b', t: 99, h: 9 }, { s: 'b', t: 2, h: 2 }, 'nope'] }] }] });
+    eq(out.matches[0].legs[0].frames,
+       [{ s: 'a', t: 4, h: 1 }, { s: null, t: 0 }, { s: 'b', t: 12, h: 4 }, { s: 'b', t: 2, h: 2 }],
+       'a side that is neither a nor b is nobody and scores nothing; a net is clamped to this game’s 12 '
+       + 'and its bags to four; and the last one KEEPS two in the hole inside a net of 2, which shuffleboard '
+       + 'would have dropped — under cancellation the pair does not have to add up');
+  });
+  t('the ending rules are frozen onto the leg, and refused rather than clamped', () => {
+    const leg = (extra) => H.normalizeLeague({ league: { id: 'L', game: 'cornhole' },
+      matches: [{ id: 'm', a: 'p', b: 'q', legs: [Object.assign({ w: 'a', start: { a: 21, b: 21 } }, extra)] }] }).matches[0].legs[0];
+    eq(leg({ bust: 11 }).bust, 11);
+    eq(leg({ bust: 21 }).bust, undefined, 'a bust AT the target would make busting a win');
+    eq(leg({ bust: 25 }).bust, undefined, 'and above it that side could never win again');
+    eq(leg({ bust: 999 }).bust, undefined, 'refused, never clamped — 99 would be a rule nobody chose');
+    eq(leg({ marg: 2 }).marg, 2);
+    eq(leg({ marg: 1 }).marg, undefined, 'a margin of one is no margin, so it is not written down');
+    eq(leg({ marg: 99 }).marg, undefined);
+    eq(leg({}).bust, undefined, 'and a game played under neither carries neither');
+  });
+  t('the typed figures of a cornhole game are its own, and are capped', () => {
+    const out = H.normalizeLeague({ league: { id: 'L', game: 'cornhole' },
+      matches: [{ id: 'm', a: 'p', b: 'q', legs: [{ w: 'a', a: { points: 900, hole: 3, high: 99, hang: 4, darts: 60 } }] }] });
+    eq(out.matches[0].legs[0].a, { points: 99, hole: 3, high: 12 },
+       'a hanger is not a field of this game, and neither is a dart');
+  });
+  t('a typed game and a scored one are read the same way', () => {
+    const typed = { w: 'a', by: { a: ['ch-ann'], b: ['ch-bo'] }, start: { a: 21, b: 21 },
+                    a: { points: 21, hole: 4, high: 8 }, b: { points: 9 } };
+    const s = H.chSideStats(typed, 'a');
+    eq([s.points, s.hole, s.high, s.won], [21, 4, 8, true]);
+    eq(H.chSideStats(typed, 'b').hole, null, 'an empty box is not a zero: nobody said');
+    eq(H.cornholePlayerStats([typed], 'ch-ann').ppg, 21);
+  });
+  t('Trim Closed Seasons moves no figure at a game of cornhole either', () => {
+    const st = H.normalizeLeague(Object.assign({}, CHFX, {
+      seasons: [{ id: 'ch-s1', name: 'Bag Season', startsOn: '2026-01-05', status: 'done' }],
+      matches: [Object.assign({}, CHFX.matches[0], { status: 'played', legs: [
+        Object.assign(rounds(chLeg(21, 15, 'a', { bust: 11 }), [['a', 9, 3], ['b', 4], ['a', 8, 1], ['a', 4, 1]]), { w: 'a' })] })] }));
+    const before = H.cornholePlayerStats(H.legsIn(st, 'ch-s1'), 'ch-ann');
+    ok(st.matches[0].legs[0].frames.length === 4 && H.legIsLive(st.matches[0].legs[0]), 'it starts round by round');
+    const out = H.compactSeason(st, 'ch-s1');
+    eq(out.trimmed, 1);
+    ok(!out.matches[0].legs[0].frames, 'and the record is gone');
+    ok(!H.legIsLive(out.matches[0].legs[0]));
+    ok(out.matches[0].legs[0].a.hole != null && out.matches[0].legs[0].a.hang === undefined,
+       'trimmed under the GAME’s own token key, not shuffleboard’s');
+    const after = H.cornholePlayerStats(H.legsIn(out, 'ch-s1'), 'ch-ann');
+    eq([after.points, after.hole, after.high, after.ppg, after.won],
+       [before.points, before.hole, before.high, before.ppg, before.won],
+       'every figure the button promised would not move');
+  });
+  t('the League Rules card offers three ways for a game to end', () => {
+    const D = W.document;
+    try {
+      H.__plant(CHFX);
+      W.setTab('league');
+      eq(D.getElementById('lr_game').value, 'Cornhole');
+      eq(D.getElementById('lr_legFormatLabel').textContent, 'Each game');
+      eq([...D.getElementById('lr_legFormat').options].map((o) => o.textContent),
+         ['First to 21', 'Exact 21 — over it, back to 11', 'First to 21, win by 2']);
+      eq(D.getElementById('lr_dOutRow').hidden, true, 'double-out is a DARTS rule');
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+  t('the head start stops at 8, and TWO floors put it there', () => {
+    eq(H.GAMES.cornhole.handicap.max, 8);
+    const target = 21 - H.GAMES.cornhole.handicap.max;
+    ok(target > 11, 'above the 11 a bust drops you to — at 11, busting would WIN');
+    ok(target > H.GAMES.cornhole.rounds.max, 'and above the 12 one perfect round scores, which is not a game');
+    eq(H.GAMES.cornhole.handicap.apply(21, 8), 13);
+    eq(H.GAMES.cornhole.handicap.pill(6), '+6');
+  });
+  t('the sheet scores a game round by round, in cornhole’s words, and busts out loud', () => {
+    const D = W.document;
+    try {
+      H.__plant(CHFX);
+      D.getElementById('tab-matches').click();
+      D.querySelector('.mrow[data-match="ch-m1"]').click();
+      D.getElementById('addLegBtn').click();
+      D.querySelector('#legsWrap [data-live]').click();
+      const leg = () => H.__state().matches[0].legs[0];
+      eq([leg().start.a, leg().start.b], [21, 15], 'Bo plays to 15 with a head start of 6');
+      eq(leg().bust, 11, 'and the ending rule is frozen on with the leg');
+      eq(D.getElementById('lvHangLabel').textContent, 'Bags in the hole this round');
+      eq(D.getElementById('lvUndo').textContent, 'Undo last round');
+      eq([...D.querySelectorAll('#lvSbPad .quick button')].map((b) => b.textContent), ['1', '3', '4', '6'],
+         'the quick row is this game’s four nets, and it fills its four cells');
+      const key = (k) => D.querySelector('#lvSbPad [data-key="' + k + '"]').click();
+      key('q6'); D.getElementById('lvHangUp').click(); D.getElementById('lvHangUp').click();
+      ok(!D.getElementById('lvHangUp').disabled, 'and two in the hole inside a net of 6 is not refused here');
+      D.getElementById('lvScoredA').click();
+      eq(leg().frames, [{ s: 'a', t: 6, h: 2 }]);
+      ok(/Ann throws first/.test(D.getElementById('lvHint').textContent), D.getElementById('lvHint').textContent);
+      key('q6'); D.getElementById('lvScoredA').click();
+      key('q6'); D.getElementById('lvScoredA').click();
+      eq(CH().state(leg()).pts.a, 18);
+      key('q6'); D.getElementById('lvScoredA').click();
+      eq(CH().state(leg()).pts.a, 11, '24 is past 21, so back to 11');
+      ok(/Bust/.test(D.getElementById('toast').textContent), 'and it is SAID — ten points do not leave the board in silence');
+      D.getElementById('lvUndo').click();
+      eq(CH().state(leg()).pts.a, 18, 'and undo puts them back');
+      D.getElementById('liveDialog').close();
+      D.getElementById('matchDialog').close();
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+  t('every game keeps its own pad, and its own explanations', () => {
+    const D = W.document;
+    try {
+      /* Shuffleboard and cornhole SHARE a sheet, so the thing that could go
+         wrong is not the pad — it is the words. HELP forks on the game's
+         identity for exactly this reason. */
+      const bodies = {};
+      Object.keys(H.GAMES).forEach((g) => {
+        H.__plant(Object.assign({}, FIXTURE, { league: Object.assign({}, FIXTURE.league, { game: g }) }));
+        bodies[g] = ['leg', 'rules', 'individual', 'matches', 'handicap'].map((k) => {
+          const e = H.HELP[k];
+          const got = typeof e === 'function' ? e() : e;
+          return got[0] + '::' + got[1];
+        });
+      });
+      ['leg', 'rules', 'individual', 'matches', 'handicap'].forEach((k, i) => {
+        const seen = Object.keys(H.GAMES).map((g) => bodies[g][i]);
+        eq(new Set(seen).size, seen.length,
+           'two games share one explanation of ' + k + ' — a game that shares a SHEET must not share its words');
+      });
+      ok(/bags|in the hole/i.test(bodies.cornhole[0]), 'cornhole says bags');
+      ok(/hanger|weight/i.test(bodies.shuffleboard[0]), 'and shuffleboard still says weights');
+    } finally { H.__plant(FIXTURE); W.setTab('standings'); }
+  });
+  t('the cornhole demo: teams, a card, a sub, live rounds and a knockout', () => {
+    const d = H.buildDemoCornhole();
+    eq(d.league.id, H.DEMO_CORN_ID);
+    eq(d.league.game, 'cornhole');
+    eq(d.league.settings.format, 'teams');
+    ok(!H.LEAGUE_ID_RE.test(d.league.id), 'and its id is not a League ID, so it can never reach the cloud');
+    eq(d.teams.length, 4); eq(d.players.length, 8);
+    ok(d.matches.some((m) => m.legs.some((l) => l.frames && l.frames.length)), 'games scored round by round');
+    ok(d.matches.some((m) => m.legs.some((l) => l.a && l.a.points != null && !l.frames)), 'and games with typed figures');
+    ok(d.matches.some((m) => m.lineup && m.lineup.a.length), 'a card was recorded — the first demo anywhere to do it');
+    ok(d.players.some((p) => p.avail), 'and somebody said whether they can make the next night');
+    /* THE THING THAT MAKES THE INDIVIDUAL TABLE REAL. A pure-doubles demo
+       would credit played and won and nothing else, and every figure column
+       would be an em-dash for everybody. */
+    const legs = d.matches.flatMap((m) => m.legs);
+    ok(legs.some((l) => l.by.a.length === 1) && legs.some((l) => l.by.a.length === 2),
+       'singles games AND doubles games, on the same night');
+    const anyone = H.cornholePlayerStats(H.legsIn(d, null), d.players[0].id);
+    ok(anyone.ppg != null && anyone.high != null, 'so a player has real figures of their own');
+    const sub = d.matches.find((m) => m.lineup && m.lineup.a.some(
+      (id) => !d.players.some((p) => p.id === id && p.teamId === m.a)));
+    ok(sub, 'and one night has a sub on the card');
+    ok(sub.legs.some((l) => l.by.a.some((id) => !d.players.some((p) => p.id === id && p.teamId === sub.a))),
+       'who actually played a game, because that is the only record of a sub there is');
+    ok(d.matches.flatMap((m) => m.legs).every((l) => l.bust === 11), 'every game carries the rule it was played under');
+    ok(d.brackets.length === 1 && d.brackets[0].entrants.length >= 4, 'a knockout seeded from the table');
+    eq(JSON.stringify(d), JSON.stringify(H.buildDemoCornhole()), 'and it is the same every time');
   });
 
   group('the chrome is the family’s');
