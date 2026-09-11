@@ -10821,7 +10821,18 @@ function armDoors() {
   }
 }
 
-const cloudOn = !!(FIREBASE_CONFIG && GOOGLE_CLIENT_ID && !inTestHarness && !window.lnViewOnly);
+/* THE TWO CONFIG OPERANDS ARE GONE, and not merely because CodeQL called them
+   trivially true. They read as a guard for a build whose cloud config had been
+   stripped — a fork, say — and they could never have been one: both are
+   literals in this same file, and `{}` is truthy, so an EMPTIED
+   FIREBASE_CONFIG would have sailed straight through and turned the cloud on
+   over a config with no project in it. A guard that cannot fail is worse than
+   no guard, because it is read as cover.
+
+   What is left are the two that genuinely vary at run time. If a stripped-config
+   build ever needs guarding, the test has to be on a FIELD — `FIREBASE_CONFIG.apiKey`
+   — not on the object. */
+const cloudOn = !inTestHarness && !window.lnViewOnly;
 document.documentElement.toggleAttribute('data-cloud', cloudOn);
 if (cloudOn) {
   btn.hidden = false;

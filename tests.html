@@ -586,7 +586,12 @@ function define() {
     eq(hosts, ['https://accounts.google.com', 'https://firestore.googleapis.com', 'https://identitytoolkit.googleapis.com',
                'https://securetoken.googleapis.com', 'https://www.googleapis.com', 'https://www.gstatic.com'],
        'Golf Handicap’s list; a new endpoint is a decision');
-    ok(!/firebaseapp\.com|apis\.google\.com/.test(csp), 'the hosted popup and the gapi iframe are deliberately absent');
+    /* MATCHED AS A HOST IN A URL, not as a bare substring. The loose version
+       CodeQL flagged would also have fired on "notfirebaseapp.com" — which for
+       an ABSENCE check errs safe, but it says something weaker than this test
+       means, and the next reader would take it for a host check. */
+    ok(!/https?:\/\/[^\s;']*\b(firebaseapp\.com|apis\.google\.com)/.test(csp),
+       'the hosted popup and the gapi iframe are deliberately absent');
     ok(/frame-src https:\/\/accounts\.google\.com/.test(csp), 'the sign-in popup needs frame-src');
   });
   t('manifest-src and worker-src are spelled out, not left to fall back', () => {
@@ -3093,7 +3098,6 @@ function define() {
     } finally { H.__plant(FIXTURE); W.setTab('standings'); }
   });
   t('every game keeps its own pad, and its own explanations', () => {
-    const D = W.document;
     try {
       /* Shuffleboard and cornhole SHARE a sheet, so the thing that could go
          wrong is not the pad — it is the words. HELP forks on the game's
