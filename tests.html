@@ -200,6 +200,54 @@ function bootApp() {
    test can set is a flag a bug can set. So this boots the real app at a real
    '#share=' link, and polls for the banner because `load` fires before boot()
    has awaited decodeShare(). */
+/* ── A FRAME THAT IS REALLY THE WIDTH IT SAYS ───────────────────────────────
+   An iframe element 375px wide is not a 375px viewport wherever the engine
+   paints its scrollbars INSIDE the frame: the app then lays out against a
+   clientWidth of 360, and every media query, every `inset: 0` sheet and every
+   header that can wrap answers 360.
+
+   That is a difference of about fifteen pixels and it broke two checks that had
+   nothing to do with scrollbars — the scorer sheet measured 360 of a claimed
+   375, and the phone header wrapped to 173px where the design keeps it under
+   100. Both read as real faults in the app. Both were the frame.
+
+   It is environment-dependent by nature: CI's headless Chromium paints overlay
+   scrollbars and takes no width, so the suite was green there and red on a
+   desktop browser for months — a suite that is always red locally stops being
+   read, which is how other things go unnoticed (2026-09-11).
+
+   So the frame is MEASURED and widened until the app inside it lays out at the
+   width asked for, rather than assumed. Nothing is faked: the app still decides
+   its own layout, this only makes the room the right size.
+
+   AT BOOT IS ENOUGH, and that was worth checking rather than assuming. The
+   scrollbar looks like it should arrive with the planted data — no content, no
+   overflow — which argued for settling again after every `__plant`. It does not:
+   the app renders its own first screen before the test hooks are ready, so the
+   frame has already overflowed and already been corrected by the time anything
+   is planted. A second pass was written, measured, found never to fire, and
+   removed. Verified by disabling this one and watching the guard below go red
+   with vw=360 — a belt-and-braces path that never runs is worse than none,
+   because the comment on it teaches the next reader something untrue. */
+function settleFrame(frame, win, want, wantH, done) {
+  let tries = 0;
+  const fix = () => {
+    let dw = 0, dh = 0;
+    try {
+      const de = win.document.documentElement;
+      dw = want - de.clientWidth;
+      dh = wantH - de.clientHeight;
+    } catch (e) { done(win); return; }
+    /* Converged, or the engine disagrees by a pixel it will not give back. */
+    if ((dw <= 0 && dh <= 0) || tries >= 4) { done(win); return; }
+    tries++;
+    if (dw > 0) frame.style.width = (parseFloat(frame.style.width) + dw) + 'px';
+    if (dh > 0) frame.style.height = (parseFloat(frame.style.height) + dh) + 'px';
+    setTimeout(fix, 30);
+  };
+  fix();
+}
+
 function bootFrame(hash, width, height) {
   return new Promise((resolve, reject) => {
     const frame = document.createElement('iframe');
@@ -210,6 +258,7 @@ function bootFrame(hash, width, height) {
     frame.src = 'index.html' + BUST + (hash || '');
     document.body.appendChild(frame);
     const started = Date.now();
+    const settle = (win) => settleFrame(frame, win, width || 1000, height || 800, resolve);
     const poll = () => {
       let win = null, ready = false;
       try {
@@ -217,7 +266,7 @@ function bootFrame(hash, width, height) {
         if (hash && hash.indexOf('#share=') === 0) { const bar = win.document.getElementById('viewbar'); ready = !!(win.lnViewOnly && bar && !bar.hidden); }
         else ready = !!win.__lnTestHooks;
       } catch (e) { /* not readable yet */ }
-      if (ready) { resolve(win); return; }
+      if (ready) { settle(win); return; }
       if (Date.now() - started > 15000) { reject(new Error('the frame never finished booting')); return; }
       setTimeout(poll, 40);
     };
@@ -328,7 +377,13 @@ async function runAsync() {
     P.__lnTestHooks.__plant(P.__lnTestHooks.buildDemoSingles());
     const bar = PD.querySelector('.tabbar');
     const r = {
-      vw: P.innerWidth, vh: P.innerHeight,
+      /* THE LAYOUT VIEWPORT, not innerWidth. These two differ by the scrollbar
+         wherever the engine paints one inside the frame, and it is the layout
+         viewport that a full-width sheet and every media query answer — so it
+         is the honest thing to compare a rendered width against. settleFrame
+         has already made them agree; measuring this way means the checks below
+         stay true even where it cannot. */
+      vw: P.document.documentElement.clientWidth, vh: P.document.documentElement.clientHeight,
       barDisplay: P.getComputedStyle(bar).display,
       /* THE ROW, not the tablist inside it: hiding only the tabs would leave
          the pin button standing where they were. */
@@ -3722,6 +3777,19 @@ function define() {
     ok(/dialog\.sheet \{ position: fixed; inset: auto 0 0 0;/.test(mob), 'and the scorer is a sheet');
     ok(/env\(safe-area-inset-bottom\)/.test(mob) && /viewport-fit=cover/.test(APP_SRC), 'safe areas need viewport-fit');
     ok(/@media print \{ \.tabbar \{ display: none !important; \}/.test(css()));
+  });
+  /* ── THE FRAME IS REALLY 375 WIDE, and this check is why the others can be
+     believed. An iframe element 375px wide lays out at 360 wherever the engine
+     paints a scrollbar inside it — and that scrollbar only appears once there is
+     content to overflow, so it arrives AFTER boot and silently narrows every
+     measurement below. Two checks read as app faults for months because of it,
+     green in CI (overlay scrollbars, no width) and red on a desktop browser.
+     Pinned so a future change to bootFrame cannot go back to measuring a 360px
+     phone and calling it 375. */
+  t('the phone frame really is 375 wide once the data is in it', () => {
+    const r = asyncResults.phone || {};
+    ok(!r.error, r.error);
+    eq(r.vw, 375, 'the app lays out at the width this block claims to test');
   });
   t('on a phone the bar is really there and the tablist really gone', () => {
     const r = asyncResults.phone || {};
