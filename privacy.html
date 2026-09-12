@@ -30,15 +30,6 @@
      the stylesheet is silently blocked and the page renders unstyled. -->
 <link rel="stylesheet" href="theme.css">
 <style>
-  :root                 { color-scheme: dark; }
-  [data-theme="dark"]   { color-scheme: dark; }
-  [data-theme="light"]  { color-scheme: light; }
-  [data-theme="sepia"]  { color-scheme: light; }
-  [data-theme="auto"]   { color-scheme: light; }
-  @media (prefers-color-scheme: dark) {
-    [data-theme="auto"] { color-scheme: dark; }
-  }
-
   /* Type comes from the pack here too, and that is the whole point of this file
      being in the starter. Seven privacy pages in this family linked theme.css
      and then set `15px/1.6` with their own font stack on top of it, and every

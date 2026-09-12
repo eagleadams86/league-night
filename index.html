@@ -168,30 +168,19 @@
 <link rel="stylesheet" href="theme.css">
 <style>
   /* ── Which way round the page is ────────────────────────────────────────────
-     `color-scheme` is not a colour of ours and overrides nothing in the pack —
-     it is how a page TELLS the browser which way round it is, so the parts of a
-     control the browser draws itself follow the theme. Without it they are
-     always drawn light: on the dark themes the calendar button inside a date
-     field is a near-black glyph on a near-black box, and it is the one control
-     that cannot be restyled from CSS. It fixes number spinners, checkboxes and
-     scrollbars too, more quietly. The pairing follows the PALETTE, not the
-     theme's name: sepia is a warm LIGHT theme and takes `light`.
+     `color-scheme` moved INTO the pack on 2026-09-12 (rule 18). theme.css emits
+     it on every palette block — :root, each [data-theme], BOTH halves of auto,
+     and the print block — derived from each theme's `isLight` in tokens.json, so
+     it follows the PALETTE and not the theme's name. This page declared its own
+     until then; don't start again, a local block is drift now.
 
-     AUTO NEEDS BOTH HALVES, and so does anything else this page invents.
-     theme.css resolves Auto's palette by itself; it cannot resolve a property or
-     a token declared here. Sprint Velocity had ten local tokens and no Auto
+     AUTO STILL NEEDS BOTH HALVES for anything this page INVENTS. theme.css
+     resolves Auto for its own palette and properties; it cannot resolve a token
+     declared here. Sprint Velocity had ten local tokens and no Auto
      block at all, which meant light chart colours on a midnight card as its
      first-run default — silent, and only visible on a dark system with an
      untouched picker. IF YOU ADD A PER-THEME TOKEN BELOW, GIVE IT AN AUTO
      ANSWER. Better still, alias a pack token and inherit Auto for free. */
-  :root                 { color-scheme: dark; }
-  [data-theme="dark"]   { color-scheme: dark; }
-  [data-theme="light"]  { color-scheme: light; }
-  [data-theme="sepia"]  { color-scheme: light; }
-  [data-theme="auto"]   { color-scheme: light; }
-  @media (prefers-color-scheme: dark) {
-    [data-theme="auto"] { color-scheme: dark; }
-  }
 
   /* ── The app's own measurements ─────────────────────────────────────────────
      Not colours, so not the pack's business.

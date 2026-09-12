@@ -626,10 +626,23 @@ function define() {
       eq(auto.bg, want.bg); eq(auto.scheme, want.scheme);
     } finally { el.setAttribute('data-theme', was || 'auto'); }
   });
-  t('every theme this page names has a color-scheme, Auto included', () => {
-    ['dark', 'light', 'sepia', 'auto'].forEach(th =>
-      ok(new RegExp('\\[data-theme="' + th + '"\\][^{]*\\{[^}]*color-scheme').test(css()), th));
-    ok(/@media \(prefers-color-scheme: dark\)[^{]*\{\s*\[data-theme="auto"\]/.test(css()));
+  t('color-scheme comes from the PACK, and every theme resolves the right way round', () => {
+    /* Rule 18 (2026-09-12) moved color-scheme into theme.css, derived from each
+       theme's isLight. A local block is drift now, so this pins the RESOLVED
+       value rather than the presence of a literal. */
+    ok(!/color-scheme\s*:/.test(css()),
+       'this page must not declare color-scheme — the pack owns it (rule 18)');
+    const el = W.document.documentElement, was = el.getAttribute('data-theme');
+    try {
+      const sch = (th) => { el.setAttribute('data-theme', th);
+        return W.getComputedStyle(el).colorScheme.trim(); };
+      eq(sch('midnight'), 'dark', 'midnight is a dark palette');
+      eq(sch('dark'), 'dark');
+      eq(sch('light'), 'light');
+      eq(sch('sepia'), 'light', 'sepia is a warm LIGHT theme — the classic way to get this wrong');
+      eq(sch('auto'), W.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+         'Auto needs BOTH halves, and the pack emits them');
+    } finally { el.setAttribute('data-theme', was || 'auto'); }
   });
 
   group('the page is on the shared origin, and behaves like it');
