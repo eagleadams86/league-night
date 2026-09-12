@@ -354,6 +354,9 @@ async function runAsync() {
       readonly: SD.documentElement.hasAttribute('data-readonly'),
       leagueId: S.__lnTestHooks.__state().club.id,
       noAddMatch: SD.getElementById('addMatchBtn').hidden,
+      /* Hidden by the classic script before first paint, never by the deferred
+         module: from there a visitor watches it painted and then taken away. */
+      noSignIn: SD.getElementById('syncBtn').hidden,
       noScore: !SD.querySelector('.mrow .mgo'),
       rows: (SD.getElementById('tab-standings').click(), SD.querySelectorAll('#standingsTable tbody tr').length),
       /* Every button on the Club tab that a reader could press, EXCEPT the
@@ -425,6 +428,26 @@ async function runAsync() {
       /* The 📌 is not on a phone at all, so it cannot be reached by a Tab. */
       r.pinRects = PD.getElementById('pinBtn').getClientRects().length;
       r.pinStuck = P.__lnTestHooks.pin.stuck();
+      /* ── The sign-in button's width floor, MEASURED ────────────────────
+         Its label is the one in this row that changes, and this is the width
+         where that costs something: every control to its right slid 63px when
+         Firebase reported a name. Measured here rather than trusted, because
+         a floor written as a number goes stale the moment the type ramp moves
+         underneath it — which is exactly what happened to the three siblings
+         carrying a pixel one (2026-08-26). Firebase cannot run in the harness,
+         so the button is unhidden for the measurement and put back after: the
+         gap check above counts only RENDERED children and would read an
+         unhidden button as a second line. */
+      {
+        const b = PD.getElementById('syncBtn');
+        const wasHidden = b.hidden, wasText = b.textContent;
+        b.hidden = false;
+        try {
+          r.syncPin = parseFloat(P.getComputedStyle(b).minWidth);
+          r.syncLabels = ['\u2601\ufe0f Sign In to Share', '\u26a0\ufe0f Not syncing', '\u2601\ufe0f Charlie']
+            .map((label) => { b.textContent = label; return { label, px: b.getBoundingClientRect().width }; });
+        } finally { b.textContent = wasText; b.hidden = wasHidden; }
+      }
     }
     PD.getElementById('tab-matches').click();
     PD.querySelector('#matchesWrap .mrow').click();
@@ -1991,6 +2014,32 @@ function define() {
     ok(/function save\(\) \{\s*if \(viewOnly\) return;\s*editSeq \+= 1;/.test(src), 'save() counts the edit');
     ok(/if \(entry && entry\.cloud\) entry\.dirty = true;/.test(src), 'and marks a shared league dirty');
     ok(/function saveLocal\(\)/.test(src), 'while the cloud’s own writes come in through saveLocal()');
+  });
+  t('the sign-in button is painted with the page, not revealed by the deferred module', () => {
+    const head = (APP_SRC.match(/<button class="no-print" id="syncBtn"[^>]*>/) || [''])[0];
+    ok(head, 'the header carries a sync button');
+    ok(!/\bhidden\b/.test(head),
+       'it ships VISIBLE \u2014 shipped hidden and unhidden from the module, it arrives after '
+         + 'first paint and shoves the row sideways on every refresh');
+    /* The module may still SET it visible \u2014 that is a no-op on an ordinary
+       visit and is there for the unreadable-'#share=' fallback below. What it
+       must never be is the only thing that makes the button appear, which is
+       what the markup check above pins. */
+    const m = stripComments(moduleSrc());
+    const src = stripComments(APP_SRC);
+    ok(/document\.getElementById\('syncBtn'\)\.hidden = false;/.test(src)
+       && /\bbtn\.hidden = false;/.test(m),
+       'a link that turns out to be unreadable is not a shared view, so both the fallback '
+         + 'and the module\u2019s cloud branch put the button back \u2014 either may run first');
+    /* The two places it does not belong, both settled before anything paints. */
+    ok(/if \(viewOnly\) document\.getElementById\('syncBtn'\)\.hidden = true;/.test(src),
+       'a visitor\u2019s copy hides it from the CLASSIC script, which runs while the page parses');
+    ok(/\} else \{\s*btn\.hidden = true;\s*\}/.test(m), 'and the harness still hides it');
+  });
+  t('a shared snapshot never offers a sign-in at all', () => {
+    const r = asyncResults.shared || {};
+    ok(!r.error, r.error);
+    ok(r.noSignIn, 'signing in belongs to whoever owns the club, not to a visitor holding a link');
   });
   t('without a config nothing cloud-only is on screen, and the sync button is hidden', () => {
     const D = W.document;
@@ -3844,6 +3893,35 @@ function define() {
     eq([...new Set(r.ctlGaps)], [12],
        'the four apps that nest their controls all said 8 and had to be corrected on 2026-08-23');
     ok(/\.headctl \{[^}]*gap: 12px/.test(css()), 'and it is declared, not hoped for');
+  });
+  /* ── The header that stopped moving on refresh (2026-09-12) ───────────────
+     Asked for by Charles: the sign-in button moved on every refresh, twice
+     over. It shipped `hidden` and was revealed by the sync module — which is a
+     <script type="module">, so it arrives after first paint and shoved 166px of
+     controls sideways on a phone — and then its label shrank from "Sign In to
+     Share" to a first name when Firebase answered, for another 63px. The three
+     siblings had answered both years ago; this app had answered neither. */
+  t('the sign-in button is pinned wider than its own widest label', () => {
+    const r = asyncResults.phone || {};
+    ok(!r.error, r.error);
+    ok(r.syncPin > 0, 'the button has a min-width floor at all', String(r.syncPin));
+    ok(r.syncLabels && r.syncLabels.length === 3, 'the labels were measured');
+    ok(r.syncLabels.every((x) => x.px > 40),
+       'the button was really laid out — a 0 here means nothing below this line proves '
+         + 'anything, which is how the sibling apps\u2019 first version of this passed',
+       JSON.stringify(r.syncLabels));
+    const widest = r.syncLabels.reduce((a, b) => (b.px > a.px ? b : a));
+    ok(widest.px <= r.syncPin,
+       'the widest label this button ever paints has to fit inside the floor, or the row '
+         + 'moves when sign-in resolves \u2014 \u201c' + widest.label + '\u201d needs '
+         + widest.px.toFixed(2) + 'px against a ' + r.syncPin + 'px pin');
+    /* THE FLOOR IS IN em, and that is the half a pixel number cannot do: the
+       same label is ~132px with a mouse and ~154px on a touch device, because
+       `.headbar button` takes --fs-base on a coarse pointer. No harness frame
+       is a coarse pointer, so the unit is what the check can hold on to — a
+       floor in the button’s own type covers both sizes and every future ramp. */
+    ok(/#syncBtn \{ min-width: [\d.]+em; \}/.test(css()),
+       'a pixel floor covers one of this app\u2019s two header type sizes, never both');
   });
   t('the pin is a desktop affordance: no button and nothing stuck on a phone', () => {
     const r = asyncResults.phone || {};

@@ -674,7 +674,25 @@ showed it.
   drawn and every handler unattached — see [[league-night-harness-traps]] for the shape.
 - **A control that is not RENDERED has an all-zero rectangle**, whose top of 0 reads as a second
   line the row has not got. The suite's phone probe filters `getClientRects().length` before it
-  measures the header, because `#syncBtn` is hidden in every harness run (no cloud config).
+  measures the header, because `#syncBtn` is hidden in every harness run (the module hides it in
+  the harness — the page itself ships it visible).
+- **THE SIGN-IN BUTTON NEVER MOVES THE HEADER** (2026-09-12), and it used to do it twice on every
+  refresh. It shipped `hidden` and was unhidden by the sync module, which is a
+  `<script type="module">` and therefore deferred: the button landed after first paint and pushed
+  166px of controls sideways at 375px. Then its label shrank from "Sign In to Share" to a first
+  name when Firebase answered, for another 63px. Both halves are the arrangement Golf Handicap,
+  Money Map and PAPTrack have had for a year:
+  - **The markup ships it VISIBLE.** The two cases where it does not belong are known before
+    anything paints, so both answer before anything paints — a shared view from the CLASSIC
+    script (beside `window.lnViewOnly`), the harness from the module, inside a frame nothing can
+    shift. Nothing in the module reveals it, and the suite pins that.
+  - **`#syncBtn { min-width: 10.5em; }` is a floor under the widest label it ever paints.** IN em,
+    unlike the three siblings' pixel pin: `.headbar button` takes `--fs-base` on a coarse pointer,
+    so the same label is ~132px with a mouse and ~154px on a phone and no pixel number covers
+    both. (Theirs has gone stale once already, when the pack moved to a 16px rem ramp.) The suite
+    MEASURES the three labels against the floor in the 375px frame rather than trusting it. The
+    button still grows past the floor for the long "· saved here, will sync" state, which is
+    deliberate and is not a refresh.
 - **A MATCH PLAYED BEFORE A SEASON STAYS OUT OF IT** (2026-09-10; it used to be swept in, and
   that was the wrong fix). `leagueMatches()` returned every league match while a league had no
   seasons and only the chosen season's once it had one, so a match added early VANISHED the

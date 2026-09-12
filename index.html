@@ -970,6 +970,27 @@
     .headbar button, .btn-small { font-size: var(--fs-base); }
   }
 
+  /* ── The one control in the row whose LABEL changes width ──────────────
+     "☁️ Sign In to Share" becomes "☁️ Charlie" the moment Firebase reports who
+     you are, and "⚠️ Not syncing" when it cannot. With no floor under the button
+     every control to its right slides sideways as sign-in resolves — 63px of it
+     on a 375px phone, on every refresh. So the floor is the WIDEST label it ever
+     paints, and the button only grows past it for a long account name. Golf
+     Handicap, Money Map and PAPTrack pin the same button the same way.
+
+     IN em, NOT px, and that is where this one diverges from those three. Theirs
+     is a measured pixel number, and it has quietly stopped covering the label
+     once already: 125px was measured at an older type size and was five short
+     the moment the pack went to a 16px rem ramp (fixed family-wide 2026-08-26).
+     Here there are TWO sizes to cover — `.headbar button` takes --fs-base on a
+     coarse pointer, three rules up, so the same label measures 132px with a
+     mouse and 154px on a phone and no single pixel number covers both. An em
+     floor is measured in the button's own type, so it follows the ramp and the
+     touch step on its own. The widest label needs 10.15em; 10.5 is that plus the
+     headroom platform text metrics want. tests.html MEASURES the labels against
+     it rather than trusting the number. */
+  #syncBtn { min-width: 10.5em; }
+
   .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
              overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
@@ -1418,11 +1439,23 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
          declared on `.headctl`, and the suite measures the RENDERED gap between
          two adjacent controls rather than the declared one. -->
     <div class="headctl">
-    <!-- Far left, because its label changes width. Hidden until the sync
-         module finds a Firebase config; its label is rewritten with
-         textContent (an account name reaches it), so the accessible name is
-         restated in every branch rather than carried by an aria-hidden glyph. -->
-    <button class="no-print" id="syncBtn" aria-label="Sign In to Share" hidden>☁️ Sign In to Share</button>
+    <!-- Far left, because its label changes width; the floor that stops that
+         width moving the row is in the stylesheet.
+
+         SHIPPED VISIBLE, like its three siblings. The sync module is a
+         <script type="module"> and therefore deferred, so a button revealed from
+         there arrives AFTER first paint and shoves the rest of the row sideways
+         on every refresh — 166px of it on a phone, which is what this used to do.
+         The two cases where the button does not belong are both known before
+         anything is painted, so both are answered before anything is painted:
+         a shared view (the classic script hides it, at the top of its own boot)
+         and the test harness (the module, inside an invisible frame where
+         nothing can shift).
+
+         Its label is rewritten with textContent (an account name reaches it), so
+         the accessible name is restated in every branch rather than carried by
+         an aria-hidden glyph. -->
+    <button class="no-print" id="syncBtn" aria-label="Sign In to Share">☁️ Sign In to Share</button>
     <button class="no-print" id="findBtn" title="Search everything (⌘K / Ctrl+K)"><span aria-hidden="true">⌕</span> Find</button>
     <!-- The record picker: which league is on screen. A device can hold
          several. -->
@@ -2392,6 +2425,13 @@ const shareToken = location.hash.startsWith(SHARE_PREFIX)
 let viewOnly = !!shareToken;
 let shareMeta = null;
 window.lnViewOnly = viewOnly;
+/* Signing in belongs to whoever owns the club, not to a visitor holding a
+   snapshot of it. The button is taken away from HERE rather than left to the
+   sync module, which is deferred: from there a visitor would watch it painted
+   and then removed. Golf Handicap and Money Map hide it from their own view-only
+   branch for the same reason. Nothing behind it can run either — the module
+   reads window.lnViewOnly before it wires anything up. */
+if (viewOnly) document.getElementById('syncBtn').hidden = true;
 
 /* Dates are calendar days with no time on them. NEVER reach for toISOString()
    here: it converts to UTC and silently shifts every date back a day for anyone
@@ -10603,9 +10643,16 @@ async function boot() {
       state = normalizeLeague(arrived);
       state.club.id = SHARED_ID;
     } catch (e) {
-      /* A link that cannot be read falls back to this browser's OWN leagues. */
+      /* A link that cannot be read falls back to this browser's OWN leagues —
+         and this browser's own sign-in with them. The button was taken away up
+         at the top of this script on the strength of the '#share=' in the URL;
+         a link that turns out to be unreadable is not a shared view, so it
+         comes back. Whether this lands before or after the deferred sync module
+         depends on how fast the link failed, so BOTH of them put it back: this
+         line, and the cloud branch down in the module. */
       viewOnly = false;
       window.lnViewOnly = false;
+      document.getElementById('syncBtn').hidden = false;
       load();
       toast(e.newerVersion ? 'That link was made by a newer version of this app.' : 'That link could not be read.');
     }
@@ -10824,11 +10871,20 @@ function armDoors() {
 const cloudOn = !inTestHarness && !window.lnViewOnly;
 document.documentElement.toggleAttribute('data-cloud', cloudOn);
 if (cloudOn) {
+  /* A NO-OP on every ordinary visit, and deliberately still here. The button is
+     visible in the markup — revealing it from this deferred module is what used
+     to move the header on every refresh, so nothing may DEPEND on this line. It
+     covers one case only: a '#share=' link that could not be read, where the
+     classic script hid the button on the strength of the fragment and then found
+     the link unreadable. That fallback puts it back too; which of the two runs
+     first depends on how fast the link failed. */
   btn.hidden = false;
   if (shouldBootSync()) ensureInit().catch((e) => { console.warn('Sync unavailable:', e); btn.hidden = true; });
   else armDoors();
   btn.addEventListener('click', onClick);
 } else {
+  /* The harness, where this frame is invisible and nothing can shift. A shared
+     view is already hidden — the classic script did it before first paint. */
   btn.hidden = true;
 }
 
@@ -10884,7 +10940,12 @@ async function init() {
       onSignInFailed(err);
     },
   });
-  btn.hidden = false;
+  /* No `btn.hidden = false` on the end of this. The button is visible from the
+     markup now, and the one thing that ever takes it away here — a failed boot,
+     in the catch above — cannot be undone from this line anyway: initPromise
+     holds the rejection, so this function never runs a second time. A line that
+     looks like a repair and cannot be one teaches the next reader something
+     untrue. */
 }
 
 function failWaiters() { const w = signInWaiters; signInWaiters = []; w.forEach((r) => r(null)); }
