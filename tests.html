@@ -5438,6 +5438,78 @@ function define() {
     ok(dlg.textContent.trim().length > 10, 'with static text, so the blind open-and-close walk does not read it as empty');
   });
 
+  group('nothing below the header is painted before the first render');
+  /* ── The footer that flashed under the header (2026-09-12) ──────────────────
+   Charles saw it in Money Map: on every refresh the footer's privacy line
+   appeared for an instant at the TOP of the page, under the header, then
+   vanished as the app appeared. Every panel inside <main> ships hidden and is drawn by render(), so <main> measured ZERO. The browser paints the parsed body
+   before the main script executes, so that is what it painted. A sweep of all
+   eight pages found five of them doing it; this was one.
+
+   `data-booting` goes on the root in the HEAD script — before first paint, the
+   same place and for the same reason as the theme — and comes off in the same
+   task as the first render. */
+  t('the gate goes on before first paint and off with the first render', () => {
+  ok(APP_SRC, 'index.html was not read — the fetch test above must run first');
+  const src = stripComments(APP_SRC);
+  ok(/document\.documentElement\.dataset\.booting = 'on';/.test(src), 'the head script sets it');
+  /* BEFORE the theme read. That read touches localStorage, which a private-mode
+     browser throws on — and that is the browser most likely to be slow enough to
+     show the flash in the first place. */
+  const setAt = src.indexOf("dataset.booting = 'on'");
+  const themeAt = src.indexOf("localStorage.getItem('ln-theme')");
+  ok(setAt > -1 && themeAt > -1 && setAt < themeAt,
+     'and sets it before the theme read, which can throw', setAt + ' vs ' + themeAt);
+  ok(/DOMContentLoaded', function \(\) \{\s*document\.documentElement\.removeAttribute\('data-booting'\);/
+       .test(src),
+     'with a DOMContentLoaded backstop, so a script that dies on the way to the '
+       + 'release can never leave the page blank');
+  ok(/render\(\);\s*document\.documentElement\.removeAttribute\('data-booting'\);/.test(src)
+     || /\}\s*document\.documentElement\.removeAttribute\('data-booting'\);/.test(src),
+     'and the release sits with the first render, in the SAME task — a frame later '
+       + 'and the reveal is itself the flash');
+  });
+  t('the rule holds the paint, not the layout', () => {
+  const src = stripComments(APP_SRC);
+  const m = src.match(/html\[data-booting\][\s\S]{0,120}?\{[^}]*\}/);
+  ok(m, 'the rule is declared');
+  ['main', 'footer'].forEach((sel) => ok(m[0].indexOf(sel) > -1, 'it covers ' + sel, m[0]));
+  ok(/visibility: hidden/.test(m[0]), 'with visibility');
+  ok(!/display: *none/.test(m[0]),
+     'NEVER display:none — render() runs while the gate is on and a chart sizes itself '
+       + 'off its container; a zero-width container is a zero-width chart that never '
+       + 'corrects itself, because nothing re-measures once it has built');
+  });
+  t('a loaded page never holds the gate, and the header is outside it', async () => {
+  const f = document.createElement('iframe');
+  f.setAttribute('data-ln-tests', '');
+  f.setAttribute('aria-hidden', 'true');
+  f.style.cssText = 'position:absolute;left:-9999px;width:1280px;height:900px;border:0';
+  await new Promise((resolve) => {
+    f.onload = resolve;
+    f.src = 'index.html?booting=' + Date.now();
+    document.body.appendChild(f);
+  });
+  try {
+    const W = f.contentWindow, D = W.document;
+    eq(D.documentElement.getAttribute('data-booting'), null,
+       'a loaded page is never left holding the gate');
+    const main = D.querySelector('main');
+    const opened = Math.round(main.getBoundingClientRect().width);
+    ok(opened > 200, 'sanity: the frame laid out at all', String(opened));
+    D.documentElement.dataset.booting = 'on';
+    try {
+      eq(W.getComputedStyle(main).visibility, 'hidden', 'the gate hides <main>');
+      eq(W.getComputedStyle(D.querySelector('footer')).visibility, 'hidden',
+         'and the footer with it — that is the line that was flashing');
+      eq(Math.round(main.getBoundingClientRect().width), opened,
+         'while the box render() measures is UNCHANGED — display:none would hand it a zero');
+      eq(W.getComputedStyle(D.querySelector('header')).visibility, 'visible',
+         'the header is static markup and paints immediately, so it stays outside the gate');
+    } finally { D.documentElement.removeAttribute('data-booting'); }
+  } finally { f.remove(); }
+  });
+
   group('installable, and it works offline');
   t('the manifest is valid, and its scope is relative', () => {
     const m = JSON.parse(MANIFEST_SRC);
