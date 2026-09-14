@@ -52,7 +52,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 424;
+const EXPECTED = 434;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -485,6 +485,110 @@ async function runAsync() {
     asyncResults.landing = { down: down, afterOtherTab: afterOtherTab, held: held, afterSameTab: afterSameTab };
   } catch (e) { asyncResults.landing = { error: e.message }; }
   try { H.__plant(FIXTURE); W.setTab('standings'); } catch (e) { /* reported by the verdict above */ }
+
+  /* ── No field left alone on its line, MEASURED ───────────────────────────
+     Every `.grid3` in every state it can be drawn in: all five demo clubs,
+     each of their leagues in BOTH formats (a teams league shows one field
+     more), and the scorer's grid for a bracket match, a season match and a
+     loose one (its Season box comes and goes) — at 1000, 740 and 400 wide,
+     which is three columns, two and one. ONE frame, resized between widths,
+     so the resize path is what gets tested and not three fresh boots.
+
+     Rows are grouped by LEFT RESETTING, never by top: a grid can align its
+     cells to the end, and two cells of one row then have different tops.
+     The sweep counts what it reached and the verdict demands every column
+     count, grid, game and format — a walk that found nothing passes every
+     "no short rows" check. */
+  try {
+    const P = await bootFrame('', 1000, 900);
+    const PH = P.__lnTestHooks, PD = P.document, frame = P.frameElement;
+    const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+    const r = { grids: 0, bad: [], seen: {}, games: {}, formats: {}, seasonBox: {}, planted: [] };
+    const measure = (label) => {
+      [...PD.querySelectorAll('.grid3')].filter((g) => g.getClientRects().length).forEach((g) => {
+        const where = g.dataset.planted ? 'planted' : g.closest('dialog') ? g.closest('dialog').id : (g.closest('.card') || {}).id;
+        const cols = P.getComputedStyle(g).gridTemplateColumns.split(' ').length;
+        const edge = g.getBoundingClientRect().right;
+        const rows = [];
+        let prevLeft = Infinity;
+        [...g.children].filter((c) => c.getClientRects().length).forEach((c) => {
+          const box = c.getBoundingClientRect();
+          if (box.left <= prevLeft + 1) rows.push([]);
+          rows[rows.length - 1].push({ c: c, box: box });
+          prevLeft = box.left;
+        });
+        r.grids++;
+        r.seen[where + '@' + cols] = (r.seen[where + '@' + cols] || 0) + 1;
+        rows.forEach((row) => {
+          const lastCell = row[row.length - 1];
+          const gap = Math.round(edge - lastCell.box.right);
+          if (gap > 1) {
+            const ctl = lastCell.c.querySelector('input, select');
+            r.bad.push(label + ': ' + where + ' at ' + cols + ' columns, ' + (ctl ? ctl.id : 'a field')
+              + ' ends ' + gap + 'px short (rows ' + rows.map((x) => x.length).join('+') + ')');
+          }
+        });
+      });
+    };
+    for (const width of [1000, 740, 400]) {
+      frame.style.width = width + 'px';
+      await new Promise((done) => settleFrame(frame, P, width, 900, done));
+      await pause(60);
+      for (const build of ['buildDemoSingles', 'buildDemoTeams', 'buildDemoShuffle', 'buildDemoPool', 'buildDemoCornhole']) {
+        const base = PH[build]();
+        for (let li = 0; li < base.leagues.length; li++) {
+          for (const format of ['singles', 'teams']) {
+            const fx = JSON.parse(JSON.stringify(base));
+            fx.leagues[li].settings.format = format;
+            PH.__plant(fx);
+            PD.getElementById('tab-club').click();
+            const pick = PD.getElementById('lrLeague');
+            pick.value = fx.leagues[li].id;
+            pick.dispatchEvent(new P.Event('change', { bubbles: true }));
+            await pause(20);
+            r.games[fx.leagues[li].game] = true;
+            r.formats[format] = true;
+            measure(width + 'px ' + build + ' ' + fx.leagues[li].game + ' ' + format);
+          }
+        }
+        PH.__plant(base);
+        const picks = [base.matches.find((m) => m.bracketId),
+                       base.matches.find((m) => m.seasonId && !m.bracketId),
+                       base.matches.find((m) => !m.seasonId && !m.bracketId)].filter(Boolean);
+        for (const m of picks) {
+          P.openMatch(m.id);
+          await pause(20);
+          r.seasonBox[PD.getElementById('mt_seasonWrap').hidden ? 'hidden' : 'shown'] = true;
+          measure(width + 'px ' + build + ' scorer, ' + (m.bracketId ? 'bracket' : m.seasonId ? 'season' : 'loose') + ' match');
+          PD.getElementById('matchDialog').close();
+        }
+      }
+      /* A grid NOBODY wrote a call for: five fields (odd, so the rule has to
+         do something at every column count), then one hidden, then one added.
+         Nothing here calls the app — if these close, the next field anyone
+         adds is covered without being told. */
+      const card = PD.getElementById('rulesCard');
+      PD.getElementById('tab-club').click();
+      const g = PD.createElement('div');
+      g.className = 'grid3';
+      g.dataset.planted = '1';
+      for (let i = 0; i < 5; i++) { const f = PD.createElement('div'); f.className = 'field'; f.textContent = 'planted ' + i; g.appendChild(f); }
+      card.appendChild(g);
+      await pause(20);
+      const before = r.bad.length;
+      measure(width + 'px planted five');
+      g.children[1].hidden = true;
+      await pause(20);
+      measure(width + 'px planted, one hidden');
+      const f = PD.createElement('div'); f.className = 'field'; f.textContent = 'added'; g.appendChild(f);
+      await pause(20);
+      measure(width + 'px planted, one added');
+      r.planted.push({ width: width, cols: P.getComputedStyle(g).gridTemplateColumns.split(' ').length, clean: r.bad.length === before });
+      g.remove();
+    }
+    frame.remove();
+    asyncResults.orphans = r;
+  } catch (e) { asyncResults.orphans = { error: e.message }; }
 }
 
 /* ── The suite plants what it needs, and never trusts what it finds ──────────
@@ -5436,6 +5540,29 @@ function define() {
     eq(dlg.querySelectorAll('input[type="text"], textarea').length, 0, 'one select and nothing to type into');
     ok(dlg.querySelector('select#as_player'), 'and the select is there');
     ok(dlg.textContent.trim().length > 10, 'with static text, so the blind open-and-close walk does not read it as empty');
+  });
+
+  group('no field left alone on its line');
+  t('the sweep reached every grid, at three columns, two and one, for every game and format', () => {
+    const r = asyncResults.orphans || {};
+    ok(!r.error, 'the sweep ran', r.error);
+    ok(r.grids > 0, 'it measured some grids', r.grids);
+    ['rulesCard', 'matchDialog', 'planted'].forEach((where) => [3, 2, 1].forEach((cols) =>
+      ok(r.seen[where + '@' + cols], where + ' was measured at ' + cols + ' columns', JSON.stringify(r.seen))));
+    eq(Object.keys(r.games).sort(), Object.keys(H.GAMES).sort(), 'every game in the registry was drawn');
+    eq(Object.keys(r.formats).sort(), ['singles', 'teams'], 'both formats were drawn');
+    eq(Object.keys(r.seasonBox).sort(), ['hidden', 'shown'], 'the scorer was drawn with its Season box and without');
+  });
+  t('no row of any grid ends short of the grid’s right edge', () => {
+    const r = asyncResults.orphans || {};
+    ok(!r.error && r.grids > 0, 'the sweep ran', r.error);
+    ok(r.bad.length === 0, r.bad.length + ' short row(s), in ' + r.grids + ' grids measured', r.bad.slice(0, 6).join('; '));
+  });
+  t('a grid nobody wrote a call for closes its own rows as fields are added and hidden', () => {
+    const r = asyncResults.orphans || {};
+    ok(!r.error, 'the sweep ran', r.error);
+    eq(r.planted.map((p) => p.cols), [3, 2, 1], 'the planted grid was measured at every column count');
+    ok(r.planted.every((p) => p.clean), 'every planted state closed', JSON.stringify(r.planted));
   });
 
   group('nothing below the header is painted before the first render');

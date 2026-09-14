@@ -1271,10 +1271,15 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
   .warn-text { color: var(--warn); }
   input.code { font-family: var(--font-mono); letter-spacing: .06em; }
   .row > input.code { flex: 1 1 12ch; width: auto; }
-  .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 var(--sp-5); }
+  /* The column count is a TOKEN, not three separate track lists, because
+     stretchShortRows() has to know it and reads it from here — one number, in
+     one place, that the layout and the script cannot disagree about. A short
+     row (a field stranded before a `.wide` one, or at the end) is closed by
+     that script, never by a span written on a field: see its comment. */
+  .grid3 { --cols: 3; display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); gap: 0 var(--sp-5); }
   .grid3 .wide { grid-column: 1 / -1; }
-  @media (max-width: 760px) { .grid3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  @media (max-width: 460px) { .grid3 { grid-template-columns: 1fr; } }
+  @media (max-width: 760px) { .grid3 { --cols: 2; } }
+  @media (max-width: 460px) { .grid3 { --cols: 1; } }
 
   /* ── Rows that open something: matches, players, teams, seasons ──────────
      Each is a full-width BUTTON — reachable from a keyboard, announced as
@@ -10663,6 +10668,49 @@ addEventListener('beforeprint', () => {
   printFolded.forEach((d) => { d.open = true; });
 });
 addEventListener('afterprint', () => { printFolded.forEach((d) => { d.open = false; }); printFolded = []; });
+
+/* ── No field left alone on its line ──────────────────────────────────────
+   Every `.grid3` closes its own short rows: the last visible field of a row
+   that stops before a `.wide` field, or before the end of the grid, spans the
+   tracks left over. The family rule (no orphaned form fields), and STRUCTURAL
+   on purpose — the stranded "…a loss" of 2026-09-14 came from nobody doing
+   anything wrong: a teams league shows one more field, a phone-ish width
+   drops a column, and the arithmetic moves under every field below.
+
+   Worked out from the grid's own `--cols` and which children are HIDDEN,
+   never from where things were drawn: a closed dialog has no layout at all,
+   and the scorer's grid is set before the dialog opens. Spans are cleared
+   first, or yesterday's stretch pushes today's rows along.
+
+   Called by name once, here, for the markup as it stands; after that an
+   observer runs it whenever anything inside a `.grid3` is shown, hidden or
+   added, and a resize runs it because that is when `--cols` changes. A field
+   added tomorrow is covered without being told. */
+function stretchShortRows() {
+  document.querySelectorAll('.grid3').forEach((grid) => {
+    const cols = Math.max(1, parseInt(getComputedStyle(grid).getPropertyValue('--cols'), 10) || 1);
+    const kids = [...grid.children];
+    kids.forEach((k) => { if (k.dataset.stretched) { k.style.gridColumn = ''; delete k.dataset.stretched; } });
+    let col = 0, last = null;
+    const close = () => {
+      if (col > 0 && col < cols && last) { last.style.gridColumn = 'span ' + (cols - col + 1); last.dataset.stretched = '1'; }
+      col = 0; last = null;
+    };
+    kids.forEach((k) => {
+      if (k.hidden || getComputedStyle(k).display === 'none') return;
+      if (k.classList.contains('wide')) { close(); return; }
+      last = k;
+      if (++col === cols) { col = 0; last = null; }
+    });
+    close();
+  });
+}
+new MutationObserver((records) => {
+  if (records.some((r) => (r.target.closest && r.target.closest('.grid3'))
+      || [...r.addedNodes].some((n) => n.nodeType === 1 && (n.matches('.grid3') || n.querySelector('.grid3'))))) stretchShortRows();
+}).observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'class'] });
+['resize', 'beforeprint', 'afterprint'].forEach((ev) => addEventListener(ev, stretchShortRows));
+stretchShortRows();
 
 /* ═══════════════════════════════ Boot ═════════════════════════════════════ */
 async function boot() {

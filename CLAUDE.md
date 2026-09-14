@@ -719,6 +719,32 @@ showed it.
     a match between seasons at all before this**, which is also why the sweep was dangerous:
     there would have been no way back out. A bracket match takes its season from its bracket and
     is not offered the box.
+- **NO FIELD IS LEFT ALONE ON ITS LINE, and no field is told how wide to be** (2026-09-14).
+  Every `.grid3` closes its own short rows through `stretchShortRows()`: the last visible field
+  of a row that stops before a `.wide` field or the end of the grid spans the tracks left over.
+  Before it, four fields were stranded — "…a loss" on the rules card at 701–760px (singles, two
+  columns) AND on desktop for any teams league (3+3+3+1), the scorer's Season box at two columns,
+  and its Venue box beside a hidden Season at three. The family rule is `no-orphaned-form-fields`
+  in memory. What a tidy-up would break:
+  - **The column count is the `--cols` token** on `.grid3`, and the media queries change only
+    that. Write a track list back into a media query and the script counts three columns the
+    grid no longer has.
+  - **It works from `--cols` and `hidden`, never from where cells were drawn** — the scorer's
+    grid is filled while its dialog is closed, when nothing has a rectangle. It clears its own
+    spans (marked `data-stretched`) first, and leaves a span it did not write alone.
+  - **It is called by name ONCE, where it is defined** (for the markup as it stands, before
+    `boot()`). After that a `MutationObserver` runs it when anything inside a `.grid3` is shown,
+    hidden or added, and `resize`/`beforeprint`/`afterprint` run it when `--cols` can change. Do
+    not replace that with calls from the render functions: the next conditional field is exactly
+    the one whose render nobody remembers to update. And not from `boot()` either — the suite
+    pins `removeAttribute('data-booting')` to the line straight after `render();`.
+  - **A field is never given a `grid-column` of its own** to fix a gap. A span written on a
+    field is right for one format at one width and wrong at the others.
+  - The suite MEASURES it (`no field left alone on its line`): every demo club × league × format
+    and the scorer with and without Season, at 1000/740/400 in one frame RESIZED between them,
+    plus a planted five-field grid nothing calls for. Rows are grouped by LEFT resetting, and it
+    fails unless it reached every grid at every column count and every game in `GAMES`. Proven
+    red with the script disabled.
 - **A forfeit deletes the legs, so it asks first when there are any.** Void keeps its legs and
   already asked; forfeit stores a score and none, and took them without a word.
 - **The owner is a field on the LEAGUE DOCUMENT and never on `state`** — a uid has no business in
