@@ -52,7 +52,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 434;
+const EXPECTED = 436;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -458,6 +458,72 @@ async function runAsync() {
     r.noSideways = PD.documentElement.scrollWidth <= P.innerWidth + 1;
     asyncResults.phone = r;
   } catch (e) { asyncResults.phone = { error: e.message }; }
+
+  /* ── One scrolling line at every width, with arrows for a pointer ────────
+     Charles, 2026-09-14, family-wide. Above this app's 760px phone the header
+     used to WRAP when the controls did not fit beside the name — a phone on
+     its side did it at the demo's own name. The harness cannot emulate a
+     coarse pointer, so the desktop case is made to overflow the honest way: a
+     club name at its 40-character cap, which is what widens the picker, in an
+     800px frame where the tab row is on the page too. Then a 1600px frame,
+     where nothing may have changed at all. */
+  try {
+    const r = {};
+    const lines = (Wn, el) => new Set([...el.children]
+      .filter((c) => c.getClientRects().length && !c.classList.contains('sr-only') && Wn.getComputedStyle(c).display !== 'none')
+      .map((c) => Math.round(c.getBoundingClientRect().top))).size;
+    const tick = (ms) => new Promise((res) => setTimeout(res, ms));
+    const N = await bootFrame('', 800, 900);
+    const ND = N.document;
+    try {
+      const fx = N.__lnTestHooks.buildDemoSingles();
+      fx.club.name = 'W'.repeat(40);
+      N.__lnTestHooks.__plant(fx);
+      await tick(120);
+      const ctl = ND.querySelector('.headctl'), tabs = ND.querySelector('.tabs');
+      const headNav = ND.querySelector('.headrow > .rownav'), tabNav = ND.querySelector('.tabrow > .rownav');
+      r.vw = ND.documentElement.clientWidth;
+      r.ctlLines = lines(N, ctl);
+      r.ctlRoom = ctl.scrollWidth - ctl.clientWidth;
+      r.headNavShown = !!headNav && !headNav.hidden && N.getComputedStyle(headNav).display !== 'none';
+      const hb = headNav ? headNav.querySelectorAll('button') : [];
+      r.prevOffAtStart = !!hb[0] && hb[0].disabled;
+      r.nextOnAtStart = !!hb[1] && !hb[1].disabled;
+      r.arrowsOutOfTabOrder = [...hb].every((b) => b.tabIndex === -1 && b.getAttribute('aria-hidden') === 'true');
+      if (hb[1]) hb[1].click();
+      r.ctlScrolled = ctl.scrollLeft;
+      await tick(60);
+      r.prevOnAfter = !!hb[0] && !hb[0].disabled;
+      r.headerH = Math.round(ND.querySelector('header').getBoundingClientRect().height);
+      r.tabLines = lines(N, tabs);
+      r.tabNavHiddenWhenFits = !!tabNav && tabNav.hidden;
+      r.tabNavOutsideTablist = !!tabNav && !tabNav.closest('[role="tablist"]');
+      /* Five tabs never overflow a window wide enough to show the row, so the
+         tab bar's wiring is proven by narrowing the bar itself. */
+      tabs.style.maxWidth = '160px';
+      await tick(120);
+      r.tabsNarrowLines = lines(N, tabs);
+      r.tabNavShownNarrow = !!tabNav && !tabNav.hidden;
+      const tb = tabNav ? tabNav.querySelectorAll('button') : [];
+      if (tb[1]) tb[1].click();
+      r.tabsScrolled = tabs.scrollLeft;
+      tabs.style.maxWidth = '';
+    } finally { N.frameElement && N.frameElement.remove(); }
+
+    const Wd = await bootFrame('', 1600, 900);
+    const WD = Wd.document;
+    try {
+      Wd.__lnTestHooks.__plant(Wd.__lnTestHooks.buildDemoSingles());
+      await tick(120);
+      const ctl = WD.querySelector('.headctl');
+      r.wideRoom = ctl.scrollWidth - ctl.clientWidth;
+      r.wideNavsHidden = [...WD.querySelectorAll('.rownav')].map((n) => n.hidden);
+      r.wideTopDelta = Math.abs(ctl.getBoundingClientRect().top + 4 - WD.querySelector('.brand').getBoundingClientRect().top);
+      r.wideLines = lines(Wd, ctl);
+      r.wideTabLines = lines(Wd, WD.querySelector('.tabs'));
+    } finally { Wd.frameElement && Wd.frameElement.remove(); }
+    asyncResults.rowScroll = r;
+  } catch (e) { asyncResults.rowScroll = { error: e.message }; }
 
   /* ── Arriving by a join link, with no cloud ─────────────────────────────── */
   try {
@@ -3997,6 +4063,42 @@ function define() {
     eq([...new Set(r.ctlGaps)], [12],
        'the four apps that nest their controls all said 8 and had to be corrected on 2026-08-23');
     ok(/\.headctl \{[^}]*gap: 12px/.test(css()), 'and it is declared, not hoped for');
+  });
+  /* ── One scrolling line at every width (2026-09-14, family-wide) ──────────
+     Charles: "should we just make them both always single line side
+     scrollers?" — the header's controls and the tab bar. */
+  t('where the controls do not fit, they are one line that scrolls, with arrows for a pointer', () => {
+    const r = asyncResults.rowScroll || {};
+    ok(!r.error, r.error);
+    eq(r.vw, 800, 'measured above the 760px phone, where the row used to wrap');
+    ok(r.ctlRoom > 1, 'the 40-character club name really does push the row past its line', r.ctlRoom);
+    eq(r.ctlLines, 1, 'every control shares a top — it wrapped to two lines before');
+    ok(r.headNavShown, 'so the header shows its arrows');
+    ok(r.prevOffAtStart && r.nextOnAtStart, 'at the start, ‹ is off and › is on');
+    ok(r.arrowsOutOfTabOrder, 'out of the Tab order and hidden from a screen reader — every control is reachable without them');
+    ok(r.ctlScrolled > 0, 'pressing › scrolls the row', r.ctlScrolled);
+    ok(r.prevOnAfter, 'and ‹ comes on');
+    ok(r.headerH <= 100, 'the header is the name and one line of controls', r.headerH + 'px');
+    eq(r.tabLines, 1, 'the tabs are one row');
+    ok(r.tabNavHiddenWhenFits, 'and five tabs fit, so the tab bar shows no arrows');
+    ok(r.tabNavOutsideTablist, 'which live beside the tablist, never inside it');
+    eq(r.tabsNarrowLines, 1, 'a bar too narrow for its tabs still does not stack them');
+    ok(r.tabNavShownNarrow && r.tabsScrolled > 0, 'it shows its arrows, and › scrolls the tabs', r.tabsScrolled);
+  });
+  t('where everything fits, nothing about the header or the tabs has changed', () => {
+    const r = asyncResults.rowScroll || {};
+    ok(!r.error, r.error);
+    ok(r.wideRoom <= 1, '1600px: the controls fit', r.wideRoom);
+    eq(r.wideNavsHidden, [true, true], 'so neither row shows arrows');
+    ok(r.wideTopDelta < 16, 'and the controls sit beside the name, on its line, as they always have', r.wideTopDelta);
+    eq(r.wideLines, 1); eq(r.wideTabLines, 1);
+    ok(/@media \(hover: none\), \(pointer: coarse\) \{ \.rownav \{ display: none !important; \} \}/.test(css()),
+       'the arrows are for a mouse or trackpad — a finger swipes, and on touch they grew Money Map’s header');
+    ok(/\.headctl \{ display: flex; align-items: center; gap: 12px; flex-wrap: nowrap; flex: 0 1 auto;\s*min-width: 0; overflow-x: auto; padding: 4px; margin: -4px; scrollbar-width: none; \}/.test(css()),
+       'the scroller is the BASE rule, with room bought for the focus ring');
+    ok(/\.rownav \{ flex: none; white-space: nowrap; \}/.test(css()), 'and the arrows’ box sets no display, so `hidden` hides it');
+    ok(!/\.brand \{ flex: 1 1 100%/.test(phoneBlock('leagueSel')),
+       'the phone no longer forces the name and the row onto lines of their own — the base rule does it');
   });
   /* ── The header that stopped moving on refresh (2026-09-12) ───────────────
      Asked for by Charles: the sign-in button moved on every refresh, twice

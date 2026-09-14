@@ -289,12 +289,33 @@
            letter-spacing: var(--ls-tight); }
   .brand span { font-weight: var(--fw-normal); color: var(--text-secondary); }
   .brand .mark { vertical-align: -4px; margin-right: 8px; border-radius: 5px; }
-  /* The controls, as one row. THE GAP IS DECLARED HERE and not inherited: a
-     nested row does not get `.headbar`'s 12px, which is how the four apps that
-     nest theirs all ended up at 8px (the 2026-08-23 sweep). `min-width: 0` is
-     what lets it shrink below its content on a phone, where it becomes the
-     scroller below. */
-  .headctl { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-width: 0; }
+  /* ── The controls: ONE LINE THAT SCROLLS SIDEWAYS, AT EVERY WIDTH ──────────
+     Charles, 2026-09-14, family-wide: "should we just make them both always
+     single line side scrollers?" It was a phone rule first (below, and its
+     history); the phone was only the narrowest case of a row that does not
+     fit, and a phone held on its side — 844px, above this app's 760px phone —
+     still wrapped the row to two lines and a 138px header.
+
+     `.headrow` is the row and its arrows; `.headctl` is what scrolls. The row
+     is `flex: 0 1 auto` — sized to its content — so while every control fits
+     beside the name it sits there, pushed right by the name's auto margin
+     exactly as before, and the moment it does not, flex-wrap takes the WHOLE
+     row onto a line of its own, where it shrinks to that line and scrolls.
+     Nothing changes on a window wide enough, and a phone lands on the shape it
+     already had — which is why the phone block no longer says anything about
+     the name or the row (measured pixel-identical at 390px, 2026-09-14).
+
+     THE GAP IS DECLARED HERE and not inherited: a nested row does not get
+     `.headbar`'s 12px, which is how the four apps that nest theirs all ended up
+     at 8px (the 2026-08-23 sweep). The 4px padding against a −4px margin is
+     the focus ring's room, explained below. No scrollbar: the arrows beside
+     the row are the sign there is more, and the thing a mouse can press — a
+     mouse wheel does not scroll sideways, and a Mac hides its bars. */
+  .headrow { display: flex; align-items: center; gap: 4px; flex: 0 1 auto; min-width: 0; }
+  .headctl { display: flex; align-items: center; gap: 12px; flex-wrap: nowrap; flex: 0 1 auto;
+             min-width: 0; overflow-x: auto; padding: 4px; margin: -4px; scrollbar-width: none; }
+  .headctl::-webkit-scrollbar { display: none; }
+  .headctl > * { flex: 0 0 auto; }
 
   /* ── The phone header: the name above, the controls on one scrolling line ──
      Asked for by Charles on 2026-09-08. The row used to WRAP — the name, then
@@ -316,8 +337,8 @@
      759.98px, the same number as the bottom bar further down and deliberately
      so: this app has ONE definition of a phone — the width where the tab strip
      gives way to the bar — and a header that changed shape at a second width
-     would be two. Harmless where the controls still fit: a nowrap row with
-     `overflow-x: auto` only scrolls when there is something to scroll.
+     would be two. Since 2026-09-14 the scroller is the base rule above, and
+     what is left in this block is the league picker's cap alone.
 
      ROOM FOR THE FOCUS RING ON EVERY SIDE. `overflow-x: auto` forces the
      vertical axis to `auto` as well, so the box clips at its padding edge and a
@@ -327,13 +348,14 @@
      margin takes the same 4px back, so the box grows INWARD and nothing on the
      page moves. */
   @media (max-width: 759.98px) {
-    .brand { flex: 1 1 100%; margin: 0; }
-    .headctl { flex: 1 1 100%; flex-wrap: nowrap; overflow-x: auto;
-               padding: 4px; margin: -4px; scrollbar-width: thin; }
-    .headctl > * { flex: 0 0 auto; }
     /* The league picker's width follows its longest league name, so left alone
        it would set the scroll width on its own; capped, it scrolls with the
-       rest. The full name is still in the list when it is opened. */
+       rest. The full name is still in the list when it is opened.
+       STILL A PHONE RULE, now that the row scrolls at every width, and that was
+       measured rather than assumed (2026-09-14): the demo's picker is 199px at
+       1600px, so the cap at every width would narrow it by 23px and slide
+       Back Up, Share and the theme picker along a header that had room for all
+       of them. Above a phone the row has the width to show a name whole. */
     .headctl > select#leagueSel { max-width: 11rem; }
   }
   .wrap { max-width: var(--page-w); margin: 0 auto; padding: 0 16px 64px; }
@@ -407,6 +429,28 @@
                     width: auto; }
   .headbar select:hover { border-color: var(--text-muted); }
 
+  /* ── The two arrows beside a scrolling row (2026-09-14, family-wide) ───────
+     A plain box that sets no `display`, so `hidden` — which `wireScrollRow()`
+     sets whenever the row has nothing to scroll — still hides it. The buttons
+     are glyphs, not controls in the row: no fill, no border, and no chrome
+     floor, which `.headbar button` would otherwise give them (written after it,
+     at the same specificity, so this wins). Money Map's arrows are its year
+     strip's buttons; this app has no year strip, so they are drawn here from
+     the same tokens. */
+  .rownav { flex: none; white-space: nowrap; }
+  .rownav button { background: none; border: 0; border-radius: var(--radius-sm); min-height: 0;
+                   padding: 4px 10px; color: var(--text-secondary); font-size: var(--fs-md); line-height: 1.1; }
+  .rownav button:hover { background: var(--surface-alt); color: var(--text-primary); }
+  .rownav button:disabled { opacity: .35; cursor: default; }
+  .rownav button:disabled:hover { background: none; color: var(--text-secondary); }
+  .rownav button:focus-visible { outline: 2px solid var(--focus-border); outline-offset: 2px; }
+  /* FOR A MOUSE OR A TRACKPAD ONLY. A finger swipes the row, which is all the
+     arrows stand in for — and on touch they grew Money Map's phone header and
+     slid every control out of line (measured in an emulated 390px phone,
+     2026-09-14). `!important` because `wireScrollRow()` clears `hidden`
+     whenever the row overflows; this keeps them away regardless. */
+  @media (hover: none), (pointer: coarse) { .rownav { display: none !important; } }
+
   :focus-visible { outline: 2px solid var(--focus-border); outline-offset: 2px; }
 
   /* ── Tabs ───────────────────────────────────────────────────────────────────
@@ -421,7 +465,17 @@
      below records. `flex: 1 1 auto; min-width: 0` on the tablist is what puts
      the button at the far end. */
   .tabrow { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
-  .tabs { display: flex; gap: 12px; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
+  /* ONE ROW THAT SCROLLS SIDEWAYS AT EVERY WIDTH (2026-09-14, family-wide — see
+     `.headrow`). Here that is a desktop rule only: under 760px this row is not
+     on the page and the bottom bar is. Five tabs fit in any window wide enough
+     to show the row, so in practice the arrows stay hidden — the shape is the
+     family's, and the day a sixth tab or a longer label arrives it scrolls
+     rather than stacking. The ring's room is the header's 4px, for the
+     header's reason. */
+  .tabs { display: flex; gap: 12px; flex-wrap: nowrap; flex: 1 1 auto; min-width: 0;
+          overflow-x: auto; position: relative; padding: 4px; margin: -4px; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs > .tab { flex: 0 0 auto; white-space: nowrap; }
   .tab { background: var(--surface-alt); border: 1px solid var(--border-control);
          border-radius: var(--radius-sm); padding: 8px 14px; cursor: pointer;
          color: var(--text-primary); font-weight: var(--fw-medium); }
@@ -1126,8 +1180,9 @@
        one prints once over the top of whatever the first page starts with and
        an unpinned one prints as 20px of nothing. */
     .tabrow { display: none !important; }
-    /* AN A4 BODY IS ABOUT 700 CSS px WIDE, so the phone header rules above
-       match a sheet of paper as well. Every control inside this row is
+    /* THE HEADER ROW SCROLLS AT EVERY WIDTH (2026-09-14), and an A4 body is
+       about 700 CSS px wide, so the phone's picker cap matches a sheet of
+       paper as well. Every control inside this row is
        furniture and already gone by the time paper is laid out — the pack
        hides `.headbar button` and `#themeSel`, and this app tags its two
        pickers `.no-print` — so what is left is an empty box with a scroller,
@@ -1482,7 +1537,12 @@ html[data-booting] footer { visibility: hidden; }
          its own children 12px and a wrapper does not pass that on, which is how
          all four of the others ended up at 8 (the 2026-08-23 sweep). It is
          declared on `.headctl`, and the suite measures the RENDERED gap between
-         two adjacent controls rather than the declared one. -->
+         two adjacent controls rather than the declared one.
+         Since 2026-09-14 it scrolls at EVERY width, and `.headrow` holds it
+         with its two arrows — the arrows cannot go inside the thing they
+         scroll. They ship `hidden`, and wireScrollRow() shows them only while
+         the row has something off an end. -->
+    <div class="headrow">
     <div class="headctl">
     <!-- Far left, because its label changes width; the floor that stops that
          width moving the row is in the stylesheet.
@@ -1521,6 +1581,13 @@ html[data-booting] footer { visibility: hidden; }
       <option value="sepia">📜 Sepia</option>
     </select>
     </div>
+    <!-- Out of the Tab order and hidden from a screen reader on purpose: every
+         control in the row is reachable with Tab, and focusing one scrolls it
+         into view. The arrows are for a pointer. -->
+    <div class="rownav" hidden><button type="button" tabindex="-1" aria-hidden="true"
+      title="Scroll the controls left">‹</button><button type="button" tabindex="-1"
+      aria-hidden="true" title="Scroll the controls right">›</button></div>
+    </div>
   </div>
 </header>
 
@@ -1552,6 +1619,12 @@ html[data-booting] footer { visibility: hidden; }
   <button class="tab" role="tab" id="tab-club" data-tab="club"
           aria-controls="clubPanel" aria-selected="false" tabindex="-1">Club</button>
 </div>
+  <!-- The bar's arrows (2026-09-14), between it and the pin — outside the
+       tablist for the pin button's reason. Out of the Tab order: the arrow keys
+       already walk the tabs. -->
+  <div class="rownav no-print" hidden><button type="button" tabindex="-1" aria-hidden="true"
+    title="Scroll the tabs left">‹</button><button type="button" tabindex="-1"
+    aria-hidden="true" title="Scroll the tabs right">›</button></div>
   <!-- Dressed by dressPinBtn() — icon, accessible name and title change
        together, and there is no aria-pressed on top of them: the state would
        then be announced twice and the two would have to be kept in agreement. -->
@@ -5600,6 +5673,45 @@ document.querySelector('.tabs').addEventListener('keydown', (e) => {
 });
 document.querySelectorAll('.tab, .tabbar button').forEach((b) =>
   b.addEventListener('click', () => pressTab(b.dataset.tab)));
+
+/* ── A row that scrolls sideways, and the two arrows beside it ───────────────
+   The header's controls and the tab bar are single scrolling lines at every
+   width (2026-09-14, family-wide — Money Map's function, verbatim). A finger
+   swipes them and a trackpad scrolls them, but a mouse wheel does not scroll
+   sideways and a Mac hides its scroll bars — so a control past the edge would
+   be one nobody knew was there. `nav` is a box holding the two arrows: shown
+   only while the row has something off an end, each arrow disabled at its own
+   end, and a press moving the row most of its own width. Instant, never
+   smooth.
+
+   What keeps it true without anyone calling it: the row's own scroll, its
+   size (a ResizeObserver — the window, the zoom), and what is inside it (a
+   MutationObserver — the league picker's options, the sync button's label).
+   Showing the arrows narrows the row, and that only ever leaves it
+   overflowing, so the two cannot flicker. Wired here, where both rows already
+   exist, and never from boot(): the suite pins the boot gate's release to the
+   line straight after `render();`. */
+function wireScrollRow(row, nav) {
+  if (!row || !nav) return;
+  const [prev, next] = nav.querySelectorAll('button');
+  const sync = () => {
+    const room = row.scrollWidth - row.clientWidth;
+    nav.hidden = room <= 1;
+    prev.disabled = row.scrollLeft <= 1;
+    next.disabled = row.scrollLeft >= room - 1;
+  };
+  const step = (dir) => { row.scrollLeft += dir * Math.max(80, Math.round(row.clientWidth * 0.8)); };
+  prev.onclick = () => step(-1);
+  next.onclick = () => step(1);
+  row.addEventListener('scroll', sync, { passive: true });
+  if ('ResizeObserver' in window) new ResizeObserver(sync).observe(row);
+  new MutationObserver(sync).observe(row, { subtree: true, childList: true, characterData: true,
+    attributes: true, attributeFilter: ['hidden', 'class', 'style'] });
+  window.addEventListener('resize', sync);
+  sync();
+}
+wireScrollRow(document.querySelector('.headctl'), document.querySelector('.headrow > .rownav'));
+wireScrollRow(document.querySelector('.tabs'), document.querySelector('.tabrow > .rownav'));
 
 /* ═══════════════════════════════ Reading the club ═════════════════════════
    Small helpers every view uses. `seasonPick` and `leaguePick` are VIEW state,

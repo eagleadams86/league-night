@@ -495,6 +495,27 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
   a focus ring has room without anything on the page moving. **759.98px is the same number as
   the bottom bar on purpose**: this app has one definition of a phone, and the suite asserts
   there are exactly two media blocks at that width so a third cannot arrive unread.
+  **Since 2026-09-14 the scroller is the BASE rule, and the tab bar is one too** (Charles,
+  family-wide: *"should we just make them both always single line side scrollers?"* — Money Map
+  commit b14f4ae is the reference). `.headrow` (`flex: 0 1 auto`, content-sized) holds `.headctl`
+  and a `.rownav` of two arrows: the row stays beside the name while it fits and flex-wrap takes it
+  onto its own line when it does not, so the phone block's `.brand`/`.headctl` 100% rules are GONE
+  — measured pixel-identical without them at 390px, and at 1600/1100/900. What changed: a phone on
+  its side (844px, above this app's phone width) went from two lines and a 138.5px header to one
+  line and 92.5px; at 705px the arrows appear. **The league picker's 11rem cap stays a PHONE rule**
+  on measurement: at every width it would take the demo's picker from 199px to 176 at 1600px and
+  slide three controls along a header with room for them — which is also why the phone block
+  still exists and the two-blocks count still holds. `.tabs` is the scroller in the base rule
+  (4px padding, −4px margin); it is desktop-only here (the bottom bar replaces it under 760px) and
+  **five tabs never overflow a window wide enough to show it, so its arrows stay hidden** — the
+  suite proves its wiring by narrowing the bar. `wireScrollRow(row, nav)` is Money Map's verbatim
+  (ResizeObserver + MutationObserver + scroll + resize; nothing calls it after it is wired), called
+  just after the tab click listeners and NOT from `boot()`. The arrows have their own
+  `.rownav button` glyph style from the app's tokens (this app has no year strip to borrow from),
+  are `tabindex="-1"` + `aria-hidden`, and are for a mouse only: `@media (hover: none), (pointer:
+  coarse) { .rownav { display: none !important } }`. No drag edge-scroll — the tabs here do not
+  reorder. The tab keydown handler focuses with `preventScroll: true`; harmless while the tabs
+  never overflow, and the first thing to revisit if a sixth tab makes them.
 - **The tab row pins, and here that is a DESKTOP affordance** — Money Map, Flow Metrics and
   Sprint Predictability grew the 📌 first and a change belongs in all four. Under 760px the tab
   strip is not on the page at all (the bottom bar is), so the row and its button go together and

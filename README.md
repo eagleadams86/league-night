@@ -138,10 +138,13 @@ club's ID can follow it, and anyone with the admin key can run it.
 - **Everything the family has.** Four themes, offline, installable, backups per club, a CSV of
   the matches, a read-only snapshot link — of the whole club, one league, or one season — Find
   (⌘K), and on a phone a bottom bar with the five views a thumb away.
-- **Chrome that stays out of the way.** On a phone the app's name holds the top of the screen and
-  the header's controls sit on one line that scrolls sideways rather than stacking three deep. On
-  a desktop the 📌 at the end of the tab row holds the tabs at the top while the page scrolls
-  under them; it is off until you press it, and remembered.
+- **Chrome that stays out of the way.** The header's controls are always one line that scrolls
+  sideways, and so is the tab row. While they fit beside the app's name they sit there; when they
+  don't — a phone held upright or on its side, or a narrow window — they take a line of their own
+  under the name rather than stacking two or three deep. With a mouse or trackpad, **‹ ›** arrows
+  appear at the end of a row whenever something is off an edge. On a desktop the 📌 at the end of
+  the tab row holds the tabs at the top while the page scrolls under them; it is off until you
+  press it, and remembered.
 
 ## Sharing a club
 
