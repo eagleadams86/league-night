@@ -52,7 +52,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 438;
+const EXPECTED = 441;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -563,6 +563,82 @@ async function runAsync() {
     } finally { Wd.frameElement && Wd.frameElement.remove(); }
     asyncResults.rowScroll = r;
   } catch (e) { asyncResults.rowScroll = { error: e.message }; }
+
+  /* ── A focus lands clear of the stuck chrome, pinned or not (2026-09-14) ──
+     Charles: "fix the sticky header shift+tab issue too". The browser scrolls a
+     focused control into view only when it is not already on screen, and a
+     control part-way under the sticky header, the pinned row or the phone's
+     fixed bottom bar IS on screen as far as it knows — so Shift+Tab up the page
+     (and Tab down a phone) left it there. The setup is MADE: a control far
+     enough down the Matches tab is scrolled until 10px of it sits under the
+     chrome, checked to be covered, and then focused with NO preventScroll. */
+  {
+    const pinWas = (() => { try { return localStorage.getItem('ln-pin'); } catch (e) { return null; } })();
+    try {
+      const pause = (ms) => new Promise((res) => setTimeout(res, ms));
+      const probe = async (F, edge) => {
+        const D = F.document;
+        const panel = D.querySelector('[role="tabpanel"]:not([hidden])');
+        const head = D.querySelector('header'), row = D.querySelector('.tabrow'), bar = D.querySelector('.tabbar');
+        const floor = () => Math.max(head.getBoundingClientRect().bottom,
+          F.__lnTestHooks.pin.stuck() ? row.getBoundingClientRect().bottom : 0);
+        const ceil = () => (bar.getClientRects().length ? bar.getBoundingClientRect().top : F.innerHeight);
+        const vh = F.innerHeight, maxY = D.documentElement.scrollHeight - vh;
+        const docY = (e) => e.getBoundingClientRect().top + F.scrollY;
+        /* The scroll that puts 10px of the control under the chrome — and a
+           control is only usable if the page can really scroll there, with room
+           to spare either side, or the browser clamps and nothing is covered. */
+        const target = (e) => {
+          const h = e.getBoundingClientRect().height, bite = Math.min(10, h / 2);
+          return edge === 'bottom' ? docY(e) + h - ceil() - bite : docY(e) - floor() + bite;
+        };
+        const c = [...panel.querySelectorAll('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+          .find((e) => e.getClientRects().length && !e.disabled && e.offsetHeight >= 20
+            && target(e) > 40 && target(e) < maxY - 40);
+        if (!c) return { none: true, maxY: maxY, vh: vh };
+        if (D.activeElement && D.activeElement.blur) D.activeElement.blur();
+        F.scrollTo(0, target(c));
+        await pause(60);
+        const r0 = c.getBoundingClientRect();
+        const out = { id: c.id || c.className || c.tagName,
+          covered: edge === 'bottom' ? r0.bottom > ceil() + 1 && r0.top < ceil() : r0.top < floor() - 1 && r0.bottom > floor() };
+        c.focus();
+        await pause(60);
+        const r = c.getBoundingClientRect();
+        out.focused = D.activeElement === c;
+        out.room = +(edge === 'bottom' ? ceil() - r.bottom : r.top - floor()).toFixed(1);
+        c.blur();
+        return out;
+      };
+      const r = {};
+      const Dk = await bootFrame('', 1000, 600);
+      try {
+        Dk.__lnTestHooks.__plant(Dk.__lnTestHooks.buildDemoSingles());
+        Dk.document.getElementById('tab-matches').click();
+        await pause(150);
+        Dk.__lnTestHooks.pin.apply(false); await pause(60);
+        r.deskOff = await probe(Dk, 'top');
+        Dk.__lnTestHooks.pin.apply(true); await pause(60);
+        r.deskOnStuck = Dk.__lnTestHooks.pin.stuck();
+        r.deskOn = await probe(Dk, 'top');
+      } finally { Dk.frameElement && Dk.frameElement.remove(); }
+      const Ph = await bootFrame('', 375, 812);
+      try {
+        Ph.__lnTestHooks.__plant(Ph.__lnTestHooks.buildDemoSingles());
+        Ph.document.getElementById('tab-matches').click();
+        await pause(150);
+        Ph.__lnTestHooks.pin.apply(false); await pause(60);
+        r.barShown = Ph.getComputedStyle(Ph.document.querySelector('.tabbar')).position === 'fixed'
+          && Ph.document.querySelector('.tabbar').getClientRects().length > 0;
+        r.phoneTop = await probe(Ph, 'top');
+        r.phoneBottom = await probe(Ph, 'bottom');
+      } finally { Ph.frameElement && Ph.frameElement.remove(); }
+      asyncResults.focusClear = r;
+    } catch (e) { asyncResults.focusClear = { error: e.message }; }
+    finally {
+      try { if (pinWas === null) localStorage.removeItem('ln-pin'); else localStorage.setItem('ln-pin', pinWas); } catch (e) {}
+    }
+  }
 
   /* ── Arriving by a join link, with no cloud ─────────────────────────────── */
   try {
@@ -4214,10 +4290,43 @@ function define() {
        '--bg and never --surface: pinning must change nothing but "content no longer shows through"');
     ok(/html\[data-pin\] \.tabrow \{[\s\S]*?margin-bottom: 0; padding-bottom: 20px/.test(css()),
        'the margin becomes padding, so the band is inside the box that paints it');
-    ok(/scroll-margin-top: var\(--pin-clear, 0px\)/.test(css()),
-       'the browser’s own Tab-key scrolling knows nothing about a pinned row');
+    ok(/html \{ scroll-padding-top: var\(--pin-clear, 0px\);/.test(css()),
+       'the browser’s own Tab-key scrolling knows nothing about a pinned row — the root’s scroll padding tells it');
     ok(/@media print \{[\s\S]*?\.tabrow \{ display: none !important; \}/.test(css()),
        'and a pinned row would otherwise print once over the first page');
+  });
+  t('a control half under the header or the pinned row, focused, lands clear of it', () => {
+    const r = asyncResults.focusClear || {};
+    ok(!r.error, r.error);
+    for (const [label, v] of [['1000px, unpinned', r.deskOff], ['1000px, pinned', r.deskOn]]) {
+      ok(v && !v.none, label + ': a control far enough down the Matches tab to scroll to', JSON.stringify(v));
+      ok(v.covered && v.focused, label + ': set up — it sits part-way under the stuck chrome and takes the focus', JSON.stringify(v));
+      ok(v.room >= 4,
+         label + ': focused with no preventScroll, it is scrolled wholly below the chrome with room for its ring',
+         v.id + ' ' + v.room + 'px');
+    }
+    eq(r.deskOnStuck, true, 'and the pinned case really had the row stuck');
+  });
+  t('on a phone a focus lands clear of the header above and the tab bar below', () => {
+    const r = asyncResults.focusClear || {};
+    ok(!r.error, r.error);
+    eq(r.barShown, true, 'the bottom bar is really drawn in the 375px frame');
+    for (const [label, v] of [['under the header', r.phoneTop], ['under the bottom bar', r.phoneBottom]]) {
+      ok(v && !v.none, label + ': a control far enough down the Matches tab to scroll to', JSON.stringify(v));
+      ok(v.covered && v.focused, label + ': set up — it sits part-way under the chrome and takes the focus', JSON.stringify(v));
+      ok(v.room >= 4, label + ': focused, it is scrolled wholly clear of it with room for its ring', v.id + ' ' + v.room + 'px');
+    }
+  });
+  t('the clearance is the root’s scroll padding, measured pinned or not', () => {
+    const src = stripComments(APP_SRC);
+    ok(/html \{ scroll-padding-top: var\(--pin-clear, 0px\); scroll-padding-bottom: var\(--bar-clear, 0px\); \}/.test(css()),
+       'one rule on the root covers every scroll into view, whatever the target');
+    ok(!/scroll-margin-top/.test(css()),
+       'and no per-control margin beside it — a margin and the padding ADD together');
+    ok(/pinWatch\.observe\(document\.querySelector\('header'\)\);\s*if \(on\) pinWatch\.observe\(document\.querySelector\('\.tabrow'\)\);\s*pinWatch\.observe\(document\.querySelector\('\.tabbar'\)\);/.test(src),
+       'the header and the bottom bar are watched always, the row only while it is pinned — or an unpinned header that re-wraps leaves a stale clearance');
+    ok(/root\.style\.setProperty\('--bar-clear', f \? Math\.round\(f \+ 8\) \+ 'px' : '0px'\);/.test(src),
+       'the bar’s clearance is its measured height, and 0 wherever it is not drawn');
   });
   t('the pin button is a sibling of the tablist, never a child of it', () => {
     const btn = W.document.getElementById('pinBtn');

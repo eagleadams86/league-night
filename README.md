@@ -147,7 +147,9 @@ club's ID can follow it, and anyone with the admin key can run it.
   land on fully into view, and a long club name never makes the club picker wider than the row
   showing it. On a desktop the 📌 at the end of
   the tab row holds the tabs at the top while the page scrolls under them; it is off until you
-  press it, and remembered.
+  press it, and remembered. Whether the tabs are pinned or not, moving through the page with Tab
+  or Shift+Tab never leaves the control you land on hidden behind the header at the top — or,
+  on a phone, behind the bottom bar.
 
 ## Sharing a club
 

@@ -561,13 +561,29 @@
     background: var(--bg);
     margin-bottom: 0; padding-bottom: 20px;
   }
-  /* Nothing in the app scrolls the page to an element — every focus() it makes
-     passes `preventScroll`. The BROWSER's own Tab-key scrolling does, though,
-     and it knows nothing about a pinned row, so a control tabbed into lands
-     behind it. `--pin-clear` is the height of everything actually stuck. */
-  html[data-pin] [role="tabpanel"] :is(button, a[href], input, select, textarea, [tabindex]) {
-    scroll-margin-top: var(--pin-clear, 0px);
-  }
+  /* A FOCUS NEVER LANDS UNDER THE STUCK CHROME, PINNED OR NOT (Charles,
+     2026-09-14: "fix the sticky header shift+tab issue too"). Nothing in the app
+     scrolls the page to an element — every focus() it makes passes
+     `preventScroll`. The BROWSER's own Tab-key scrolling does, though, and it
+     knows nothing about a sticky header or a pinned row: a control part-way
+     under either counts as on screen, so Shift+Tab back up the page left it
+     there. Measured with the demo before this rule: unpinned, 19 of 170
+     Shift+Tab stops on a 390px phone and 33 of 212 on a phone on its side sat
+     behind the header.
+     ROOT SCROLL PADDING, not a margin on each control. It covers every scroll
+     into view the page makes, whatever the target, so the list of selectors a
+     `scroll-margin-top` needed — which only ever named the tab panels, and only
+     while pinned — is gone. Never both: the two ADD together. `--pin-clear` is
+     the height of everything actually stuck (the header, plus the row while
+     pinned) plus 8px for the ring, measured by measurePinTop() pinned or not.
+     Money Map's shape, and Golf Handicap's `8935363` for the header alone.
+     AND THE FOOT, on a phone: the bottom tab bar is fixed there and hides a
+     focus the same way from below — a real Tab down the Matches tab on a 375px
+     phone left a match row 10px under it. `--bar-clear` is the bar's MEASURED
+     height plus 8px (it carries the safe-area inset, and its labels wrap at a
+     large text size), and 0 wherever the bar is not drawn: every desktop width,
+     the welcome card, and under an open dialog. */
+  html { scroll-padding-top: var(--pin-clear, 0px); scroll-padding-bottom: var(--bar-clear, 0px); }
 
   .card { background: var(--surface); border: 1px solid var(--border);
           border-radius: var(--radius); padding: 18px; margin-bottom: var(--sp-6); }
@@ -5947,8 +5963,9 @@ const listWords = (xs) => (xs.length < 3 ? xs.join(' and ')
 
    ONE ATTRIBUTE, ONE MEASURED OFFSET. `data-pin` on <html> is the whole state —
    the head script sets it before first paint so the page doesn't jump — and
-   `--pin-top` / `--pin-clear` are where the row is told to stop and how far a
-   tabbed-to control has to clear it. Measured, because there is no number to
+   `--pin-top` / `--pin-clear` are where the row is told to stop and how far the
+   page's scroll padding keeps a focus clear of everything stuck — the header
+   alone while unpinned, which is why both are measured pinned or not. Measured, because there is no number to
    write down: the header wraps to two rows at a tablet width and to two on a
    phone.
 
@@ -5994,6 +6011,12 @@ function measurePinTop() {
   root.style.setProperty('--pin-top', Math.round(h) + 'px');
   /* Plus a little, so a control tabbed into isn't flush against the row. */
   root.style.setProperty('--pin-clear', Math.round(h + b + 8) + 'px');
+  /* The phone's bottom bar, the same way up from the foot. Asked of the
+     rectangle for pinStuck()'s reason: `display: none` still computes `fixed`. */
+  const bar = document.querySelector('.tabbar');
+  const f = bar && bar.getClientRects().length && getComputedStyle(bar).position === 'fixed'
+    ? bar.getBoundingClientRect().height : 0;
+  root.style.setProperty('--bar-clear', f ? Math.round(f + 8) + 'px' : '0px');
 }
 
 const PIN_KEY = 'ln-pin';
@@ -6024,10 +6047,14 @@ function applyPin(on) {
   dressPinBtn();
   if (pinWatch) {
     pinWatch.disconnect();
-    if (on) {
-      pinWatch.observe(document.querySelector('header'));
-      pinWatch.observe(document.querySelector('.tabrow'));
-    }
+    /* The HEADER always: it is stuck whether or not the row is, and the scroll
+       padding reads its height. The row only while it is pinned — unpinned it
+       adds nothing to the clearance. */
+    pinWatch.observe(document.querySelector('header'));
+    if (on) pinWatch.observe(document.querySelector('.tabrow'));
+    /* The bottom bar always too: it comes and goes with a dialog, the welcome
+       card and the phone width, and each of those resizes it to or from 0. */
+    pinWatch.observe(document.querySelector('.tabbar'));
   }
   /* NO render(). Nothing about the markup changes — this is paint and position
      and nothing else — so the toggle keeps the reader's scroll place and their
@@ -6037,7 +6064,8 @@ function applyPin(on) {
 /* Both boxes change height for reasons that are not a window resize: a longer
    league name wrapping the header, the picker arriving with a second league,
    the row going away on the welcome card. An observer catches every one without
-   a list of call sites to keep in step. Connected only while the pin is on. */
+   a list of call sites to keep in step. The header is watched always, the row
+   only while the pin is on. */
 const pinWatch = ('ResizeObserver' in window)
   ? new ResizeObserver(() => measurePinTop()) : null;
 $('pinBtn').addEventListener('click',

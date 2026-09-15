@@ -537,6 +537,27 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
   Everything else is the family's — `data-pin` on `<html>` set before first paint, `ln-pin`, off
   by default, `--pin-top` MEASURED from the header's rectangle, the margin becoming padding so
   toggling costs no reflow, `--bg` and never `--surface`, and z-index 12 under the header's 20.
+- **A KEYBOARD FOCUS CLEARS THE STUCK CHROME, PINNED OR NOT — ROOT SCROLL PADDING** (2026-09-14,
+  Charles: *"fix the sticky header shift+tab issue too"*; Money Map's shape, Golf Handicap's
+  `8935363` for a header alone). The browser scrolls a focus into view only when it is not already
+  on screen, and a control part-way under the sticky header, the pinned row or the phone's fixed
+  bottom bar IS on screen to it. The old `html[data-pin] [role="tabpanel"] :is(…) { scroll-margin-top:
+  var(--pin-clear) }` covered only the pinned case, only inside the panels; unpinned, real
+  Shift+Tab up the demo's Matches tab left 36 of 236 stops behind the header at 1280px, 32 of 199
+  on a 390px phone and 79 of 236 on a phone on its side, and Tab down a phone left 24 under the
+  bottom bar. It is now `html { scroll-padding-top: var(--pin-clear, 0px); scroll-padding-bottom:
+  var(--bar-clear, 0px) }` — every count 0. What a tidy-up would break:
+  - **Never a `scroll-margin` beside it.** Margin and padding ADD; the suite asserts no
+    `scroll-margin-top` is left in the CSS.
+  - **`measurePinTop()` writes both, pinned or not**: `--pin-clear` is header + (row while
+    pinned) + 8, `--bar-clear` the bar's measured height + 8, and 0 where the bar is not drawn
+    (asked of the RECTANGLE, `pinStuck()`'s reason — `display: none` still computes `fixed`).
+  - **`pinWatch` observes the HEADER and the BAR always**, the row only while pinned. It used to
+    connect nothing while unpinned, which was harmless only while nothing read the clearance then.
+  - The suite MAKES the case (a Matches control scrolled 10px under the chrome, then `focus()`
+    with no `preventScroll`) at 1000px unpinned and pinned, and at 375px under the header and
+    under the bar; the unpinned and phone-header checks are red on `069bbd1` (the pinned one was
+    already green there), and the bar check is red with only `--bar-clear` taken out of the rule.
 - **Dev port 8024**, recorded in `.claude/launch.json` AND `~/.claude/launch.json`. 8021 is
   not free (held by something outside these repos); 8024 is the first past the family band.
 
