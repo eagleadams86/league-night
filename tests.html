@@ -52,7 +52,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 436;
+const EXPECTED = 438;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -495,6 +495,42 @@ async function runAsync() {
       await tick(60);
       r.prevOnAfter = !!hb[0] && !hb[0].disabled;
       r.headerH = Math.round(ND.querySelector('header').getBoundingClientRect().height);
+      /* BESIDE THE NAME, and scrolling there (Charles, the same evening: "keep
+         buttons beside the name"). 800px leaves the row about 416px beside the
+         name — over its 15rem — so it must share the name's line even though
+         it overflows. The 4px is the scroller's negative margin. And the
+         picker, whose 40-character name is 541px wide, may be no wider than
+         the row's content box: a control wider than the row that shows it can
+         never be seen whole. */
+      r.besideDelta = +Math.abs(ctl.getBoundingClientRect().top + 4
+        - ND.querySelector('.brand').getBoundingClientRect().top).toFixed(1);
+      r.pickW = +ND.getElementById('leagueSel').getBoundingClientRect().width.toFixed(1);
+      r.ctlInner = ctl.clientWidth - 8;
+      /* A CONTROL HALF PAST THE EDGE, FOCUSED, LANDS WHOLE INSIDE THE ROW — the
+         browser only scrolls a focus target that is entirely hidden. The
+         straddle is MADE rather than hoped for: at rest a 12px gap can land
+         exactly on the edge, and then nothing is half past it. The first
+         control reaching past the right edge is scrolled until its middle sits
+         on the edge, and then focused. */
+      const reveal = (row, items) => {
+        row.scrollLeft = 0;
+        let box = row.getBoundingClientRect();
+        const half = items.find((el) => el.getBoundingClientRect().right > box.right - 1);
+        if (!half) return { none: true };
+        const r0 = half.getBoundingClientRect();
+        row.scrollLeft += Math.max(0, r0.left + r0.width / 2 - box.right);
+        box = row.getBoundingClientRect();
+        const r1 = half.getBoundingClientRect();
+        const straddles = r1.left < box.right && r1.right > box.right;
+        half.focus();
+        const out = { id: half.id, straddles, focused: ND.activeElement === half, visible: half.matches(':focus-visible') };
+        const r2 = half.getBoundingClientRect(), b2 = row.getBoundingClientRect();
+        out.left = +(r2.left - b2.left).toFixed(1);
+        out.right = +(b2.right - r2.right).toFixed(1);
+        half.blur();
+        return out;
+      };
+      r.revealHead = reveal(ctl, [...ctl.children].filter((c) => c.getClientRects().length && !c.classList.contains('sr-only')));
       r.tabLines = lines(N, tabs);
       r.tabNavHiddenWhenFits = !!tabNav && tabNav.hidden;
       r.tabNavOutsideTablist = !!tabNav && !tabNav.closest('[role="tablist"]');
@@ -507,6 +543,9 @@ async function runAsync() {
       const tb = tabNav ? tabNav.querySelectorAll('button') : [];
       if (tb[1]) tb[1].click();
       r.tabsScrolled = tabs.scrollLeft;
+      /* The same reveal along the narrowed tab bar — the arrow keys focus a tab
+         with `preventScroll`, so without it the browser scrolls nothing at all. */
+      r.revealTab = reveal(tabs, [...tabs.querySelectorAll('[role="tab"]')]);
       tabs.style.maxWidth = '';
     } finally { N.frameElement && N.frameElement.remove(); }
 
@@ -4099,6 +4138,36 @@ function define() {
     ok(/\.rownav \{ flex: none; white-space: nowrap; \}/.test(css()), 'and the arrows’ box sets no display, so `hidden` hides it');
     ok(!/\.brand \{ flex: 1 1 100%/.test(phoneBlock('leagueSel')),
        'the phone no longer forces the name and the row onto lines of their own — the base rule does it');
+  });
+  /* ── Beside the name, and a keyboard focus that lands whole (2026-09-14) ──
+     Charles, the same evening: "keep buttons beside the name" — the first cut
+     took the whole row onto a line of its own the moment it did not fit — and
+     "fix those four issues", the first being a control half past a row's edge
+     staying clipped when reached from the keyboard. */
+  t('the controls stay beside the name and scroll there, and no control is wider than the row', () => {
+    const r = asyncResults.rowScroll || {};
+    ok(!r.error, r.error);
+    ok(r.ctlRoom > 1, 'the row really does overflow at 800px — otherwise nothing is being measured', r.ctlRoom);
+    ok(r.besideDelta < 16, 'the controls sit BESIDE the name, on its line, and scroll there rather than taking a line of their own', r.besideDelta);
+    ok(r.headerH <= 60, 'so the header is one line, not the name above a row of controls', r.headerH + 'px');
+    ok(r.pickW <= r.ctlInner + 0.5,
+       'a 40-character club name does not make the picker wider than the row showing it — or it could never be seen whole',
+       r.pickW + 'px in ' + r.ctlInner + 'px');
+    ok(/\.headrow \{ display: flex; align-items: center; justify-content: flex-end; gap: 4px;\s*flex: 1 1 0%; min-width: min\(15rem, 100%\); \}/.test(css()),
+       'the row takes what the name leaves, packed right, and wraps under it only when that is under 15rem');
+  });
+  t('a control reached from the keyboard lands whole inside its scrolling row', () => {
+    const r = asyncResults.rowScroll || {};
+    ok(!r.error, r.error);
+    for (const [label, v] of [['the header', r.revealHead], ['the tab bar', r.revealTab]]) {
+      ok(v && !v.none, label + ': there is a control reaching past the edge to test with');
+      ok(v.straddles && v.focused && v.visible, label + ': set up — it straddles the edge and holds a keyboard-style focus', JSON.stringify(v));
+      ok(v.left >= 3 && v.right >= 3,
+         label + ': focused, it is scrolled wholly inside the row with its ring’s room — the browser only scrolls a WHOLLY hidden focus target',
+         v.id + ' ' + v.left + ' / ' + v.right);
+    }
+    ok(/if \(t === row \|\| !t\.matches\(':focus-visible'\)\) return;/.test(APP_SRC),
+       'only a keyboard focus scrolls the row — a mouse press needs no help');
   });
   /* ── The header that stopped moving on refresh (2026-09-12) ───────────────
      Asked for by Charles: the sign-in button moved on every refresh, twice

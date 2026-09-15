@@ -497,15 +497,28 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
   there are exactly two media blocks at that width so a third cannot arrive unread.
   **Since 2026-09-14 the scroller is the BASE rule, and the tab bar is one too** (Charles,
   family-wide: *"should we just make them both always single line side scrollers?"* — Money Map
-  commit b14f4ae is the reference). `.headrow` (`flex: 0 1 auto`, content-sized) holds `.headctl`
-  and a `.rownav` of two arrows: the row stays beside the name while it fits and flex-wrap takes it
-  onto its own line when it does not, so the phone block's `.brand`/`.headctl` 100% rules are GONE
-  — measured pixel-identical without them at 390px, and at 1600/1100/900. What changed: a phone on
-  its side (844px, above this app's phone width) went from two lines and a 138.5px header to one
-  line and 92.5px; at 705px the arrows appear. **The league picker's 11rem cap stays a PHONE rule**
-  on measurement: at every width it would take the demo's picker from 199px to 176 at 1600px and
-  slide three controls along a header with room for them — which is also why the phone block
-  still exists and the two-blocks count still holds. `.tabs` is the scroller in the base rule
+  commit b14f4ae is the reference). `.headrow` holds `.headctl` and a `.rownav` of two arrows, and
+  the phone block's `.brand`/`.headctl` 100% rules are GONE. **THE ROW STAYS BESIDE THE NAME AND
+  SCROLLS THERE** (Charles, the same evening: *"keep buttons beside the name"* — Money Map commit
+  2c19e01, verbatim): `.headrow { justify-content: flex-end; flex: 1 1 0%; min-width: min(15rem,
+  100%) }` takes whatever the name leaves, controls packed right, and wraps under the name only
+  when that is under 15rem — an upright phone. The first cut (`flex: 0 1 auto`) took the whole row
+  onto a line of its own the moment it did not fit, which left the name alone above the controls
+  from 760 to ~1090px. Measured against that cut: 1600, 1100 and a 390px phone pixel-identical;
+  the header went 88.5 → 51px at 705/761/800/900 and 92.5 → 55px on a phone on its side (844×390).
+  `flex-end` cannot strand a control because the row never overflows — the scroller inside it
+  shrinks. **`wireScrollRow` has a `focusin` reveal** (Money Map's, verbatim): the browser only
+  scrolls a WHOLLY hidden focus target into view, so Tab onto a control half past the edge left
+  it half past (the theme picker 73.5px past at 705px), and the tab bar's arrow keys — which focus
+  with `preventScroll: true` — scrolled nothing at all (three tabs up to 218px off a 300px bar).
+  It measures against the PADDING edge and acts only on `:focus-visible`. **TWO LEAGUE-PICKER
+  CAPS, on measurement.** The 11rem one stays a PHONE rule: at every width it would take the
+  demo's picker from 199px to 176 at 1600px and slide three controls along a header with room for
+  them — which is also why the phone block still exists and the two-blocks count still holds. And
+  a base `.headctl > select#leagueSel { max-width: 100% }`, because beside the name the row can be
+  narrower than the picker: a 40-character club name is 541px (647 on touch) against a row of
+  327px at 761 and 468 on a sideways phone, a control no scroll could show whole. The percentage
+  bites only there — the demo's default measured identical with and without it everywhere. `.tabs` is the scroller in the base rule
   (4px padding, −4px margin); it is desktop-only here (the bottom bar replaces it under 760px) and
   **five tabs never overflow a window wide enough to show it, so its arrows stay hidden** — the
   suite proves its wiring by narrowing the bar. `wireScrollRow(row, nav)` is Money Map's verbatim
@@ -514,8 +527,9 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
   `.rownav button` glyph style from the app's tokens (this app has no year strip to borrow from),
   are `tabindex="-1"` + `aria-hidden`, and are for a mouse only: `@media (hover: none), (pointer:
   coarse) { .rownav { display: none !important } }`. No drag edge-scroll — the tabs here do not
-  reorder. The tab keydown handler focuses with `preventScroll: true`; harmless while the tabs
-  never overflow, and the first thing to revisit if a sixth tab makes them.
+  reorder. The tab keydown handler focuses with `preventScroll: true`, which is fine now that the
+  row's own `focusin` reveal brings the focused tab whole into view — the suite proves it along a
+  bar narrowed to 160px.
 - **The tab row pins, and here that is a DESKTOP affordance** — Money Map, Flow Metrics and
   Sprint Predictability grew the 📌 first and a change belongs in all four. Under 760px the tab
   strip is not on the page at all (the bottom bar is), so the row and its button go together and
