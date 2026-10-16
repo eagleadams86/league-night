@@ -870,14 +870,14 @@ function define() {
   t('and outside it, only the literals that must survive a missing theme.css', () => {
     const outside = stripComments(APP_SRC).replace(/<style>[\s\S]*?<\/style>/, '');
     const found = [...new Set((outside.match(/#[0-9a-f]{6}\b/gi) || []).map(h => h.toLowerCase()))];
-    const allowed = ['#0a0e1a', '#121829', '#262f4a', '#aab2d0', '#e7eaf6', '#f5f5f3', '#818cf8', '#a5b4fc', '#141c33'];
+    const allowed = ['#0a0e1a', '#121829', '#262f4a', '#aab2d0', '#e7eaf6', '#ebebe8', '#818cf8', '#a5b4fc', '#141c33'];
     eq(found.filter(h => allowed.indexOf(h) === -1), [], 'unexpected literal colour(s)');
     const el = W.document.documentElement, was = el.getAttribute('data-theme');
     try {
       el.setAttribute('data-theme', 'midnight');
       eq(W.getComputedStyle(el).getPropertyValue('--bg').trim(), '#0a0e1a', 'the theme-color meta and the halt card use Midnight’s --bg');
       el.setAttribute('data-theme', 'light');
-      eq(W.getComputedStyle(el).getPropertyValue('--bg').trim(), '#f5f5f3', 'and the boot script uses Light’s');
+      eq(W.getComputedStyle(el).getPropertyValue('--bg').trim(), '#ebebe8', 'and the boot script uses Light’s');
     } finally { el.setAttribute('data-theme', was || 'auto'); }
   });
   t('the pack is LINKED, never inlined', () => {
