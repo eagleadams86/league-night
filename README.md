@@ -331,6 +331,9 @@ Every view and window was audited with axe-core under Playwright at 1280px in Mi
 axe's best-practice level (re-run 10 September 2026 across all five tabs and every dialog forced
 open — a closed dialog is invisible to axe, and an unnamed box inside one passes a whole-page run). Beyond what a tool can see: status is never
 carried by colour alone (a form tile is a letter, a chosen side a tick, a thrower a pill),
+a switched-off button (Undo with nothing to undo, Save on a schedule with too few sides, Claim
+while a claim is in flight) is dimmed with the "not allowed" cursor by the pack's `theme.css`
+(rule 20, 2026-10-23) rather than looking pressable,
 every dialog closes on Escape and a click outside, the tab strip takes arrow keys and hands the
 next Tab to the 📌 beside it, and the
 column letters of the table are spelled out beneath it rather than hidden in a hover title —
