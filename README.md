@@ -337,6 +337,8 @@ column letters of the table are spelled out beneath it rather than hidden in a h
 and so is its one other abbreviation, the figure marking a player's handicap (a deduction at
 darts, a head start at shuffleboard or cornhole, racks on the wire at pool, and the key says
 which).
+A number box steps only when you press its arrows: one click on an arrow is one step, and
+scrolling the page over a box you just typed in never changes it.
 On paper every round prints open and a bracket wraps instead of clipping.
 
 A club that grows past 300 KB is offered **Trim Closed Seasons** on the Club tab: every

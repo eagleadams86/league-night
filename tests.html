@@ -52,7 +52,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 441;
+const EXPECTED = 445;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -5843,6 +5843,73 @@ function define() {
     ok(!r.error, 'the sweep ran', r.error);
     eq(r.planted.map((p) => p.cols), [3, 2, 1], 'the planted grid was measured at every column count');
     ok(r.planted.every((p) => p.clean), 'every planted state closed', JSON.stringify(r.planted));
+  });
+
+  group('a number box never steps on its own');
+  t('a click on a number box’s arrows is never left holding', () => {
+    /* Select-on-focus cancels the mouse release so a click cannot undo the
+       selection — and Chrome stops an arrow repeating only on the release, so
+       ONE click on an arrow ran a box away on its own (Wine Cellar, 2026-10-23:
+       1 → 109 in three seconds). A number box must return before that cancel
+       is added. Read off the source because the harness cannot press a native
+       spin button. */
+    const src = stripComments(APP_SRC);
+    const fn = (src.match(/addEventListener\('focusin', \(e\) => \{[\s\S]*?\n\}\);/) || [''])[0];
+    const guard = fn.indexOf("=== 'number') return;");
+    const cancel = fn.indexOf("addEventListener('mouseup'");
+    ok(guard > -1 && cancel > -1 && guard < cancel, 'number boxes skip the mouseup cancel', guard + ' vs ' + cancel);
+  });
+  t('a press that moved the focus cannot cancel the NEXT release anywhere', () => {
+    /* Wine Cellar's second report (2026-10-23): click a ROW to open the editor,
+       then click a number box's arrow once — it ran 1 → 51 in two seconds. The
+       first press armed the release-cancel, the focus landed in a text box it
+       never touched, and the cancel ate the arrow's release. Replayed here with
+       the events themselves: the release on a number box must reach the
+       browser. */
+    const D = W.document;
+    H.__plant(FIXTURE);
+    W.setTab('club');
+    const name = D.getElementById('lr_name'), n = D.getElementById('lr_n');
+    ok(!name.disabled && !n.disabled, 'sanity: the rules card is editable');
+    const tab = D.getElementById('tab-club');
+    tab.dispatchEvent(new W.PointerEvent('pointerdown', { bubbles: true }));
+    name.focus();
+    tab.dispatchEvent(new W.PointerEvent('pointerup', { bubbles: true }));
+    const up = new W.MouseEvent('mouseup', { bubbles: true, cancelable: true });
+    n.dispatchEvent(up);
+    eq(up.defaultPrevented, false, 'the release on the legs box was left alone');
+    name.blur();
+  });
+  t('a click straight into a text box still selects it, so typing replaces', () => {
+    const D = W.document;
+    W.setTab('club');
+    const box = D.getElementById('lr_name');
+    if (D.activeElement === box) box.blur();
+    box.dispatchEvent(new W.PointerEvent('pointerdown', { bubbles: true }));
+    box.focus();
+    box.dispatchEvent(new W.PointerEvent('pointerup', { bubbles: true }));
+    const up = new W.MouseEvent('mouseup', { bubbles: true, cancelable: true });
+    box.dispatchEvent(up);
+    eq(up.defaultPrevented, true, 'the release that would collapse the selection is held back');
+    ok(box.value.length > 0, 'sanity: there is a name to select');
+    eq([box.selectionStart, box.selectionEnd], [0, box.value.length], 'and the whole value is selected');
+    box.blur();
+  });
+  t('a focused number box ignores the mouse wheel', () => {
+    /* Chrome steps a focused number box on every wheel tick over it: scrolling
+       past a box just typed in changes the number (Wine Cellar saved 0 bottles
+       that way, 2026-10-23). The wheel must take the focus away before it can
+       step anything. */
+    const D = W.document;
+    W.setTab('club');
+    const q = D.getElementById('lr_n');
+    const before = q.value;
+    q.focus();
+    eq(D.activeElement, q, 'the box has the focus');
+    q.dispatchEvent(new W.WheelEvent('wheel', { deltaY: 100, bubbles: true }));
+    ok(D.activeElement !== q, 'the first wheel tick takes the focus away, so nothing steps');
+    eq(q.value, before, 'and the value is untouched');
+    H.__plant(FIXTURE); W.setTab('standings');
   });
 
   group('nothing below the header is painted before the first render');

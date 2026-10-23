@@ -558,6 +558,17 @@ full plan is at `~/.claude/plans/my-friends-are-going-zany-riddle.md`.
     with no `preventScroll`) at 1000px unpinned and pinned, and at 375px under the header and
     under the bar; the unpinned and phone-header checks are red on `069bbd1` (the pinned one was
     already green there), and the bar check is red with only `--bar-clear` taken out of the rule.
+- **A number box never steps on its own (2026-10-23, ported from Wine Cellar a17b8f2).** Two
+  halves, both needed. **Select-on-focus never cancels the mouse release on a number box**:
+  Chrome stops a spin arrow repeating only when it sees the release, so the old one-shot
+  `mouseup` cancel made ONE arrow click keep stepping (reproduced here headless before the fix:
+  a match's Round box ran 8 → 39 in two seconds). And **the "this focus came from the mouse" flag is `pressedOn`**, the element
+  pressed, cleared on pointerup/pointercancel — it was a bare boolean nothing reset, so a press on
+  a row or a button armed the cancel for the next release ANYWHERE. The cancel is armed only when
+  the press focused that same box, and only cancels a release on that box. Beside it, a
+  capture-phase `wheel` listener blurs a focused number box, because Chrome steps one on every
+  wheel tick over it. Four tests in *a number box never steps on its own*; three are red on the
+  old handler, the fourth pins that a click into a text box still selects it.
 - **Dev port 8024**, recorded in `.claude/launch.json` AND `~/.claude/launch.json`. 8021 is
   not free (held by something outside these repos); 8024 is the first past the family band.
 

@@ -5622,19 +5622,49 @@ function toast(msg, ms) {
    It does not fight openModal: on a touch screen focus goes to the dialog, so
    nothing is selected until you tap a field. */
 const SELECT_ON_FOCUS = ['text', 'number', 'tel', 'url', 'email'];
-let focusFromPointer = false;
-addEventListener('pointerdown', () => { focusFromPointer = true; }, true);
+/* WHICH ELEMENT the current press landed on, cleared when the press ends. It
+   used to be a bare true/false that nothing reset: a click on a table row or a
+   button set it, the window that click opened put the focus in its first box,
+   that focus read the stale flag and armed the release-cancel below — and the
+   cancel then ate the NEXT release anywhere on the page. Found in Wine Cellar
+   (2026-10-23), where the next release was a click on a number box's arrow, so
+   the arrow never let go: 1 → 51 in two seconds, and pointing at the down arrow
+   ran it to 0. Now the cancel is armed only when THIS press focused THIS box,
+   and only ever cancels a release on that same box. */
+let pressedOn = null;
+addEventListener('pointerdown', (e) => { pressedOn = e.target; }, true);
+addEventListener('pointerup', () => { pressedOn = null; }, true);
+addEventListener('pointercancel', () => { pressedOn = null; }, true);
 addEventListener('focusin', (e) => {
   const el = e.target;
+  const byThisPress = pressedOn === el;
+  pressedOn = null;
   if (!el || el.tagName !== 'INPUT') return;
   if (el.hasAttribute('data-keep-caret')) return;
   if (SELECT_ON_FOCUS.indexOf((el.type || '').toLowerCase()) === -1) return;
   el.select();
-  if (focusFromPointer) {
-    focusFromPointer = false;
-    addEventListener('mouseup', (ev) => { ev.preventDefault(); }, { once: true });
-  }
+  if (!byThisPress) return;
+  /* NEVER on a number box. The press may have landed on its up/down arrows,
+     and Chrome stops an arrow repeating only when it sees the release —
+     cancel the release and ONE click keeps stepping on its own (a match's Round box ran
+     away the same way before 2026-10-23). A click in the box's text may
+     collapse the selection instead, which costs a keystroke, not a figure. */
+  if ((el.type || '').toLowerCase() === 'number') return;
+  const keep = (ev) => { if (ev.target === el) ev.preventDefault(); };
+  addEventListener('mouseup', keep, { once: true, capture: true });
 });
+
+/* A FOCUSED NUMBER BOX IGNORES THE MOUSE WHEEL (2026-10-23). Chrome steps a
+   focused <input type="number"> on every wheel tick over it, so scrolling a
+   window down to reach Save, with the pointer passing over a box you just
+   typed in, quietly changes the number — Wine Cellar saved 0 bottles that
+   way and the wine vanished as "finished". The box loses focus on the first
+   tick, which stops the step and lets the window scroll as the reader meant.
+   Passive, so scrolling stays smooth. */
+addEventListener('wheel', (e) => {
+  const el = e.target;
+  if (el && el.tagName === 'INPUT' && el.type === 'number' && el === document.activeElement) el.blur();
+}, { passive: true, capture: true });
 
 /* ═══════════════════════════════ Theme and tabs ═══════════════════════════ */
 
