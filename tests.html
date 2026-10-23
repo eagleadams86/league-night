@@ -52,7 +52,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 445;
+const EXPECTED = 446;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -4007,6 +4007,17 @@ function define() {
   });
   t('raisesKeyboard is a whitelist', () => {
     ok(H.raisesKeyboard({ tagName: 'INPUT', type: 'text' })); ok(!H.raisesKeyboard({ tagName: 'INPUT', type: 'checkbox' })); ok(!H.raisesKeyboard({ tagName: 'BUTTON' }));
+  });
+  t('a dropdown or picker opens on focus, so a window never opens on one', () => {
+    /* iOS 26 opens a focused <select>'s menu at once: Wine Cellar's Share and
+       Settings windows opened with their first dropdown already down (Charles,
+       iPhone, 2026-10-23). openModal() asks opensOnFocus(), not raisesKeyboard(). */
+    ok(H.opensOnFocus({ tagName: 'SELECT' }), 'a select');
+    ok(H.opensOnFocus({ tagName: 'INPUT', type: 'time' }), 'a time picker');
+    ok(H.opensOnFocus({ tagName: 'INPUT', type: 'text' }), 'and everything that raises the keyboard');
+    ok(!H.opensOnFocus({ tagName: 'INPUT', type: 'checkbox' }), 'a checkbox opens nothing');
+    ok(!H.opensOnFocus({ tagName: 'BUTTON' }), 'nor a button');
+    ok(!H.opensOnFocus(null), 'nor nothing focused');
   });
   t('[hidden] beats a class that sets display', () => { ok(/\[hidden\]\s*\{\s*display:\s*none\s*!important/.test(css())); });
   t('a scroll box carries position: relative, for iOS', () => {

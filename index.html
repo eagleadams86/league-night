@@ -907,6 +907,14 @@
            border: 1px solid var(--border-strong); border-radius: var(--radius);
            padding: var(--sp-7); max-width: 560px; width: calc(100% - var(--sp-8));
            max-height: calc(100vh - var(--sp-8)); overflow: auto; overscroll-behavior: contain; }
+  /* A tall window on an installed iPhone reached up under the status bar, its
+     heading behind the clock (Wine Cellar, 2026-10-23). A dialog is centred, so
+     the room comes off BOTH ends by the larger inset — that is what keeps its top
+     edge clear of the notch. Zero wherever there is no notch. vh, not dvh:
+     dvh resolves to 0 in some embedded engines. A phone's
+     sheet keeps its own height below. */
+  dialog { max-height: calc(100vh - var(--sp-8)
+             - 2 * max(env(safe-area-inset-top), env(safe-area-inset-bottom))); }
   dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
   dialog:focus { outline: none; }
   /* A dialog heading is --fs-md — the same step as a card heading, by the role
@@ -1249,7 +1257,7 @@
    document, not something to click on the way in. */
 footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
 .footnotes { flex: 1 1 320px; min-width: 0; }
-.privacy { font-size: var(--fs-xs); color: var(--text-muted); margin: 28px 0 0; padding-left: 19px; }
+.privacy { font-size: var(--fs-xs); color: var(--text-muted); margin: 28px 0 0; padding: 0 19px; }
 .privacy-links { margin-top: 6px; }
 .privacy-links a { color: var(--text-muted); }
   /* ═══════════════════════════ League Night's own ══════════════════════════
@@ -5531,6 +5539,20 @@ function raisesKeyboard(el) {
     indexOf((el.type || '').toLowerCase()) !== -1;
 }
 
+/* Which controls OPEN something the moment they are focused, on a touch
+   screen: the keyboard's, plus a <select> and the date and time pickers.
+   iOS 26 opens a focused select's menu at once — Wine Cellar's Share and
+   Settings windows opened with their first dropdown already down (Charles,
+   iPhone, 2026-10-23) — so openModal() asks this, not raisesKeyboard(). */
+function opensOnFocus(el) {
+  if (!el) return false;
+  if (raisesKeyboard(el)) return true;
+  const tag = (el.tagName || '').toUpperCase();
+  if (tag === 'SELECT') return true;
+  return tag === 'INPUT' && ['date', 'time', 'datetime-local', 'month', 'week']
+    .indexOf((el.type || '').toLowerCase()) !== -1;
+}
+
 /* EVERY modal opens through here, never showModal() directly. showModal() runs
    the spec's focusing steps — the autofocus element, or failing that the first
    focusable one — so which dialogs raise a phone's keyboard is otherwise decided
@@ -5549,7 +5571,7 @@ function openModal(dlg) {
   if (!matchMedia('(pointer: coarse)').matches) return;
   const el = document.activeElement;
   if (!el || !dlg.contains(el)) return;
-  if (!raisesKeyboard(el)) return;
+  if (!opensOnFocus(el)) return;
   dlg.tabIndex = -1;
   dlg.focus();
 }
@@ -11030,7 +11052,7 @@ window.__lnTestHooks = {
   copyPlan: copyPlan, copyPlayers: copyPlayers, PLAYERS_MAX: PLAYERS_MAX, TEAMS_MAX: TEAMS_MAX, LEAGUES_MAX: LEAGUES_MAX,
   buildSharePayload: buildSharePayload, encodeShare: encodeShare, decodeShare: decodeShare,
   csvMatches: csvMatches, csvCell: csvCell, toCsv: toCsv, toTsv: toTsv, FORMULA_LEAD: FORMULA_LEAD, PLAIN_NUMBER: PLAIN_NUMBER,
-  tableToRows: tableToRows, cellText: cellText, raisesKeyboard: raisesKeyboard, esc: esc, todayISO: todayISO,
+  tableToRows: tableToRows, cellText: cellText, raisesKeyboard: raisesKeyboard, opensOnFocus: opensOnFocus, esc: esc, todayISO: todayISO,
   searchApp: searchApp, SEARCH_CAP: SEARCH_CAP, slug: slug, tableFor: tableFor, trendFor: trendFor,
   pin: { apply: applyPin, on: () => !!document.documentElement.dataset.pin,
          stuck: pinStuck, measure: measurePinTop, KEY: PIN_KEY },
