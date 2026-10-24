@@ -428,8 +428,13 @@
   button.icon-btn.danger:hover { color: var(--err); border-color: var(--err); background: none; }
   .icon-btn:disabled { opacity: .45; cursor: not-allowed; }
   .icon-btn:disabled:hover { color: var(--text-muted); border-color: var(--border-control); }
+  /* A name in a table is a button, and the base button rule says nowrap — so
+     the name column alone never wrapped and squeezed every other column
+     (Wine Cellar, 2026-10-24; fixed family-wide the same day). It wraps like
+     the text it is. */
   .rowbtn { background: none; border: none; padding: 0; min-height: 0; color: inherit;
-            text-decoration: underline; text-underline-offset: 2px; cursor: pointer; font: inherit; }
+            text-decoration: underline; text-underline-offset: 2px; cursor: pointer; font: inherit;
+            white-space: normal; text-align: left; }
 
   /* The header row alone is pinned to --fs-xs, and it stays there: chrome is
      13px in every app and did NOT scale with the body when the pack's base moved
@@ -782,6 +787,12 @@
      button inside is what makes it usable without a mouse. */
   tr.rowlink { cursor: pointer; }
   tr.rowlink:hover th, tr.rowlink:hover td { background: var(--surface-alt); }
+  /* No underline where the WHOLE ROW is the target (2026-10-24): the row hovers
+     and opens as one, so the name needs no mark of its own. WCAG 1.4.1's "a link
+     in running text needs more than colour" has no running text here, and
+     keyboard focus still draws the family's ring. A .rowbtn that is the ONLY
+     target keeps its underline. */
+  tr.rowlink .rowbtn { text-decoration: none; }
 
   .pill { display: inline-block; font-size: var(--fs-xs); padding: 1px var(--sp-4);
           border-radius: var(--radius-pill); border: 1.5px solid var(--border-strong);

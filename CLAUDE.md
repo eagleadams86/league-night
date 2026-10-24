@@ -716,6 +716,12 @@ showed it.
 
 ## Things a tidy-up would break
 
+- **A name in a table wraps, and drops its underline only where the whole row is the target**
+  (2026-10-24, family-wide after Wine Cellar). `.rowbtn` sets `white-space: normal; text-align:
+  left` — the base `button` rule says `nowrap`, so the name column alone never wrapped, squeezed
+  every other column and pushed the table past its box. `tr.rowlink .rowbtn` sets
+  `text-decoration: none`: the row hovers and opens as one, and keyboard focus keeps the ring. A
+  `.rowbtn` that is the only target in its row keeps the underline. A test pins both.
 - **`memberForPlayer` reads `claim` and NEVER `playerId`.** `.find` on `playerId` cannot express
   a conflict, so it silently picked one — and two accounts were pointing at one player in the
   live league, which meant `availFor` guessed and `requestVerdict` returned `apply` to both of

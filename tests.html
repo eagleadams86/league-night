@@ -52,7 +52,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 446;
+const EXPECTED = 447;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -1750,6 +1750,11 @@ function define() {
     eq(rows, ['Alpha Thousands', 'Delta Retired', 'Bravo Ordinary', 'Charlie Negative'], 'Alpha 4pts, Delta 2, then the two on nought by leg difference: Bravo −2, Charlie −3 with a forfeit against');
     ok(W.document.querySelector('#standingsTable .pill') && /retired/.test(W.document.querySelector('#standingsWrap').textContent), 'a retired side that played is shown and marked');
     ok(/counted/.test(W.document.getElementById('standingsNote').textContent), 'and the note says how many matches count');
+  });
+  t('a name wraps like every other column, with no underline', () => {
+    const b = W.document.querySelector('#standingsTable tr.rowlink .rowbtn'), cs = W.getComputedStyle(b);
+    eq(cs.whiteSpace, 'normal', 'the base button rule says nowrap — the name column alone squeezed the rest (2026-10-24)');
+    eq(cs.textDecorationLine, 'none', 'the whole row is the target, so the name carries no mark of its own');
   });
 
   group('brackets');
