@@ -4351,6 +4351,10 @@ function define() {
     eq(btn.closest('[role="tablist"]'), null);
     ok(/\.pinbtn svg \{ pointer-events: none; \}/.test(css()),
        'the icon is redrawn on press, so it must never be the thing that was clicked');
+    /* Read from the cascade, since the row is display: none at a phone width. */
+    const cs = W.getComputedStyle(btn);
+    eq(cs.minHeight, '0px', 'out from under the page\u2019s button floor');
+    eq(cs.height, cs.width, 'so it is a square, never a 26\u00d738.5 slab');
   });
   t('pinning costs no reflow, and the icon and the name change together', () => {
     const D = W.document, root = D.documentElement;

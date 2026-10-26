@@ -547,6 +547,9 @@
     flex: 0 0 auto; align-self: center;
     display: flex; align-items: center; justify-content: center;
     width: 26px; height: 26px; padding: 0; border-radius: var(--radius-sm);
+    /* Out from under this page's button floor, or the square stretches to a
+       26×38.5 slab — Money Map's, which has no floor, is the shape. */
+    min-height: 0;
     border: 1px solid var(--border-control); background: transparent;
     color: var(--text-secondary); cursor: pointer;
   }
