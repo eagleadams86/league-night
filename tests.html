@@ -52,7 +52,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 447;
+const EXPECTED = 448;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -5863,6 +5863,15 @@ function define() {
     ok(!r.error, 'the sweep ran', r.error);
     eq(r.planted.map((p) => p.cols), [3, 2, 1], 'the planted grid was measured at every column count');
     ok(r.planted.every((p) => p.clean), 'every planted state closed', JSON.stringify(r.planted));
+  });
+
+  group('Tick boxes');
+  t('every tick box is one size a flex row cannot squeeze (2026-10-27)', () => {
+    const boxes = [...W.document.querySelectorAll('input[type="checkbox"], input[type="radio"]')];
+    ok(boxes.length > 0, 'found the tick boxes', String(boxes.length));
+    const bad = boxes.filter((i) => { const cs = W.getComputedStyle(i);
+      return cs.flexShrink !== '0' || cs.width !== '20px' || cs.height !== '20px'; });
+    eq(bad.map((i) => i.id || i.name || i.value), [], 'every one is 20px, and none can shrink');
   });
 
   group('a number box never steps on its own');
