@@ -1606,6 +1606,14 @@ input:is([type="checkbox"], [type="radio"]) { flex: none; width: 1.25rem; height
 :is(.formpanel) :is(input, select, textarea):not([type=checkbox], [type=radio], [type=range], [readonly]) {
   background-color: var(--surface); }
 :is(.formpanel) :is(input, textarea)[readonly] { background-color: transparent; }
+
+/* A PILL SITS ONE STEP OFF WHAT IS BEHIND IT, like a field (theme pack rule 21).
+   A plain pill is --surface-alt, the well's own fill, so inside a well it showed
+   only as an outline. There it takes the card colour; in a hovered row (which
+   goes --surface) it swaps back. :where() keeps this at the weight of `.pill`
+   alone, so a status pill (.pill.ok and friends) keeps its tint. */
+:where(#standingsWrap, #playersWrap, #teamsWrap, #leaguesWrap, #seasonsWrap, #membersWrap, #requestsWrap, #minePending, details.round) .pill { background: var(--surface); }
+:where(#standingsWrap, #playersWrap, #teamsWrap, #leaguesWrap, #seasonsWrap, #membersWrap, #requestsWrap, #minePending, details.round) :where(tr:hover, .prow:hover) .pill { background: var(--surface-alt); }
 </style>
 </head>
 <body>
