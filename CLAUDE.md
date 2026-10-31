@@ -730,7 +730,10 @@ showed it.
   buttons, the `.bracket` scroller is not a box), the scorer's leg rows and live-sheet panels
   (dialogs, already `--surface-alt`). Never `--bg` or a bare `--surface` as a well's fill —
   the pack's surfaces stack differently in the light and dark themes. A test, *content wells*,
-  reads the computed fills of a tile and every kind of well in all four themes.
+  reads the computed fills of a tile and every kind of well on every tab in all four themes —
+  the singles FIXTURE, then `buildDemoTeams()` for the Teams list and the individual table; the
+  three cloud-only lists get the markup their renderers write, because the harness has no cloud.
+  The Tournament tab has no well (see above).
 - **A name in a table wraps, and drops its underline only where the whole row is the target**
   (2026-10-24, family-wide after Wine Cellar). `.rowbtn` sets `white-space: normal; text-align:
   left` — the base `button` rule says `nowrap`, so the name column alone never wrapped, squeezed

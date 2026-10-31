@@ -880,39 +880,57 @@ function define() {
       eq(W.getComputedStyle(el).getPropertyValue('--bg').trim(), '#ebebe8', 'and the boot script uses Light’s');
     } finally { el.setAttribute('data-theme', was || 'auto'); }
   });
-  t('content wells: tiles, the standings table and every record list are one fill in every theme', () => {
+  t('content wells: tiles, both tables and every record list on every tab are one fill in every theme', () => {
     /* Theme pack rule 21 (2026-10-31): --surface-alt, never --bg (which matches
        in Light and drops darker in the dark themes) and never the card's bare
        --surface (lighter than the tiles in Light). Inside a well the heading
-       band is --surface, so it must differ. */
+       band is --surface, so it must differ. Every tab is reached: Standings
+       (both tables), Matches (rounds), Players (roster, Retired, Teams), Club
+       (leagues, seasons, and the three cloud-only lists, which the harness has
+       no cloud to draw — so they get the markup their renderers write).
+       Tournament has no list: its bracket cells are already surface-alt. */
     const D = W.document, el = D.documentElement, was = el.getAttribute('data-theme');
     const bg = (e) => W.getComputedStyle(e).backgroundColor;
-    H.__plant(FIXTURE);
-    W.setTab('players');
+    const CLEAR = 'rgba(0, 0, 0, 0)';
     const tile = D.createElement('div'); tile.className = 'stat';
-    D.getElementById('playersWrap').parentNode.appendChild(tile);
-    try {
-      const roster = D.querySelector('#playersWrap > .plist');
-      const retired = D.querySelector('#playersWrap > details.round');
-      const retiredList = retired && retired.querySelector('.plist');
-      const round = D.querySelector('#matchesWrap details.round');
-      const roundList = round && round.querySelector('.mlist');
-      const seasons = D.querySelector('#seasonsWrap > .plist');
-      const leagues = D.querySelector('#leaguesWrap > .plist');
-      const table = D.getElementById('standingsWrap');
-      ok(roster && retiredList && roundList && seasons && leagues && table.querySelector('table'), 'every kind of well is drawn by the fixture');
+    const cloud = ['membersWrap', 'requestsWrap', 'minePending'].map((id) => D.getElementById(id));
+    const cloudWas = cloud.map((w) => w.innerHTML);
+    const check = (label, wells, inner, bands) => {
+      ok(wells.every(Boolean) && inner.every(Boolean) && bands.every(Boolean), label + ': every well is drawn');
       ['midnight', 'dark', 'light', 'sepia'].forEach((th) => {
         el.setAttribute('data-theme', th);
-        const well = bg(tile);
-        const fills = [roster, retired, round, seasons, leagues, table].map(bg);
-        ok(fills.every((f) => f === well), th + ': tile ' + well + ' vs wells ' + fills.join(' / '));
-        /* A list inside a round is transparent — it shows the round's fill, not a second shade. */
-        eq([retiredList, roundList].map(bg), ['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0)'], th + ': a round’s inner list paints nothing of its own');
-        ok(bg(table.querySelector('thead th')) !== well, th + ': the heading band stands apart from the well');
-        eq(W.getComputedStyle(roster).borderTopStyle, 'solid', th + ': the well is edged');
+        const well = bg(tile), fills = wells.map(bg);
+        ok(fills.every((f) => f === well), label + ' / ' + th + ': tile ' + well + ' vs wells ' + fills.join(' / '));
+        /* A list inside a round shows the round's fill, never a second shade. */
+        ok(inner.every((e) => bg(e) === CLEAR), label + ' / ' + th + ': a round’s inner list paints nothing of its own');
+        ok(bands.every((b) => bg(b) !== well), label + ' / ' + th + ': the heading band stands apart from the well');
+        ok(wells.every((w) => W.getComputedStyle(w).borderTopStyle === 'solid'), label + ' / ' + th + ': every well is edged');
       });
+    };
+    try {
+      D.getElementById('playersWrap').parentNode.appendChild(tile);
+      H.__plant(FIXTURE);
+      W.setTab('standings');
+      cloud.forEach((w) => { w.innerHTML = '<div class="plist"><div class="prow static"><span class="pname">A member</span></div></div>'; });
+      check('singles', [
+        D.querySelector('#standingsWrap'),
+        D.querySelector('#playersWrap > .plist'), D.querySelector('#playersWrap > details.round'),
+        D.querySelector('#matchesWrap details.round'),
+        D.querySelector('#seasonsWrap > .plist'), D.querySelector('#leaguesWrap > .plist'),
+        ...cloud.map((w) => w.querySelector(':scope > .plist')),
+      ], [D.querySelector('#playersWrap > details.round .plist'), D.querySelector('#matchesWrap details.round .mlist')],
+      [D.querySelector('#standingsTable thead th')]);
+      H.__plant(H.buildDemoTeams());
+      W.setTab('standings');
+      const teams = D.querySelector('#teamsWrap > .plist');
+      const sides = D.querySelector('#standingsTable thead th');
+      check('teams table', [D.querySelector('#standingsWrap'), teams], [], [sides]);
+      D.querySelector('#stModeWrap [data-mode="players"]').click();
+      check('individual table', [D.querySelector('#standingsWrap')], [], [D.querySelector('#individualTable thead th')]);
+      D.querySelector('#stModeWrap [data-mode="sides"]').click();
     } finally {
       tile.remove();
+      cloud.forEach((w, i) => { w.innerHTML = cloudWas[i]; });
       el.setAttribute('data-theme', was || 'auto'); H.__plant(FIXTURE); W.setTab('standings');
     }
   });
