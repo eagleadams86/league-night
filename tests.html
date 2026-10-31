@@ -52,7 +52,7 @@
    go MISSING look exactly like tests that pass — a suite that quietly shrank to
    three checks still says "all 3 tests pass". RAISE THIS when you add tests, and
    lower it only when you retire one deliberately. */
-const EXPECTED = 448;
+const EXPECTED = 449;
 
 /* ── It refuses to run anywhere but localhost, and that is load-bearing ──────
    GitHub Pages publishes this page BESIDE the app, where the iframe below would
@@ -879,6 +879,42 @@ function define() {
       el.setAttribute('data-theme', 'light');
       eq(W.getComputedStyle(el).getPropertyValue('--bg').trim(), '#ebebe8', 'and the boot script uses Light’s');
     } finally { el.setAttribute('data-theme', was || 'auto'); }
+  });
+  t('content wells: tiles, the standings table and every record list are one fill in every theme', () => {
+    /* Theme pack rule 21 (2026-10-31): --surface-alt, never --bg (which matches
+       in Light and drops darker in the dark themes) and never the card's bare
+       --surface (lighter than the tiles in Light). Inside a well the heading
+       band is --surface, so it must differ. */
+    const D = W.document, el = D.documentElement, was = el.getAttribute('data-theme');
+    const bg = (e) => W.getComputedStyle(e).backgroundColor;
+    H.__plant(FIXTURE);
+    W.setTab('players');
+    const tile = D.createElement('div'); tile.className = 'stat';
+    D.getElementById('playersWrap').parentNode.appendChild(tile);
+    try {
+      const roster = D.querySelector('#playersWrap > .plist');
+      const retired = D.querySelector('#playersWrap > details.round');
+      const retiredList = retired && retired.querySelector('.plist');
+      const round = D.querySelector('#matchesWrap details.round');
+      const roundList = round && round.querySelector('.mlist');
+      const seasons = D.querySelector('#seasonsWrap > .plist');
+      const leagues = D.querySelector('#leaguesWrap > .plist');
+      const table = D.getElementById('standingsWrap');
+      ok(roster && retiredList && roundList && seasons && leagues && table.querySelector('table'), 'every kind of well is drawn by the fixture');
+      ['midnight', 'dark', 'light', 'sepia'].forEach((th) => {
+        el.setAttribute('data-theme', th);
+        const well = bg(tile);
+        const fills = [roster, retired, round, seasons, leagues, table].map(bg);
+        ok(fills.every((f) => f === well), th + ': tile ' + well + ' vs wells ' + fills.join(' / '));
+        /* A list inside a round is transparent — it shows the round's fill, not a second shade. */
+        eq([retiredList, roundList].map(bg), ['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0)'], th + ': a round’s inner list paints nothing of its own');
+        ok(bg(table.querySelector('thead th')) !== well, th + ': the heading band stands apart from the well');
+        eq(W.getComputedStyle(roster).borderTopStyle, 'solid', th + ': the well is edged');
+      });
+    } finally {
+      tile.remove();
+      el.setAttribute('data-theme', was || 'auto'); H.__plant(FIXTURE); W.setTab('standings');
+    }
   });
   t('the pack is LINKED, never inlined', () => {
     ok(/<link[^>]+href="theme\.css"/.test(APP_SRC), 'index.html must link theme.css');

@@ -716,6 +716,21 @@ showed it.
 
 ## Things a tidy-up would break
 
+- **THE CONTENT WELL — theme pack rule 21, adopted 2026-10-31.** A box of records inside a
+  card is `--surface-alt` with a `--border` edge and `--radius-sm`, the tiles' fill, so every
+  such box is one colour in all four themes. The wells: `#standingsWrap:has(> table)` (both the
+  standings and individual tables), the `.plist` directly inside `#playersWrap`, `#teamsWrap`,
+  `#leaguesWrap`, `#seasonsWrap`, `#membersWrap`, `#requestsWrap` and `#minePending`, and
+  `details.round` (already that fill; its inner `.mlist`/`.plist` used to be `--surface`, a second
+  shade in one box, and is now transparent). Inside a well the `thead th` band and row hover are
+  `--surface` — the rules name each well so they out-rank `tbody tr:hover`, `tr.rowlink:hover`
+  and `.prow:hover`; static rows (members, requests) keep no hover. No cell here had a
+  background of its own (no sticky columns, foot rows or zebra). **Left out:** the side window's
+  *Recent Matches* `.mlist` (a dialog), the bracket (its cells are already `--surface-alt`
+  buttons, the `.bracket` scroller is not a box), the scorer's leg rows and live-sheet panels
+  (dialogs, already `--surface-alt`). Never `--bg` or a bare `--surface` as a well's fill —
+  the pack's surfaces stack differently in the light and dark themes. A test, *content wells*,
+  reads the computed fills of a tile and every kind of well in all four themes.
 - **A name in a table wraps, and drops its underline only where the whole row is the target**
   (2026-10-24, family-wide after Wine Cellar). `.rowbtn` sets `white-space: normal; text-align:
   left` — the base `button` rule says `nowrap`, so the name column alone never wrapped, squeezed

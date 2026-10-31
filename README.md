@@ -138,6 +138,9 @@ club's ID can follow it, and anyone with the admin key can run it.
 - **Everything the family has.** Four themes, offline, installable, backups per club, a CSV of
   the matches, a read-only snapshot link — of the whole club, one league, or one season — Find
   (⌘K), and on a phone a bottom bar with the five views a thumb away.
+  The standings table, every list of players, teams, leagues, seasons and members, and each
+  round of matches sit in a ruled box the same colour as the figure tiles, in all four themes
+  (the theme pack's content-well rule).
 - **Chrome that stays out of the way.** The header's controls are always one line that scrolls
   sideways, and so is the tab row. The controls stay beside the app's name and scroll there when
   they don't all fit — in a narrow window or on a phone held on its side the header is still one

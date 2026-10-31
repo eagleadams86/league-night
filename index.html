@@ -1423,8 +1423,36 @@ footer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
   details.round > summary::before { content: '▸'; margin-right: var(--sp-3); color: var(--text-muted); }
   details.round[open] > summary::before { content: '▾'; }
   details.round.next { border-color: var(--focus-border); }
-  details.round > .mlist, details.round > .plist { background: var(--surface); border-top: 1px solid var(--border);
-                                                   padding: 0 var(--sp-3); }
+  details.round > .mlist, details.round > .plist { border-top: 1px solid var(--border); padding: 0 var(--sp-3); }
+
+  /* ── The content well (theme pack rule 21, 2026-10-31) ─────────────────
+     Every box of records set inside a card — the standings and individual
+     tables, the roster/team/league/season/member/request lists, and a round
+     of matches — is ONE fill: --surface-alt, the tiles' fill, with a --border
+     edge. Never --bg and never the card's bare --surface: the pack's surfaces
+     climb bg < surface < surfaceAlt in Midnight and Dark but sit
+     surfaceAlt ≈ bg < surface in Light and Sepia, so either one matches the
+     tiles in one pair of themes and is the odd one out in the other. A round
+     was already a well; its list inside used to be --surface, a second shade
+     in the same box, and now takes the round's fill. Inside a well the table
+     heading band and the hover are --surface — the old hover colour IS the
+     well now — so in the dark themes a hovered row goes a shade darker.
+     These rules have to out-rank `tbody tr:hover`, `tr.rowlink:hover` and
+     `.prow:hover`, which is why each names its well. A static row (members,
+     requests) is not a target and keeps no hover. Never --accent-bg behind
+     these rows: muted text on it is 3.43 in Dark. No shadow (rule 14). The
+     side window's Recent Matches list is in a dialog and is left bare. */
+  :is(#standingsWrap:has(> table), :is(#playersWrap, #teamsWrap, #leaguesWrap, #seasonsWrap,
+      #membersWrap, #requestsWrap, #minePending) > .plist) {
+    border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-alt); }
+  #standingsWrap thead th { background: var(--surface); }
+  #standingsWrap :is(tbody tr:hover, tr.rowlink:hover :is(th, td)) { background: var(--surface); }
+  #standingsWrap tbody tr:last-child :is(th, td) { border-bottom: 0; }
+  :is(#playersWrap, #teamsWrap, #leaguesWrap, #seasonsWrap, #membersWrap, #requestsWrap, #minePending) > .plist {
+    padding: 0 var(--sp-3); }
+  :is(:is(#playersWrap, #teamsWrap, #leaguesWrap, #seasonsWrap) > .plist, details.round) :is(.prow:not(.static), .mrow):hover {
+    background: var(--surface); }
+  #playersWrap > .plist + details.round { margin-top: var(--sp-4); }
 
   /* ── The scorer ──────────────────────────────────────────────────────── */
   .mtscore { display: flex; align-items: center; gap: var(--sp-5); margin: var(--sp-3) 0; }
